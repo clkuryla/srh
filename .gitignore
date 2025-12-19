@@ -51,14 +51,7 @@ rsconnect/
 # Data
 data/
 big_data/
-**/*.csv
-**/*.dta
-**/*.sav
-**/*.sas7bdat
-**/*.xpt
-**/*.parquet
-**/*.rds
-**/*.RDS
+
 
 # Local config
 config.yml
