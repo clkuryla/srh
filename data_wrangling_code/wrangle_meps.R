@@ -220,7 +220,7 @@ data_meps <- data_meps %>%
 
 readr::write_rds(data_meps, derived_path("meps_analytic.rds"))
 
-
+rm(data_meps_raw)
 #################################################### 
 ########################## CREATE SURVEY OBJECT
 #################################################### 
