@@ -218,7 +218,7 @@ data_meps <- data_meps %>%
                 )))
 
 
-readr::write_rds(data_meps, derived_path("meps_analytic.rds"))
+readr::write_rds(data_meps, derived_path("data_meps.rds"))
 
 rm(data_meps_raw)
 #################################################### 
