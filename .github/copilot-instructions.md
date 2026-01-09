@@ -38,7 +38,7 @@ This repo contains scientific analysis code for SRH using NHIS, MEPS, BRFSS, GSS
   If a requested code change could alter the estimator, test, or model meaning, ask for clarification in the response.
 - Write code to be reproducible:
   - use set.seed() when randomness is involved
-  - avoid absolute paths; prefer here::here() or data_depot/derived_path
+  - avoid absolute paths; prefer here::here() or data_depot or derived_path from R/paths.R 
   - keep functions pure where possible (no hidden global state)
 - Be explicit about NA handling (na.rm=, drop_na vs replace_na, etc).
 - When refactoring, preserve outputs: same columns, same units, same grouping.
