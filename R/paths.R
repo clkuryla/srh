@@ -1,4 +1,4 @@
-# Paths helper
+# Paths helper function
 
 # This function enables us to store large files in a separate data depot
 # This function assumes an environment variable DATA_DEPOT and SRH_DATA that points to the root of the data depot (see comments below the code)
@@ -9,7 +9,7 @@ library(here)
 data_root <- function() {
   dr <- Sys.getenv("DATA_DEPOT", unset = NA_character_)
   if (!is.na(dr) && nzchar(dr) && dir.exists(dr)) return(dr)
-  stop("DATA_DEPOT not set. See README.")
+  stop("DATA_DEPOT not set. See README or R/paths.R")
 }
 
 depot_path   <- function(...) file.path(data_root(), ...)
