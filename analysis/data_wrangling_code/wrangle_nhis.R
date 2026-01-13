@@ -20,7 +20,7 @@ data_nhis <- data_nhis_raw %>%
   filter(!(is.na(AGE))) %>% 
   filter(AGE >= 18) %>% 
   filter(AGE < 90) %>% 
-  filter(YEAR >= 1982)
+  filter(YEAR >= 1982) %>% # SRH has no "Very Good" in NHIS pre-1982
 #  select(AGE, YEAR, HEALTH, PSU, STRATA, SAMPWEIGHT, SEX) %>% 
   filter(HEALTH %in% 1:5) %>% 
   mutate(age = AGE, 
@@ -35,16 +35,18 @@ data_nhis <- data_nhis_raw %>%
 rm(data_nhis_raw)
 
 ####### Survey object
+library(survey)
+library(srvyr)
 
-# svy_nhis <- data_nhis %>%
-#   #  filter(!(is.na(HHWEIGHT))) %>% 
-#   filter(!(is.na(SAMPWEIGHT))) %>% 
-#   as_survey_design(
-#     ids = PSU,           # PSU identifiers (use 1 if not available)
-#     weights = SAMPWEIGHT,  # missing some every once in a while
-#     #  weights = HHWEIGHT, # missing 2019+, also this is for households, not individuals
-#     strata = STRATA, 
-#     nest = TRUE
-#   )
+svy_nhis <- data_nhis %>%
+  #  filter(!(is.na(HHWEIGHT))) %>%
+  filter(!(is.na(SAMPWEIGHT))) %>%
+  as_survey_design(
+    ids = psu,           # PSU identifiers (use 1 if not available)
+    weights = wt,  # missing some every once in a while
+    #  weights = HHWEIGHT, # missing 2019+, also this is for households, not individuals
+    strata = strata,
+    nest = TRUE
+  )
 
-readr::write_rds(data_nhis, derived_path("data_nhis.rds"))
+# readr::write_rds(data_nhis, derived_path("data_nhis.rds"))

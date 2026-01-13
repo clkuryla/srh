@@ -12,7 +12,10 @@ editor: visual
 **Data**: NHIS, BRFSS, MEPS, CPS, NHANES, GSS
 
 **Outputs**: 
+
 1. Visualizations and tables of weighted mean SRH by age group over time. 
+
 2. Visualizations and tables of regression results showing the relationship between age and SRH over time for different age groups.
+
 
 

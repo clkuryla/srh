@@ -218,7 +218,7 @@ data_meps <- data_meps %>%
                 )))
 
 
-readr::write_rds(data_meps, derived_path("data_meps.rds"))
+# readr::write_rds(data_meps, derived_path("data_meps.rds"))
 
 rm(data_meps_raw)
 #################################################### 
@@ -230,6 +230,6 @@ library(srvyr)
 svy_meps <- data_meps %>% 
   as_survey_design(
     ids = psu,
-    weights = wt)#,
-# strata = ~strata,
-#  nest = TRUE,)
+    weights = wt,
+    strata = strata,
+    nest = TRUE)
