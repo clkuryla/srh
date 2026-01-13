@@ -1,0 +1,18 @@
+---
+title: "SRH-Age Over Time Phenomenon"
+author: "Christine L. Kuryla"
+format: html
+editor: visual
+---
+
+# SRH-Age Relationship over Time
+
+**Purpose**: Determine the relationship between age and SRH (Self-Rated Health) over time using six datasets.
+
+**Data**: NHIS, BRFSS, MEPS, CPS, NHANES, GSS
+
+**Outputs**: 
+1. Visualizations and tables of weighted mean SRH by age group over time. 
+2. Visualizations and tables of regression results showing the relationship between age and SRH over time for different age groups.
+
+
