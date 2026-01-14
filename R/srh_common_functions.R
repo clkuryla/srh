@@ -1,8 +1,86 @@
 # This script is to source for common needs throughout the SRH analysis project such as:
+#    Formatting (tables, etc)
 #    Colors for consistency across plots
 #    Themes for consistency across ggplots
 #    Common functions for sensitivity analyses
 #    Other functions that are used in multiple places
+
+
+
+##########################
+######### Formatting #########
+##########################
+
+# # Conditional table output based on format
+# if (knitr::is_html_output()) {
+#   library(DT)
+  
+#   datatable(
+#     df,
+#     rownames = FALSE,
+#     caption = if (!is.null(caption)) {
+#       htmltools::tags$caption(
+#         style = 'caption-side: bottom; text-align: left;',
+#         caption
+#       )
+#     } else {
+#       NULL
+#     },
+#     filter = "top",
+#     options = list(
+#       pageLength = 10,
+#       lengthMenu = c(10, 25, 50, 100, nrow(df)),
+#       scrollX = TRUE
+#     )
+#   )
+
+# } else {
+#   knitr::kable(
+#     df,
+#     caption = "Table. Self-rated health by age group and year (NHIS)")
+# }
+
+
+#' Render a table with format-aware output (DT for HTML, kable otherwise)
+#'
+#' @param df A data frame to display.
+#' @param caption Optional caption string.
+#' @return A DT datatable (HTML) or kable (other formats).
+table_render <- function(df, caption = NULL) {
+  stopifnot(is.data.frame(df))
+  
+  n <- nrow(df)
+  length_menu <- c(10)
+  if (n >= 25) length_menu <- c(length_menu, 25)
+  if (n >= 50) length_menu <- c(length_menu, 50)
+  if (n >= 100) length_menu <- c(length_menu, 100)
+  length_menu <- c(length_menu, n)
+  
+  if (knitr::is_html_output()) {
+    DT::datatable(
+      df,
+      rownames = FALSE,
+      caption = if (!is.null(caption)) {
+        htmltools::tags$caption(
+          style = "caption-side: bottom; text-align: left;",
+          caption
+        )
+      } else {
+        NULL
+      },
+      filter = "top",
+      options = list(
+        pageLength = 10,
+        lengthMenu = length_menu,
+        scrollX = TRUE
+      )
+    )
+  } else {
+    knitr::kable(df, caption = caption)
+  }
+}
+
+
 
 ##########################
 ######### Colors #########
