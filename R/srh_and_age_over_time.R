@@ -9,6 +9,8 @@
 # summarize_srh_over_time.R 
 #        Description: Summarize and plot self-rated health (SRH) over time by age group. 
 #        Outputs: a list with 'estimates' data frame and 'plot' ggplot object.
+# table_mean_srh.R
+#        Description: Display SRH means table with DT.
 # -------------------------------------------------------------------------------
 
 
@@ -218,3 +220,31 @@ summarize_srh_over_time <- function(
 # out <- summarize_srh_over_time(data_nhis, survey_name = "NHIS", age_group_var = "age_group")
 # out$estimates
 # out$plot
+
+
+## ---------------------------------------------------------------
+# -------------- Display SRH means table with DT --------------
+# ---------------------------------------------------------------
+library(DT)
+
+table_mean_srh <- function(df, caption = NULL) {
+
+  datatable(
+    df,
+    rownames = FALSE,
+    caption = if (!is.null(caption)) {
+      htmltools::tags$caption(
+        style = 'caption-side: bottom; text-align: left;',
+        caption
+      )
+    } else {
+      NULL
+    },
+    filter = "top",
+    options = list(
+      pageLength = 10,
+      lengthMenu = c(10, 25, 50, 100, nrow(df)),
+      scrollX = TRUE
+    )
+  )
+}

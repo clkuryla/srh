@@ -1,8 +1,20 @@
 ---
 title: "SRH-Age Over Time Phenomenon"
 author: "Christine L. Kuryla"
-format: html
+format: 
+  html:
+    toc: true
+    toc-location: left
+    toc-depth: 3
+  gfm:
+    toc: true
 editor: visual
+execute:
+  echo: false
+  message: false
+  warning: false
+code-fold: true
+code-tools: true
 ---
 
 # SRH-Age Relationship over Time
@@ -13,23 +25,59 @@ editor: visual
 
 **Outputs**: Visualizations and tables of:
 
-1. weighted mean SRH by age group over time. 
+1. Weighted mean SRH by age group over time. 
 
-2. weighted regression results showing the relationship between age and SRH over time for different age groups.
+2. Weighted regression results showing the relationship between age and SRH over time for different age groups.
 
+#### Load packages and source functions
 ```{r}
 library(tidyverse)
 library(here)
 source(here::here("R/paths.R")) # To access path for data as depot_path and derived_path
 ensure_dirs()
 
-```
+source(here::here("R/srh_common_functions.R")) # Common SRH functions
+source(here::here("R/srh_and_age_over_time.R")) # Functions for this analysis/exploration
 
-# Load data
-``````{r}
-
-data_nhis <- readr::read_rds(derived_path("data_nhis.rds")) %>% 
-  select(srh, age, year, psu, wt, strata)
+library(srvyr)
+library(knitr)
 
 ```
 
+#### Load data
+```{r}
+#| label: load-data
+
+data_nhis <- readr::read_rds(derived_path("data_nhis.rds")) |> 
+  select(srh, age, year, psu, wt, strata) |>
+  filter(wt != 0) |>
+  drop_na(srh, age, year, wt) |>
+  add_age_group(scheme = "B", new_var = age_group)
+
+
+```
+
+
+# SRH per age group over time (figures and tables)
+
+## NHIS
+```{r}
+#| label: mean-srh-nhis
+# data_x * 1, namestring *2, srh_means_x * 3
+
+srh_means_nhis <- summarize_srh_over_time(data_nhis, 
+                                          survey_name = "NHIS", 
+                                          age_group_var = "age_group") #,
+                                        #  title_style = "dataset") # Comment out for descriptive title
+                                          
+srh_means_nhis$plot
+
+table_render(
+  srh_means_nhis$estimates,
+  caption = "Table. Self-rated health by age group and year (NHIS)")
+# library(DT)
+# table_mean_srh(
+#   srh_means_nhis$estimates,
+#   caption = "Table. Self-rated health by age group and year (NHIS)")
+
+```
