@@ -3,6 +3,7 @@ library(here)
 source(here::here("R/paths.R")) # To access path for data as depot_path and derived_path
 ensure_dirs()
 
+library(tidyverse)
 library(srvyr)
 
 summarize_srh_over_time <- function(
@@ -17,13 +18,18 @@ summarize_srh_over_time <- function(
   ci_level = 0.95,
   show_ci = FALSE,  # figure default: NO confidence intervals
   colors = c("#D55E00", "#E69F00", "#F0E442", "#009E73", "#56B4E9", "#0072B2", "#CC79A7"),
-  lonely_psu = "adjust"
+  lonely_psu = "adjust",
+  title_style = c("descriptive", "dataset")  # New parameter
 ) {
+
+  title_style <- match.arg(title_style)  # Validate input
+  
   params <- list(
     survey_name = survey_name,
     age_group_var = age_group_var, srh_var = srh_var, year_var = year_var,
     psu_var = psu_var, strata_var = strata_var, wt_var = wt_var,
-    ci_level = ci_level, show_ci = show_ci, colors = colors, lonely_psu = lonely_psu
+    ci_level = ci_level, show_ci = show_ci, colors = colors, lonely_psu = lonely_psu,
+    title_style = title_style  # Store in params
   )
 
   old_lonely <- getOption("survey.lonely.psu")
@@ -165,12 +171,19 @@ summarize_srh_over_time <- function(
   stopifnot(all(is.finite(estimates$mean_srh)))
   stopifnot(n_distinct(estimates$age_group) <= length(params$colors))
 
+  # Create title based on title_style
+  plot_title <- if (params$title_style == "descriptive") {
+    paste0(params$survey_name, ": Weighted mean self-rated health by age group")
+  } else {
+    params$survey_name
+  }
+
   p <- ggplot(estimates, aes(x = year, y = mean_srh, color = age_group, group = age_group)) +
     geom_line(linewidth = 0.6) +
     geom_point(size = 1.2) +
     scale_color_manual(values = params$colors) +
     labs(
-      title = paste0(params$survey_name, ": Weighted mean self-rated health by age group"),
+      title = plot_title,  # Use conditional title
       x = "Survey year",
       y = "Weighted mean SRH",
       color = "Age group"
