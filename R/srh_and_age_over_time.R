@@ -1,19 +1,30 @@
-library(tidyverse)
-library(here)
-source(here::here("R/paths.R")) # To access path for data as depot_path and derived_path
-ensure_dirs()
+# These functions describe and explore the relationship between self-rated health (SRH) and age over time.
+# Fig. 1 in the SRH over age manuscript is generated using these functions.
+
+# -------------------------------------------------------------------------------
+# -------------- File: srh_and_age_over_time.R --------------
+# -------------- Function List and Descriptions --------------
+# Functions:
+#
+# summarize_srh_over_time.R 
+#        Description: Summarize and plot self-rated health (SRH) over time by age group. 
+#        Outputs: a list with 'estimates' data frame and 'plot' ggplot object.
+# -------------------------------------------------------------------------------
 
 
-
-# ' Summarize and plot self-rated health (SRH) over time by age group.
+# -------------------------------------------------------------------------------
+# -------------- Summarize SRH over time by age group --------------
+# -------------------------------------------------------------------------------
+# Summarize and plot self-rated health (SRH) over time by age group.
+# Outputs a list with 'estimates' data frame and 'plot' ggplot object.
 
 library(tidyverse)
 library(srvyr)
 
 summarize_srh_over_time <- function(
   data,
-  survey_name,
-  age_group_var = "age_group",
+  survey_name, # Sstring: name of the survey for titles/labels
+  age_group_var = "age_group", 
   srh_var = "srh",
   year_var = "year",
   psu_var = "psu",
@@ -23,7 +34,7 @@ summarize_srh_over_time <- function(
   show_ci = FALSE,  # figure default: NO confidence intervals
   colors = c("#D55E00", "#E69F00", "#F0E442", "#009E73", "#56B4E9", "#0072B2", "#CC79A7"),
   lonely_psu = "adjust",
-  title_style = c("descriptive", "dataset")  # New parameter
+  title_style = c("descriptive", "dataset")  # Title is just dataset title vs descriptive 
 ) {
 
   title_style <- match.arg(title_style)  # Validate input
