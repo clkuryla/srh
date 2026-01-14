@@ -11,11 +11,25 @@ editor: visual
 
 **Data**: NHIS, BRFSS, MEPS, CPS, NHANES, GSS
 
-**Outputs**: 
+**Outputs**: Visualizations and tables of:
 
-1. Visualizations and tables of weighted mean SRH by age group over time. 
+1. weighted mean SRH by age group over time. 
 
-2. Visualizations and tables of regression results showing the relationship between age and SRH over time for different age groups.
+2. weighted regression results showing the relationship between age and SRH over time for different age groups.
 
+```{r}
+library(tidyverse)
+library(here)
+source(here::here("R/paths.R")) # To access path for data as depot_path and derived_path
+ensure_dirs()
 
+```
+
+# Load data
+``````{r}
+
+data_nhis <- readr::read_rds(derived_path("data_nhis.rds")) %>% 
+  select(srh, age, year, psu, wt, strata)
+
+```
 
