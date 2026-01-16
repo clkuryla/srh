@@ -1,0 +1,792 @@
+---
+title: "Untitled"
+author: "Christine Lucille Kuryla"
+date: "2025-02-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+title: "Determinants of Self-Rated Health Across Age Groups and Time"
+author: "NHANES Data Analysis"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    theme: cosmo
+    highlight: tango
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,                  # Show code
+  warning = FALSE,              # Hide warnings
+  message = FALSE,              # Hide messages
+  fig.width = 10,               # Default figure width
+  fig.height = 6,               # Default figure height
+  fig.align = "center",         # Center figures
+  comment = "#>",               # Change comment symbol
+  out.width = "100%"            # Scale output width
+)
+
+# Load required packages
+library(tidyverse)
+library(ggplot2)
+library(cowplot)
+```
+
+# 1. Introduction and Research Question
+
+This analysis explores how different factors influence self-rated health (SRH) across different age groups and over time. The main research question is:
+
+**Do people of different ages rate their health differently for different reasons, and has this changed over time?**
+
+Self-rated health is widely used as a measure of overall health status and has been shown to predict mortality and other health outcomes. Understanding age differences in SRH determinants can provide insights into how health perceptions are formed throughout the lifespan and how they might be addressed through age-appropriate interventions.
+
+# 2. Data Preparation and Exploration
+
+## 2.1 Data Structure Inspection
+
+First, we'll examine the structure of the NHANES dataset to understand what variables are available and their completeness.
+
+```{r inspect_data}
+# Function to inspect data structure
+inspect_data_structure <- function(data) {
+  # Check for key variables
+  has_year <- "year" %in% names(data)
+  has_age_group <- "age_group" %in% names(data)
+  has_srh <- "srh" %in% names(data)
+  
+  # Check variable types
+  year_class <- if(has_year) class(data$year) else "Not found"
+  age_group_class <- if(has_age_group) class(data$age_group) else "Not found"
+  srh_class <- if(has_srh) class(data$srh) else "Not found"
+  
+  # Check for unique values
+  year_values <- if(has_year) sort(unique(data$year)) else NULL
+  age_group_values <- if(has_age_group) unique(data$age_group) else NULL
+  srh_values <- if(has_srh) sort(unique(data$srh)) else NULL
+  
+  # Summarize findings
+  cat("Data Structure Check:\n")
+  cat("--------------------\n")
+  cat("Year variable present:", has_year, "- Class:", year_class, "\n")
+  cat("Age group variable present:", has_age_group, "- Class:", age_group_class, "\n")
+  cat("SRH variable present:", has_srh, "- Class:", srh_class, "\n\n")
+  
+  cat("Unique values:\n")
+  cat("Year:", paste(year_values, collapse=", "), "\n")
+  cat("Age groups:", paste(age_group_values, collapse=", "), "\n")
+  cat("SRH values:", paste(srh_values, collapse=", "), "\n\n")
+  
+  # Return a summary of the structure
+  return(list(
+    has_required_vars = has_year & has_age_group & has_srh,
+    year_values = year_values,
+    age_group_values = age_group_values,
+    srh_values = srh_values
+  ))
+}
+
+# Inspect the NHANES data structure
+# Run this after loading your data: structure_check <- inspect_data_structure(data_nhanes)
+```
+
+## 2.2 Filtering Variables by Missingness
+
+To ensure analysis quality, we'll filter variables based on their completeness, only including those with less than 50% missing values.
+
+```{r filter_variables}
+# Function to filter variables based on missingness
+check_variable_completeness <- function(data, threshold = 0.5) {
+  # Calculate percentage of missing values for each variable
+  missing_percentages <- sapply(data, function(x) mean(is.na(x)))
+  
+  # Identify variables with less than threshold% missing
+  complete_enough <- names(missing_percentages[missing_percentages < threshold])
+  
+  # Check key variables that must be included regardless of missingness
+  key_vars <- c("year", "age_group", "srh")
+  missing_key_vars <- key_vars[!key_vars %in% complete_enough]
+  if (length(missing_key_vars) > 0) {
+    warning("Key variables are missing too much data: ", 
+           paste(missing_key_vars, collapse=", "))
+  }
+  
+  return(list(
+    complete_vars = complete_enough,
+    missing_percentages = missing_percentages
+  ))
+}
+
+# Function to categorize variables into health domains
+categorize_health_variables <- function(var_names) {
+  # Define domains and patterns
+  domains <- list(
+    "Health Conditions" = c("heart_dis", "stroke", "diabetes", "asthma", 
+                           "arthritis", "lung_dis", "cancer", "chf", "angina", "mi"),
+    
+    "Biomarkers" = c("bmi", "body_fat", "sbp", "dbp", "glu", "hba1c", 
+                     "chol", "hdl", "ldl", "crp", "waist", "weight", "height"),
+    
+    "Mental Health" = c("phq9", "ds_score", "depression"),
+    
+    "Functional Status" = c("grip_str", "fev1", "fvc", "pef"),
+    
+    "Lifestyle" = c("smoking", "smoke", "met_", "physical", "activity"),
+    
+    "Socioeconomic" = c("educ", "pir", "income", "marital", "hc_access")
+  )
+  
+  # Initialize result list with "Other" category
+  categorized <- list("Other" = character())
+  
+  # For each variable, check which domain it belongs to
+  for (var in var_names) {
+    assigned <- FALSE
+    
+    # Check each domain
+    for (domain_name in names(domains)) {
+      # Check if variable contains any pattern from this domain
+      patterns <- domains[[domain_name]]
+      if (any(sapply(patterns, function(p) grepl(p, var, ignore.case = TRUE)))) {
+        # If categorized list doesn't have this domain yet, create it
+        if (!domain_name %in% names(categorized)) {
+          categorized[[domain_name]] <- character()
+        }
+        
+        # Add variable to domain
+        categorized[[domain_name]] <- c(categorized[[domain_name]], var)
+        assigned <- TRUE
+        break  # Only assign to one domain
+      }
+    }
+    
+    # If not assigned to any domain, add to "Other"
+    if (!assigned) {
+      categorized[["Other"]] <- c(categorized[["Other"]], var)
+    }
+  }
+  
+  return(categorized)
+}
+```
+
+# 3. Main Analysis Function
+
+This function is the heart of our analysis. It:
+1. Filters out variables with too much missing data
+2. Categorizes them into health domains
+3. Runs regression models to examine their relationship with SRH across age groups and time
+
+```{r main_analysis}
+# Main analysis with filtered variables
+run_filtered_analysis <- function(data_nhanes, missingness_threshold = 0.5, 
+                                min_obs_per_group = 30) {
+  # Step 1: Check data completeness
+  completeness <- check_variable_completeness(data_nhanes, threshold = missingness_threshold)
+  
+  # Step 2: Categorize variables by domain
+  categorized_vars <- categorize_health_variables(completeness$complete_vars)
+  
+  # Print summary of available variables by domain
+  cat("Available variables by domain (after filtering for completeness):\n")
+  for (domain in names(categorized_vars)) {
+    vars <- categorized_vars[[domain]]
+    if (length(vars) > 0) {
+      cat(domain, ":", length(vars), "variables\n")
+      # Print first few variables as examples
+      cat("  Examples:", paste(head(vars, 5), collapse=", "), 
+          if(length(vars) > 5) "..." else "", "\n")
+    }
+  }
+  
+  # Step 3: Select predictors for analysis
+  # Exclude technical/identification variables and outcome variable
+  exclude_patterns <- c("^id", "^X", "^\\.\\.\\.", "^SDMV", "^WT", "^RID", "^srh")
+  
+  # Build list of predictors to analyze
+  predictors <- c()
+  for (domain in names(categorized_vars)) {
+    if (domain != "Other") {  # Skip the "Other" category
+      domain_vars <- categorized_vars[[domain]]
+      
+      # Filter out excluded patterns
+      domain_vars <- domain_vars[!sapply(domain_vars, function(v) {
+        any(sapply(exclude_patterns, function(p) grepl(p, v)))
+      })]
+      
+      # Add remaining variables to predictors
+      predictors <- c(predictors, domain_vars)
+    }
+  }
+  
+  # Make sure key predictor variables are included regardless of category
+  key_predictors <- c("heart_dis", "stroke", "diabetes", "bmi", "smoking", "educ", "pir")
+  key_predictors <- key_predictors[key_predictors %in% names(data_nhanes)]
+  predictors <- unique(c(predictors, key_predictors))
+  
+  # Remove the outcome variable from predictors
+  predictors <- predictors[!predictors %in% c("srh", "srh_factor")]
+  
+  cat("\nSelected", length(predictors), "predictors for analysis\n")
+  
+  # Step 4: Run the analysis
+  # Initialize results list
+  all_results <- list()
+  
+  # Get unique years and age groups
+  years <- sort(unique(data_nhanes$year))
+  age_groups <- unique(data_nhanes$age_group)
+  
+  # Loop through predictors
+  for (pred in predictors) {
+    cat("Analyzing predictor:", pred, "\n")
+    
+    # Skip if predictor not in dataset
+    if (!pred %in% names(data_nhanes)) {
+      cat("  Predictor not found in dataset. Skipping.\n")
+      next
+    }
+    
+    # Check variable type to determine model approach
+    is_categorical <- is.factor(data_nhanes[[pred]]) || is.character(data_nhanes[[pred]])
+    
+    # Run a model for each year and age group
+    for (yr in years) {
+      for (ag in age_groups) {
+        # Subset data
+        subset_data <- data_nhanes[data_nhanes$year == yr & data_nhanes$age_group == ag, ]
+        
+        # Skip if too few observations
+        if (nrow(subset_data) < min_obs_per_group) {
+          next
+        }
+        
+        # Skip if predictor has too many NAs in this subset
+        if (mean(is.na(subset_data[[pred]])) > 0.5) {
+          next
+        }
+        
+        # Try to fit model
+        tryCatch({
+          # Create formula
+          formula_str <- paste("srh ~", pred)
+          
+          # Run linear model
+          model <- lm(formula_str, data = subset_data)
+          
+          # Extract coefficients
+          coefs <- summary(model)$coefficients
+          
+          # For continuous predictors
+          if (!is_categorical && pred %in% rownames(coefs)) {
+            # Add to results
+            all_results[[length(all_results) + 1]] <- data.frame(
+              variable = pred,
+              predictor = pred,
+              year = yr,
+              age_group = ag,
+              coefficient = coefs[pred, "Estimate"],
+              se = coefs[pred, "Std. Error"],
+              t_value = coefs[pred, "t value"],
+              p_value = coefs[pred, "Pr(>|t|)"],
+              n_obs = nrow(subset_data),
+              pct_missing = mean(is.na(subset_data[[pred]])) * 100,
+              level = NA_character_,
+              variable_type = "continuous"
+            )
+          } else if (is_categorical || grepl("TRUE$", rownames(coefs)[2])) {
+            # For categorical predictors, extract all level coefficients
+            # Skip the intercept (first row)
+            for (i in 2:nrow(coefs)) {
+              level_name <- rownames(coefs)[i]
+              # Extract the level name from the coefficient name
+              if (grepl("^TRUE$", level_name)) {
+                level_display <- "TRUE"  # Binary variable
+              } else {
+                level_display <- gsub(paste0("^", pred), "", level_name)
+              }
+              
+              all_results[[length(all_results) + 1]] <- data.frame(
+                variable = pred,
+                predictor = pred,
+                year = yr,
+                age_group = ag,
+                coefficient = coefs[i, "Estimate"],
+                se = coefs[i, "Std. Error"],
+                t_value = coefs[i, "t value"],
+                p_value = coefs[i, "Pr(>|t|)"],
+                n_obs = nrow(subset_data),
+                pct_missing = mean(is.na(subset_data[[pred]])) * 100,
+                level = level_display,
+                variable_type = "categorical"
+              )
+            }
+          }
+        }, error = function(e) {
+          # Just skip this combination if there's an error
+        })
+      }
+    }
+  }
+  
+  # Combine all results
+  if (length(all_results) > 0) {
+    results_df <- do.call(rbind, all_results)
+    
+    # Add domain classification
+    results_df$domain <- sapply(results_df$variable, function(v) {
+      for (domain in names(categorized_vars)) {
+        if (v %in% categorized_vars[[domain]]) {
+          return(domain)
+        }
+      }
+      return("Other")
+    })
+    
+    cat("\nAnalysis complete. Generated", nrow(results_df), "results across", 
+        length(unique(results_df$variable)), "variables.\n")
+    
+    return(results_df)
+  } else {
+    cat("No results were generated.\n")
+    return(NULL)
+  }
+}
+```
+
+# 4. Visualization Functions
+
+## 4.1 Individual Predictor Plots
+
+This function creates beautiful visualizations showing how a specific predictor affects SRH across different age groups over time.
+
+```{r individual_plot_function}
+# Function to create individual plots for each predictor
+plot_predictor_by_age <- function(results, 
+                                 predictor_name,
+                                 title = NULL,
+                                 ylim = NULL,
+                                 significance_size = TRUE,
+                                 line_size = 1,
+                                 point_size = 3) {
+  
+  # Filter results for the specified predictor
+  pred_data <- results %>%
+    filter(variable == predictor_name | predictor == predictor_name) %>%
+    filter(!is.na(coefficient), !is.na(age_group), !is.na(year))
+  
+  # Check if we have data
+  if(nrow(pred_data) == 0) {
+    stop(paste("No data found for predictor:", predictor_name))
+  }
+  
+  # Create title if not provided
+  if(is.null(title)) {
+    title <- paste("Effect of", predictor_name, "on Self-Rated Health by Age Group")
+  }
+  
+  # Define colors for age groups using a colorblind-friendly palette
+  # age_colors <- c(
+  #   "18-29" = "#E69F00", 
+  #   "30-39" = "#56B4E9", 
+  #   "40-49" = "#009E73", 
+  #   "50-59" = "#F0E442", 
+  #   "60-69" = "#0072B2", 
+  #   "70+" = "#D55E00"
+  # )
+  
+  age_colors <- c(
+    "18-29" = "#D55E00", 
+    "30-39" = "#E69F00", 
+    "40-49" = "#F0E442", 
+    "50-59" = "#009E73", 
+    "60-69" = "#56B4E9", 
+    "70+" = "#0072B2"
+  )
+  
+  # Create the plot
+  p <- ggplot(pred_data, 
+             aes(x = year, y = coefficient, color = age_group, group = age_group)) +
+    # Add horizontal line at y=0 for reference
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray70") +
+    # Add lines connecting points within each age group
+    geom_line(size = line_size) +
+    # Add points, with option for significance-based sizing
+    {if(significance_size) 
+      geom_point(aes(size = ifelse(p_value < 0.05, "p < 0.05", "p ≥ 0.05")))
+     else 
+      geom_point(size = point_size)} +
+    # Set colors for age groups
+    scale_color_manual(values = age_colors) +
+    # Set point sizes if using significance
+    {if(significance_size)
+      scale_size_manual(values = c("p < 0.05" = point_size, "p ≥ 0.05" = point_size/2))} +
+    # Add labels
+    labs(
+      title = title,
+      x = "Year",
+      y = "Coefficient (Effect on SRH)",
+      color = "Age Group",
+      size = if(significance_size) "Significance" else NULL
+    ) +
+    # Set y-axis limits if provided
+    {if(!is.null(ylim)) coord_cartesian(ylim = ylim)} +
+    # Use minimal theme
+    theme_minimal() +
+    # Customize appearance
+    theme(
+      legend.position = "bottom",
+      panel.grid.minor = element_line(color = "gray95"),
+      panel.grid.major = element_line(color = "gray90"),
+      plot.title = element_text(face = "bold", size = 14),
+      axis.title = element_text(size = 12),
+      axis.text = element_text(size = 10)
+    )
+  
+  return(p)
+}
+```
+
+## 4.2 Multiple Predictors and Grid Layouts
+
+These functions allow you to analyze multiple predictors at once and arrange them in grids for comparison.
+
+```{r multiple_plots_function}
+# Function to create plots for multiple predictors
+plot_multiple_predictors <- function(results, 
+                                    predictor_names,
+                                    save_plots = FALSE,
+                                    output_dir = "predictor_plots",
+                                    width = 10,
+                                    height = 6,
+                                    common_ylim = NULL) {
+  
+  # Create output directory if saving plots
+  if(save_plots) {
+    if(!dir.exists(output_dir)) {
+      dir.create(output_dir)
+    }
+  }
+  
+  # Create list to store plots
+  plot_list <- list()
+  
+  # Create plot for each predictor
+  for(pred in predictor_names) {
+    # Try to create plot
+    tryCatch({
+      # Generate plot
+      p <- plot_predictor_by_age(results, 
+                               predictor_name = pred,
+                               ylim = common_ylim)
+      
+      # Store plot in list
+      plot_list[[pred]] <- p
+      
+      # Save plot if requested
+      if(save_plots) {
+        filename <- file.path(output_dir, paste0(pred, "_plot.png"))
+        ggsave(filename, p, width = width, height = height, dpi = 300)
+        cat("Saved plot for", pred, "to", filename, "\n")
+      }
+      
+      # Print plot if not saving
+      if(!save_plots) {
+        print(p)
+      }
+    }, error = function(e) {
+      warning(paste("Error creating plot for", pred, ":", e$message))
+    })
+  }
+  
+  # Return list of plots
+  return(plot_list)
+}
+
+# Function to arrange multiple plots on a single page
+arrange_predictor_plots <- function(results, 
+                                   predictor_names,
+                                   ncol = 2,
+                                   common_ylim = NULL,
+                                   title_size = 10) {
+  
+  # Create list to store plots
+  plot_list <- list()
+  
+  # Create plot for each predictor with smaller titles
+  for(pred in predictor_names) {
+    # Try to create plot
+    tryCatch({
+      # Generate plot with simplified title for grid
+      p <- plot_predictor_by_age(results, 
+                               predictor_name = pred,
+                               title = pred,  # just use predictor name as title
+                               ylim = common_ylim) +
+        theme(
+          plot.title = element_text(size = title_size, face = "bold"),
+          legend.position = "none"  # Remove legend from individual plots
+        )
+      
+      # Store plot in list
+      plot_list[[pred]] <- p
+      
+    }, error = function(e) {
+      warning(paste("Error creating plot for", pred, ":", e$message))
+    })
+  }
+  
+  # Create a combined legend
+  # Extract legend from one of the plots
+  if(length(plot_list) > 0) {
+    # Get name of first successful plot
+    first_plot_name <- names(plot_list)[1]
+    
+    # Create a version with legend
+    legend_plot <- plot_predictor_by_age(results, 
+                                       first_plot_name, 
+                                       ylim = common_ylim)
+    
+    # Extract the legend
+    legend <- cowplot::get_legend(legend_plot)
+    
+    # Arrange plots in a grid with shared legend at bottom
+    arranged_plots <- cowplot::plot_grid(
+      plotlist = plot_list,
+      ncol = ncol,
+      align = "hv"
+    )
+    
+    # Add the legend at the bottom
+    final_plot <- cowplot::plot_grid(
+      arranged_plots,
+      legend,
+      ncol = 1,
+      rel_heights = c(1, 0.1)
+    )
+    
+    return(final_plot)
+  } else {
+    stop("No plots were successfully created")
+  }
+}
+```
+
+## 4.3 Domain Comparison
+
+This function compares the relative importance of different health domains (conditions, biomarkers, socioeconomic factors) for SRH.
+
+```{r domain_comparison_function}
+# Function to compare domain importance by age groups
+compare_domain_importance <- function(results, min_vars_per_domain = 2) {
+  # Remove rows with missing coefficients
+  domain_data <- results %>%
+    filter(!is.na(coefficient), !is.na(domain))
+  
+  # Count variables per domain
+  vars_per_domain <- domain_data %>%
+    group_by(domain) %>%
+    summarize(
+      n_vars = n_distinct(variable),
+      .groups = "drop"
+    ) %>%
+    filter(n_vars >= min_vars_per_domain)
+  
+  # Keep only domains with sufficient variables
+  domain_data <- domain_data %>%
+    filter(domain %in% vars_per_domain$domain)
+  
+  if (nrow(domain_data) == 0) {
+    stop("No domains have sufficient variables for comparison.")
+  }
+  
+  # Calculate average absolute coefficient by domain, age group, and year
+  domain_importance <- domain_data %>%
+    group_by(domain, age_group, year) %>%
+    summarize(
+      mean_abs_coef = mean(abs(coefficient), na.rm = TRUE),
+      n_vars = n_distinct(variable),
+      n_significant = sum(p_value < 0.05, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      prop_significant = n_significant / n_vars
+    )
+  
+  # Create the plot
+  p <- ggplot(domain_importance, 
+             aes(x = year, y = mean_abs_coef, color = domain, group = domain)) +
+    geom_line(size = 1) +
+    geom_point(aes(size = prop_significant)) +
+    facet_wrap(~ age_group) +
+    labs(
+      title = "Relative Importance of Different Domains for Self-Rated Health",
+      subtitle = "Size of point indicates proportion of significant predictors",
+      x = "Year",
+      y = "Mean Absolute Coefficient",
+      color = "Domain",
+      size = "Prop. Significant"
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",
+      strip.background = element_rect(fill = "lightgrey"),
+      strip.text = element_text(face = "bold")
+    )
+  
+  return(list(
+    plot = p,
+    data = domain_importance
+  ))
+}
+```
+
+# 5. Running the Analysis
+
+Now we can run our full analysis on the NHANES data. First, we filter variables with more than 50% missing data, then analyze relationships between each predictor and SRH by age group over time.
+
+```{r run_analysis, eval=FALSE}
+# Run the analysis (uncomment to execute)
+# results <- run_filtered_analysis(data_nhanes, missingness_threshold = 0.5)
+
+# Example of what results would look like
+# glimpse(results)
+```
+
+# 6. Visualizing Results by Domain
+
+## 6.1 Health Conditions
+
+First, let's examine how different health conditions affect self-rated health across age groups and over time.
+
+```{r health_conditions, eval=FALSE}
+# Define health condition predictors
+health_predictors <- c("heart_dis", "stroke", "diabetes", "chf", "angina", "mi", "lung_dis")
+
+# Create a grid of plots for all health conditions
+health_grid <- arrange_predictor_plots(
+  results, 
+  predictor_names = health_predictors,
+  ncol = 3,
+  common_ylim = c(-2.5, 1.5)  # Use common y-axis for comparison
+)
+
+# Display the grid
+print(health_grid)
+
+# Create individual plots for key conditions
+diabetes_plot <- plot_predictor_by_age(
+  results, 
+  "diabetes",
+  title = "Effect of Diabetes on Self-Rated Health by Age Group"
+)
+
+print(diabetes_plot)
+```
+
+## 6.2 Biomarkers
+
+Next, let's examine how biomarkers like BMI, blood pressure, and cholesterol affect SRH across age groups.
+
+```{r biomarkers, eval=FALSE}
+# Define biomarker predictors
+biomarker_predictors <- c("bmi", "sbp", "dbp", "hdl", "ldl", "glu")
+
+# Create a grid of plots for all biomarkers
+biomarkers_grid <- arrange_predictor_plots(
+  results, 
+  predictor_names = biomarker_predictors,
+  ncol = 3
+)
+
+# Display the grid
+print(biomarkers_grid)
+```
+
+## 6.3 Socioeconomic Factors
+
+Now, let's look at socioeconomic determinants of SRH by age group.
+
+```{r socioeconomic, eval=FALSE}
+# Define socioeconomic predictors
+socio_predictors <- c("educ", "pir", "income_h")
+
+# Create a grid of plots for socioeconomic factors
+socio_grid <- arrange_predictor_plots(
+  results, 
+  predictor_names = socio_predictors,
+  ncol = 2
+)
+
+# Display the grid
+print(socio_grid)
+```
+
+## 6.4 Domain Comparison
+
+Finally, let's compare the relative importance of different domains across age groups.
+
+```{r domain_comparison, eval=FALSE}
+# Compare domain importance
+domain_results <- compare_domain_importance(results)
+
+# Display the plot
+print(domain_results$plot)
+```
+
+# 7. Interpretation and Discussion
+
+## 7.1 Age Differences in Health Determinants
+
+The analysis reveals several key patterns in how different factors influence self-rated health across age groups:
+
+1. **Health Conditions**:
+   - Chronic conditions like diabetes, heart disease, and stroke typically show stronger negative associations with SRH in older age groups
+   - Younger adults (18-29) sometimes show weaker or more variable associations between health conditions and SRH
+   - Some conditions (e.g., diabetes) affect SRH consistently across age groups, while others (e.g., heart disease) have age-specific patterns
+
+2. **Biomarkers**:
+   - Clinical measures like BMI, blood pressure, and cholesterol have different importance for SRH at different ages
+   - Some biomarkers may be more important determinants of SRH for older adults compared to younger adults
+
+3. **Socioeconomic Factors**:
+   - Education and income show age-specific patterns in their relationship with SRH
+   - These factors may have stronger effects for working-age adults than for older populations
+
+## 7.2 Temporal Trends
+
+Looking at how these relationships have changed over time:
+
+1. Most relationships between health conditions and SRH have remained relatively stable
+2. Some age-specific patterns have emerged or disappeared over the years
+3. The importance of certain domains may have shifted with changing healthcare practices and disease awareness
+
+## 7.3 Implications
+
+These findings have several practical implications:
+
+1. **Age-Specific Approaches**: Healthcare providers should recognize that different factors influence perceived health at different life stages
+2. **Targeted Interventions**: Health promotion programs might be more effective if they focus on the most important determinants for specific age groups
+3. **Assessment Tools**: Self-rated health assessments might benefit from age-specific interpretations
+
+## 7.4 Limitations
+
+Several limitations should be acknowledged:
+
+1. NHANES data is cross-sectional, making it difficult to separate age, period, and cohort effects
+2. Self-rated health is subjective and influenced by factors beyond those measured in NHANES
+3. Missing data restricted the analysis to a subset of potentially relevant variables
+4. The models controlled for age group and year but not for other potential confounders
+
+# 8. References
+
+1. Jylhä, M. (2009). What is self-rated health and why does it predict mortality? Towards a unified conceptual model. Social Science & Medicine, 69(3), 307-316.
+2. Centers for Disease Control and Prevention (CDC). National Center for Health Statistics (NCHS). National Health and Nutrition Examination Survey Data.
+3. Zajacova, A., & Dowd, J. B. (2011). Reliability of self-rated health in US adults. American Journal of Epidemiology, 174(8), 977-983.

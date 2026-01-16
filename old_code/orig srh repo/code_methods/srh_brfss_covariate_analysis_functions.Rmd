@@ -1,0 +1,1351 @@
+---
+title: "BRFSS Trends and Analyses"
+author: "Christine Lucille Kuryla"
+date: "2025-09-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Old file: srh_brfss_covariate_analysis_clean.Rmd
+
+mh_good_days ~ srh + dep_dx
+ph_good_days ~ srh + diabetes + etc
+usual_activities ~ srh + comorbidities
+
+Q: is mh_good_days ~ srh equivalent to srh ~ mh_good_days?
+
+# Introduction
+This report presents an analysis of the BRFSS dataset (1993–2023). We are interested in exploring:
+
+*Coefficient Analyses:*
+How do different predictors—Physical Health, Mental Health, Functional Health (measured by usual_activities_health), Sex, and Education (EDUCA)—relate to self‑rated health (SRH) over time? What about comorbidities? We run separate weighted regressions (by year and age group) and visualize the coefficients (with confidence intervals) over the years. 
+
+We also provide a grouped bar plot of the average coefficients (averaged over all years) by age group.
+
+*Prevalence/Trend Analyses:*
+Moving away from regression coefficients, we explore trends in the average values of Mental Health, Physical Health, and Functional Health (via usual_activities_health) over time for each age group. An overall bar plot summarizes the average health measures across all years by age group.
+
+# Load data and create survey object
+
+First, load data into data_brfss. See srh_brfss_morevariables.Rmd for data loading, cleaning, wrangling. 
+
+```{r}
+
+library(tidyverse)
+library(here)
+data_brfss <-read_csv(here("big_data/BRFSS/brfss_selected_20250916.csv")) #check this
+
+```
+
+Create survey object.
+
+```{r}
+
+library(srvyr)
+
+# Create svy object to enable weighted analysis
+svy_brfss <- data_brfss %>%
+  select(psu, wt, srh, year, age_decade_cat_6, age_decade_cat, mental_health_good_days:prediab_any) %>% #age_decade_cat, age_decade_cat_6) %>% 
+  filter(!(year == 1993)) %>% # different form of question
+  as_survey_design(
+    ids    = psu,
+   # strata = ststr, # For the plots, we will not use the strata because the memory times out after 32 GB. This only changes the SE so the point estimates will be correct and that's sufficient for visualization. 
+    weights = wt#,
+  #  nest = TRUE
+  )
+
+
+df %>% 
+  mutate(functional_ratio_1 = 
+           case_when(
+               PHYSHLTH == 0 & MENTHLTH == 0 ~ NA_real_,
+               TRUE ~ (1 - POORHLTH / pmax(PHYSHLTH, MENTHLTH))
+               )) %>% 
+  mutate(functional_ratio_cdc = 
+           case_when(
+               PHYSHLTH == 0 & MENTHLTH == 0 ~ NA_real_,
+               TRUE ~ (1 - POORHLTH / unhealthy_days)
+               ))
+
+svy_brfss <- df %>%
+  select(psu, wt, srh, year, age_decade_cat_6, age_decade_cat, GENHLTH:POORHLTH, mental_health_good_days:prediab_any) %>% #age_decade_cat, age_decade_cat_6) %>% 
+  filter(!(year == 1993)) %>% # different form of question
+  as_survey_design(
+    ids    = psu,
+   # strata = ststr, # For the plots, we will not use the strata because the memory times out after 32 GB. This only changes the SE so the point estimates will be correct and that's sufficient for visualization. 
+    weights = wt#,
+  #  nest = TRUE
+  )
+
+```
+
+# Define function for prevalance and regression coefficient plots
+
+```{r}
+library(tidyverse)
+library(survey)
+library(broom)
+
+# Master function for creating survey-weighted trend plots
+plot_survey_trends <- function(svy_data,
+                               plot_type = c("coefficient", "prevalence"),
+                               variables = NULL,        # For prevalence plots
+                               predictors = NULL,       # For coefficient plots  
+                               outcome = NULL,          # For coefficient plots
+                               age_var = "age_decade_cat",
+                               year_var = "year",
+                               colors = NULL,
+                               legend_labels = NULL,    # Custom legend labels
+                               overall_title = NULL,
+                               y_label = NULL,
+                               x_label = "Year",
+                               legend_title = NULL,
+                               legend_position = c(0.76, 0.18),
+                               legend_justification = c(0, 0),
+                               title_bold = FALSE,
+                               strip_text_size = 11,
+                               strip_text_bold = FALSE,
+                               title_size = 14,
+                               facet_rows = 2,
+                               confidence_level = 0.95,
+                               min_n = 30) {
+  
+  # Validate plot type
+  plot_type <- match.arg(plot_type)
+  
+  # Default colors if not provided
+  if(is.null(colors)) {
+  #  colors <- c("#E91E63", "#8BC34A", "#2196F3", "#FF9800", "#9C27B0", 
+  #              "lightpink", "gold", "turquoise2", "gray", "mediumpurple1")
+    colors <- c("cornflowerblue", "mediumvioletred", "chartreuse3", "darkgoldenrod1",
+                "mediumpurple1", "lightpink", "darkorange2", 
+                "aquamarine", "gray", "gold")
+    
+  }
+  
+  # Set default titles based on plot type
+  if(is.null(overall_title)) {
+    overall_title <- ifelse(plot_type == "coefficient", 
+                            "Coefficient Trends by Age Group",
+                            "Health Measure Trends by Age Group")
+  }
+  
+  if(is.null(y_label)) {
+    y_label <- ifelse(plot_type == "coefficient", 
+                      "Coefficient", 
+                      "Average Value")
+  }
+  
+  if(is.null(legend_title)) {
+    legend_title <- ifelse(plot_type == "coefficient", 
+                           "Predictor", 
+                           "Health Measure")
+  }
+  
+  # Get unique age groups and years
+  age_groups <- unique(svy_data$variables[[age_var]])
+  age_groups <- age_groups[!is.na(age_groups)]
+  
+  years <- unique(svy_data$variables[[year_var]])
+  years <- sort(years[!is.na(years)])
+  
+  # Initialize results data frame
+  results_df <- data.frame()
+  
+  # Branch based on plot type
+  if(plot_type == "coefficient") {
+    # Coefficient plot logic
+    if(is.null(predictors) || is.null(outcome)) {
+      stop("For coefficient plots, both 'predictors' and 'outcome' must be specified")
+    }
+    
+    # Loop through age groups and years
+    for(age in age_groups) {
+      for(yr in years) {
+        # Subset survey data
+        svy_subset <- subset(svy_data, 
+                             get(age_var) == age & get(year_var) == yr)
+        
+        # Check if subset has enough data
+        if(nrow(svy_subset$variables) > min_n) {
+          # Build formula
+          formula_str <- paste(outcome, "~", paste(predictors, collapse = " + "))
+          formula_obj <- as.formula(formula_str)
+          
+          # Try to fit model
+          tryCatch({
+            model <- svyglm(formula_obj, design = svy_subset)
+            
+            # Extract coefficients with confidence intervals
+            coef_summary <- tidy(model, conf.int = TRUE, conf.level = confidence_level)
+            
+            # Add metadata
+            coef_summary$age_group <- as.character(age)
+            coef_summary$year <- yr
+            
+            # Filter to only the predictors of interest
+            coef_summary <- coef_summary[coef_summary$term %in% predictors, ]
+            
+            # Bind to results
+            results_df <- rbind(results_df, coef_summary)
+          }, error = function(e) {
+            # Skip if model fails
+            NULL
+          })
+        }
+      }
+    }
+    
+    # Rename for consistency
+    results_df <- results_df %>%
+      rename(
+        variable = term,
+        value = estimate,
+        se = std.error,
+        ci_lower = conf.low,
+        ci_upper = conf.high
+      )
+    
+    # Variables to use for plotting
+    plot_vars <- predictors
+    
+  } else {
+    # Prevalence/average plot logic
+    if(is.null(variables)) {
+      stop("For prevalence plots, 'variables' must be specified")
+    }
+    
+    # Loop through variables, age groups, and years
+    for(var in variables) {
+      # Check variable type
+      var_values <- svy_data$variables[[var]]
+      is_binary <- all(var_values %in% c(0, 1, NA))
+      
+      for(age in age_groups) {
+        for(yr in years) {
+          # Subset survey data
+          svy_subset <- subset(svy_data, 
+                               get(age_var) == age & get(year_var) == yr)
+          
+          # Check if subset has enough data
+          if(nrow(svy_subset$variables) > min_n) {
+            tryCatch({
+              # Calculate weighted mean (works for both binary and continuous)
+              result <- svymean(as.formula(paste("~", var)), 
+                                design = svy_subset, 
+                                na.rm = TRUE)
+              estimate <- as.numeric(result)[1]
+              se <- as.numeric(sqrt(attr(result, "var")))[1]
+              
+              # Calculate confidence intervals
+              z_score <- qnorm(1 - (1 - confidence_level) / 2)
+              ci_lower <- estimate - z_score * se
+              ci_upper <- estimate + z_score * se
+              
+              # If binary, convert to percentage
+              if(is_binary) {
+                estimate <- estimate * 100
+                ci_lower <- ci_lower * 100
+                ci_upper <- ci_upper * 100
+                se <- se * 100
+              }
+              
+              # Add to results
+              new_row <- data.frame(
+                variable = var,
+                age_group = as.character(age),
+                year = yr,
+                value = estimate,
+                se = se,
+                ci_lower = ci_lower,
+                ci_upper = ci_upper,
+                type = ifelse(is_binary, "prevalence", "mean")
+              )
+              
+              results_df <- rbind(results_df, new_row)
+              
+            }, error = function(e) {
+              # Skip if calculation fails
+              NULL
+            })
+          }
+        }
+      }
+    }
+    
+    # Variables to use for plotting
+    plot_vars <- variables
+  }
+  
+  # Create named color vector for proper mapping
+  color_mapping <- setNames(colors[1:length(plot_vars)], plot_vars)
+  
+  # Create legend labels - use custom if provided, otherwise auto-generate
+  if(!is.null(legend_labels)) {
+    # Check if the right number of labels were provided
+    if(length(legend_labels) != length(plot_vars)) {
+      stop(paste("Number of legend_labels (", length(legend_labels), 
+                 ") must match number of variables/predictors (", 
+                 length(plot_vars), ")", sep = ""))
+    }
+    label_mapping <- setNames(legend_labels, plot_vars)
+  } else {
+    # Auto-generate nice labels
+    label_mapping <- setNames(
+      stringr::str_to_title(gsub("_", " ", plot_vars)),
+      plot_vars
+    )
+  }
+  
+  # Create the plot
+  p <- ggplot(results_df, aes(x = year, y = value, color = variable)) +
+    geom_line(linewidth = 1.2, alpha = 0.8) +
+    geom_point(size = 0.8, alpha = 0.6) +
+    geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper, fill = variable), 
+                alpha = 0.4, linetype = 0) +
+   # facet_wrap(~ age_group, nrow = facet_rows) +
+    facet_wrap(~ age_group, nrow = 1) +
+    scale_color_manual(values = color_mapping, labels = label_mapping) +
+    scale_fill_manual(values = color_mapping, labels = label_mapping) +
+    labs(
+      title = overall_title,
+      x = x_label,
+      y = y_label,
+      color = legend_title,
+      fill = legend_title
+    ) +
+    theme_minimal() +
+    theme(
+    #  legend.position = "inside",  # First specify that legend should be inside
+    #  legend.position.inside = legend_position,  # Then specify where inside
+    #  legend.justification = legend_justification,
+      legend.position = "bottom",
+      legend.background = element_rect(fill = "white", color = NA),
+      legend.key.size = unit(0.8, "lines"),
+      strip.text = element_text(
+        size = strip_text_size, 
+        face = ifelse(strip_text_bold, "bold", "plain")
+      ),
+      panel.grid.minor = element_blank(),
+      axis.text.x = element_text(angle = 30), #, hjust = 1, vjust = 0.5), 
+      plot.title = element_text(
+        hjust = 0.5, 
+        size = title_size, 
+        face = ifelse(title_bold, "bold", "plain")
+      )
+    )
+  
+  # Create summary table
+  if(plot_type == "coefficient") {
+    summary_table <- results_df %>%
+      select(age_group, year, variable, value, se, p.value, ci_lower, ci_upper) %>%
+      rename(coefficient = value) %>%
+      mutate(across(where(is.numeric), ~round(., 4)))
+  } else {
+    summary_table <- results_df %>%
+      select(age_group, year, variable, value, se, ci_lower, ci_upper, type) %>%
+      mutate(across(where(is.numeric), ~round(., 2)))
+  }
+  
+  # Print first rows of summary table
+  cat("\nSummary of results (first 20 rows):\n")
+  print(head(summary_table, 20))
+  
+  return(list(plot = p, data = summary_table))
+}
+
+# Helper function to combine multiple plots if needed
+combine_plots <- function(plot_list, 
+                          ncol = 2, 
+                          main_title = "Combined Analysis") {
+  
+  library(patchwork)
+  
+  # Combine plots using patchwork
+  combined <- wrap_plots(plot_list, ncol = ncol) +
+    plot_annotation(
+      title = main_title,
+      theme = theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"))
+    )
+  
+  return(combined)
+}
+```
+
+
+# Create Plots of Interest
+
+## Good Health Days (Mental, Physical, Functional)
+
+```{r}
+# ============================================================================
+# USAGE EXAMPLES
+# ============================================================================
+# Use legend_labels = c("Label1", "Label2", "Label3") to manually set legend names
+# The labels must be in the same order as your predictors/variables
+
+# Coefficient plot of good health days
+coef_results_health_days <- plot_survey_trends_2(
+  svy_data = svy_brfss,
+  plot_type = "coefficient",
+  predictors = c("physical_health_good_days", "mental_health_good_days", "usual_activities_health_good_days"),
+#  predictors = c("physical_health", "mental_health", "usual_activities_health"),
+  outcome = "srh",
+  age_var = "age_decade_cat",
+  year_var = "year",
+#  legend_labels = c("Physical", "Mental", "Functional"),  # Custom legend labels
+  legend_labels = c("Physical Health", "Mental Health", "Functional Days"),
+  overall_title = "Coefficients of Good Health Days Measure on SRH",
+  y_label = "Coefficient on SRH",
+#  legend_position = c(0.76, 0.18) ,
+  title_bold = FALSE  # If you want to unbold the title
+)
+
+coef_results_health_days$plot
+
+# Prevalence/Average plot of good health days
+prev_results_health_days_a <- plot_survey_trends(
+  svy_data = svy_brfss,
+  plot_type = "prevalence",
+  variables = c("physical_health_good_days", "mental_health_good_days",
+                "usual_activities_health_good_days"),
+  age_var = "age_decade_cat",
+  year_var = "year",
+  legend_labels = c("Physical Health", "Mental Health", "Functional Days"),
+  overall_title = "Trends of Good Health Days Measure",
+  title_bold = FALSE,
+  y_label = "Average Good Days"#,
+ # legend_position = c(0.76, 0.18)
+)
+
+prev_results_health_days_a$plot
+```
+
+## Diagnosed Condition Prevalence 
+
+```{r}
+
+
+# Coefficient plot of diagnosed health conditions
+coef_results_conditions <- plot_survey_trends_2(
+  svy_data = svy_brfss,
+  plot_type = "coefficient",
+  predictors = c("diabetes_dx", "chd_dx", "htn_dx", "dep_dx", "stroke_dx", "mi_dx", "asthma", "arthritis_dx"),
+  outcome = "srh",
+  age_var = "age_decade_cat",
+  year_var = "year",
+  legend_labels = c("Diabetes", "CHD", "HTN", "Depression", "Stroke", "MI", "Asthma", "Arthritis"),
+  overall_title = "Coefficients of Diagnosed Condition on SRH",
+  y_label = "Coefficient on SRH",
+#  legend_position = c(0.76, 0.18) ,
+  title_bold = FALSE  # If you want to unbold the title
+)
+
+coef_results_conditions$plot
+
+# Prevalence (%) Plot of Self-Reported Diagnosed Health Conditions 
+prev_results_conditions <- plot_survey_trend(
+  svy_data = svy_brfss,
+  plot_type = "prevalence",
+  variables = c("diabetes_dx", "chd_dx", "htn_dx", "dep_dx", "stroke_dx", "mi_dx", "asthma", "arthritis_dx"),
+  age_var = "age_decade_cat",
+  year_var = "year",
+  legend_labels = c("Diabetes", "CHD", "HTN", "Depression", "Stroke", "MI", "Asthma", "Arthritis"),  # Custom clean labels
+#  colors = c("#FF5722", "#9C27B0", "#00BCD4"),  # Custom colors
+  overall_title = "Trends of Diagnosed Condition Prevalence",
+  y_label = "Prevalence (%)",
+  title_bold = FALSE,
+  legend_title = "Diagnosed Condition", #,
+  # legend_position = c(0.76, 0.18)
+)
+
+prev_results_conditions$plot
+
+# Example 3: Prevalence plot for binary variables with custom labels
+# binary_results <- plot_survey_trends(
+#   svy_data = svy_brfss,
+#   plot_type = "prevalence",
+#   variables = c("diabetes_dx", "htn_dx", "dep_dx"),
+#   age_var = "age_decade_cat",
+#   year_var = "year",
+#   legend_labels = c("Diabetes", "Hypertension", "Depression"),  # Custom clean labels
+#   colors = c("#FF5722", "#9C27B0", "#00BCD4"),  # Custom colors
+#   overall_title = "Disease Prevalence Trends",
+#   y_label = "Prevalence (%)",
+#   legend_title = "Condition",
+#   legend_position = c(0.76, 0.18)
+# )
+
+# Example 4: With custom formatting and legend labels
+# custom_results <- plot_survey_trends(
+#   svy_data = svy_brfss,
+#   plot_type = "coefficient",
+#   predictors = c("physical_health", "mental_health"),
+#   outcome = "srh",
+#   legend_labels = c("Physical Health\n(Good Days)", "Mental Health\n(Good Days)"),
+#   legend_position = c(0.80, 0.15),      # Adjust legend position
+#   title_bold = FALSE,                   # Unbold title
+#   strip_text_bold = FALSE,              # Unbold facet labels
+#   strip_text_size = 10,                 # Smaller facet labels
+#   title_size = 12,                      # Smaller title
+#   facet_rows = 3,                       # 3 rows instead of 2
+#   confidence_level = 0.99,              # 99% confidence intervals
+#   min_n = 50                            # Require at least 50 observations
+# )
+```
+
+
+# Part 1. Coefficient Analyses
+
+We begin by estimating the relationship between self‑rated health (srh) and five predictors:
+
+- Physical Health (physical_health)
+- Mental Health (mental_health)
+- Usual Activities (usual_activities_health)
+- Sex (sex)
+- Education (EDUCA)
+
+For each predictor, we run a simple linear regression model by subgroup (year and age group) and extract the coefficient (with 95% confidence intervals). We then visualize the coefficient estimates over time for each age group and provide an overall (averaged) bar plot.
+
+# Part 2. Prevalence/Trend Analyses of Health Measures
+Now we move away from regression coefficients to explore trends in health measures themselves. In this section, we examine the average values over time of Mental Health, Physical Health, and Usual Activities Health (via usual_activities_health). (Self‑rated health is not included here.) We produce:
+
+*Trend Plots:*
+A line plot (with points) for each age group showing the trends over the years.
+
+*Overall Bar Plot:*
+A grouped bar plot comparing the overall (across all years) average values of these health measures by age group.
+
+# Conclusion
+
+In this report we have:
+
+- Estimated how five predictors (physical health, mental health, functional (usual activities) health, sex, and education) relate to self‑rated health across different years and age groups, and visualized the coefficient trends as well as overall average coefficients.
+
+- Examined the trends over time for three health measures (mental, physical, and functional (usual activities) health) by age group and provided an overall comparison via a grouped bar plot.
+
+These analyses provide a comprehensive view of both the predictive relationships and the underlying trends in health measures across age groups in the BRFSS dataset.
+
+
+```{r}
+
+library(tidyverse)
+library(survey)
+library(broom)
+
+# Master function for creating survey-weighted trend plots
+# 
+# For coefficient plots:
+# - predictors: variables whose coefficients you want to PLOT
+# - adjust_for: additional covariates to include in the model (for adjustment) but NOT plot
+# - The regression will include: outcome ~ predictors + adjust_for
+# - Only coefficients for 'predictors' will be shown in the plot
+# - The output will include both plotted coefficients and full model results
+
+plot_survey_trends_2 <- function(svy_data,
+                               plot_type = c("coefficient", "prevalence"),
+                               variables = NULL,        # For prevalence plots
+                               predictors = NULL,       # For coefficient plots - variables to plot
+                               adjust_for = NULL,       # Additional covariates to adjust for (not plotted)
+                               outcome = NULL,          # For coefficient plots
+                               age_var = "age_decade_cat",
+                               year_var = "year",
+                               colors = NULL,
+                               legend_labels = NULL,    # Custom legend labels
+                               overall_title = NULL,
+                               y_label = NULL,
+                               x_label = "Year",
+                               legend_title = NULL,
+                               legend_position = c(0.76, 0.18),
+                               legend_justification = c(0, 0),
+                               title_bold = FALSE,
+                               strip_text_size = 11,
+                               strip_text_bold = FALSE,
+                               title_size = 14,
+                               facet_rows = 2,
+                               confidence_level = 0.95,
+                               min_n = 30) {
+  
+  # Validate plot type
+  plot_type <- match.arg(plot_type)
+  
+  # Default colors if not provided
+  if(is.null(colors)) {
+    # colors <- c("#E91E63", "#8BC34A", "#2196F3", "#FF9800", "#9C27B0", 
+    #             "lightpink", "gold", "mediumblue", "gray")
+    colors <- c("cornflowerblue", "mediumvioletred", "chartreuse3", "darkgoldenrod1",
+                "mediumpurple1", "darkorange2", 
+                "lightpink", "aquamarine", "gray", "gold")    
+  }
+  
+  # Set default titles based on plot type
+  if(is.null(overall_title)) {
+    overall_title <- ifelse(plot_type == "coefficient", 
+                           "Coefficient Trends by Age Group",
+                           "Health Measure Trends by Age Group")
+  }
+  
+  if(is.null(y_label)) {
+    y_label <- ifelse(plot_type == "coefficient", 
+                     "Coefficient", 
+                     "Average Value")
+  }
+  
+  if(is.null(legend_title)) {
+    legend_title <- ifelse(plot_type == "coefficient", 
+                          "Predictor", 
+                          "Healthy Days")
+  }
+  
+  # Get unique age groups and years
+  age_groups <- unique(svy_data$variables[[age_var]])
+  age_groups <- age_groups[!is.na(age_groups)]
+  
+  years <- unique(svy_data$variables[[year_var]])
+  years <- sort(years[!is.na(years)])
+  
+  # Initialize results data frame
+  results_df <- data.frame()
+  
+  # Branch based on plot type
+  if(plot_type == "coefficient") {
+    # Coefficient plot logic
+    if(is.null(predictors) || is.null(outcome)) {
+      stop("For coefficient plots, both 'predictors' and 'outcome' must be specified")
+    }
+    
+    # Combine predictors and adjustment covariates for the model
+    all_model_vars <- c(predictors, adjust_for)
+    
+    # Initialize results for plotting and full model results
+    plot_results_df <- data.frame()
+    full_results_df <- data.frame()
+    
+    # Loop through age groups and years
+    for(age in age_groups) {
+      for(yr in years) {
+        # Subset survey data
+        svy_subset <- subset(svy_data, 
+                           get(age_var) == age & get(year_var) == yr)
+        
+        # Check if subset has enough data
+        if(nrow(svy_subset$variables) > min_n) {
+          # Build formula with all variables
+          formula_str <- paste(outcome, "~", paste(all_model_vars, collapse = " + "))
+          formula_obj <- as.formula(formula_str)
+          
+          # Try to fit model
+          tryCatch({
+            model <- svyglm(formula_obj, design = svy_subset)
+            
+            # Extract coefficients with confidence intervals
+            coef_summary <- tidy(model, conf.int = TRUE, conf.level = confidence_level)
+            
+            # Add metadata
+            coef_summary$age_group <- as.character(age)
+            coef_summary$year <- yr
+            
+            # Separate results for plotting (only predictors) and full results
+            plot_coef <- coef_summary[coef_summary$term %in% predictors, ]
+            all_coef <- coef_summary[coef_summary$term %in% all_model_vars, ]
+            
+            # Mark which variables are adjustment variables
+            all_coef$variable_type <- ifelse(all_coef$term %in% predictors, 
+                                            "Plotted", "Adjustment")
+            
+            # Bind to results
+            plot_results_df <- rbind(plot_results_df, plot_coef)
+            full_results_df <- rbind(full_results_df, all_coef)
+          }, error = function(e) {
+            # Skip if model fails
+            NULL
+          })
+        }
+      }
+    }
+    
+    # Use plot_results_df for plotting
+    results_df <- plot_results_df %>%
+      rename(
+        variable = term,
+        value = estimate,
+        se = std.error,
+        ci_lower = conf.low,
+        ci_upper = conf.high
+      )
+    
+    # Also rename full results table for consistency
+    if(nrow(full_results_df) > 0) {
+      full_results_df <- full_results_df %>%
+        rename(
+          variable = term,
+          coefficient = estimate,
+          se = std.error,
+          ci_lower = conf.low,
+          ci_upper = conf.high
+        )
+    }
+    
+    # Variables to use for plotting
+    plot_vars <- predictors
+    
+  } else {
+    # Prevalence/average plot logic
+    if(is.null(variables)) {
+      stop("For prevalence plots, 'variables' must be specified")
+    }
+    
+    # Loop through variables, age groups, and years
+    for(var in variables) {
+      # Check variable type
+      var_values <- svy_data$variables[[var]]
+      is_binary <- all(var_values %in% c(0, 1, NA))
+      
+      for(age in age_groups) {
+        for(yr in years) {
+          # Subset survey data
+          svy_subset <- subset(svy_data, 
+                             get(age_var) == age & get(year_var) == yr)
+          
+          # Check if subset has enough data
+            if(nrow(svy_subset$variables) > min_n) {
+              # Add check for non-NA values
+              non_na_count <- sum(!is.na(svy_subset$variables[[var]]))
+              
+              # Only proceed if there are actual non-NA values
+              if(non_na_count > 0) {
+                tryCatch({
+                  # Calculate weighted mean (works for both binary and continuous)
+                  result <- svymean(as.formula(paste("~", var)), 
+                                  design = svy_subset, 
+                                  na.rm = TRUE)
+              estimate <- as.numeric(result)[1]
+              se <- as.numeric(sqrt(attr(result, "var")))[1]
+              
+              # Calculate confidence intervals
+              z_score <- qnorm(1 - (1 - confidence_level) / 2)
+              ci_lower <- estimate - z_score * se
+              ci_upper <- estimate + z_score * se
+              
+              # If binary, convert to percentage
+              if(is_binary) {
+                estimate <- estimate * 100
+                ci_lower <- ci_lower * 100
+                ci_upper <- ci_upper * 100
+                se <- se * 100
+              }
+              
+              # Add to results
+              new_row <- data.frame(
+                variable = var,
+                age_group = as.character(age),
+                year = yr,
+                value = estimate,
+                se = se,
+                ci_lower = ci_lower,
+                ci_upper = ci_upper,
+                type = ifelse(is_binary, "prevalence", "mean")
+              )
+              
+              results_df <- rbind(results_df, new_row)
+              
+            }, error = function(e) {
+              # Skip if calculation fails
+              NULL
+            })
+              }
+            }
+        }
+      }
+    }
+    
+    # Variables to use for plotting
+    plot_vars <- variables
+  }
+  
+  # Create named color vector for proper mapping
+  color_mapping <- setNames(colors[1:length(plot_vars)], plot_vars)
+  
+  # Create legend labels - use custom if provided, otherwise auto-generate
+  if(!is.null(legend_labels)) {
+    # Check if the right number of labels were provided
+    if(length(legend_labels) != length(plot_vars)) {
+      stop(paste("Number of legend_labels (", length(legend_labels), 
+                 ") must match number of variables/predictors (", 
+                 length(plot_vars), ")", sep = ""))
+    }
+    label_mapping <- setNames(legend_labels, plot_vars)
+  } else {
+    # Auto-generate nice labels
+    label_mapping <- setNames(
+      stringr::str_to_title(gsub("_", " ", plot_vars)),
+      plot_vars
+    )
+  }
+  
+  # Create the plot
+  p <- ggplot(results_df, aes(x = year, y = value, color = variable)) +
+    geom_line(linewidth = 1.2, alpha = 0.8) +
+    geom_point(size = 0.8, alpha = 0.6) +
+    geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper, fill = variable), 
+                alpha = 0.4, linetype = 0) +
+    # facet_wrap(~ age_group, nrow = facet_rows) +
+    facet_wrap(~ age_group, nrow = 1) +
+    scale_color_manual(values = color_mapping, labels = label_mapping) +
+    scale_fill_manual(values = color_mapping, labels = label_mapping) +
+    labs(
+      title = overall_title,
+      subtitle = "Age Group (Years)",
+      x = x_label,
+      y = y_label,
+      color = legend_title,
+      fill = legend_title
+    ) +
+    theme_minimal() +
+    theme(
+      # legend.position = "inside",  # First specify that legend should be inside
+      # legend.position.inside = legend_position,  # Then specify where inside
+      # legend.justification = legend_justification,
+      legend.position = "bottom",
+      legend.background = element_rect(fill = "white", color = NA),
+      legend.key.size = unit(0.8, "lines"),
+      axis.text.x = element_text(angle = 45), #, hjust = 1, vjust = 1),
+      strip.text = element_text(
+        size = strip_text_size, 
+        face = ifelse(strip_text_bold, "bold", "plain")
+      ),
+      panel.grid.minor = element_blank(),
+      plot.title = element_text(
+        hjust = 0.5, 
+        size = title_size, 
+        face = ifelse(title_bold, "bold", "plain")
+      ),
+      plot.subtitle = element_text(  
+        hjust = 0,  # Left align
+        size = strip_text_size,
+        face = ifelse(strip_text_bold, "bold", "plain"),
+        margin = margin(b = 5)
+      )
+    )
+  
+  # Create summary table
+  if(plot_type == "coefficient") {
+    # For coefficient plots, show full model results if adjustment variables were used
+    if(!is.null(adjust_for) && length(adjust_for) > 0 && nrow(full_results_df) > 0) {
+      summary_table <- full_results_df %>%
+        select(age_group, year, variable, variable_type, coefficient, se, p.value, ci_lower, ci_upper) %>%
+        arrange(age_group, year, variable_type, variable) %>%
+        mutate(across(where(is.numeric), ~round(., 4)))
+      
+      # Also create a separate table for just the plotted coefficients
+      plot_summary <- summary_table %>%
+        filter(variable_type == "Plotted") %>%
+        select(-variable_type)
+      
+      cat("\nSummary of PLOTTED coefficients (first 20 rows):\n")
+      print(head(plot_summary, 20))
+      
+      cat("\nFull model results including adjustment variables (first 30 rows):\n")
+      print(head(summary_table, 30))
+    } else {
+      # No adjustment variables, just show the regular summary
+      summary_table <- results_df %>%
+        select(age_group, year, variable, value, se, p.value, ci_lower, ci_upper) %>%
+        rename(coefficient = value) %>%
+        mutate(across(where(is.numeric), ~round(., 4)))
+      
+      cat("\nSummary of results (first 20 rows):\n")
+      print(head(summary_table, 20))
+    }
+  } else {
+    summary_table <- results_df %>%
+      select(age_group, year, variable, value, se, ci_lower, ci_upper, type) %>%
+      mutate(across(where(is.numeric), ~round(., 2)))
+    
+    cat("\nSummary of results (first 20 rows):\n")
+    print(head(summary_table, 20))
+  }
+  
+  # Return both plot and data
+  if(plot_type == "coefficient" && !is.null(adjust_for) && length(adjust_for) > 0 && nrow(full_results_df) > 0) {
+    return(list(
+      plot = p, 
+      plotted_data = plot_summary,
+      full_model_data = summary_table
+    ))
+  } else {
+    return(list(plot = p, data = summary_table))
+  }
+}
+
+# Helper function to combine multiple plots if needed
+combine_plots <- function(plot_list, 
+                         ncol = 1, 
+                         main_title = "Combined Analysis") {
+  
+  library(patchwork)
+  
+  # Combine plots using patchwork
+  combined <- wrap_plots(plot_list, ncol = ncol) +
+    plot_annotation(
+      title = main_title,
+      theme = theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"))
+    )
+  
+  return(combined)
+}
+
+# ============================================================================
+# USAGE EXAMPLES
+# ============================================================================
+# NOTE 1: You can now specify custom legend labels!
+# Use legend_labels = c("Label1", "Label2", "Label3") to manually set legend names
+# The labels must be in the same order as your predictors/variables
+
+# NOTE 2: For coefficient plots, you can adjust for covariates without plotting them!
+# Use predictors = variables you want to plot
+# Use adjust_for = additional covariates to include in the model (but not plot)
+# The function will return both the plotted coefficients and the full model results
+
+# Example 1: Coefficient plot with custom legend labels AND adjustment variables
+# coef_results <- plot_survey_trends(
+#   svy_data = svy_brfss,
+#   plot_type = "coefficient",
+#   predictors = c("physical_health", "mental_health", "usual_activities_health"),
+#   adjust_for = c("diabetes_dx", "htn_dx", "sex"),  # Adjust for these but don't plot
+#   outcome = "srh",
+#   age_var = "age_decade_cat",
+#   year_var = "year",
+#   legend_labels = c("Physical", "Mental", "Functional"),  # Custom legend labels
+#   overall_title = "Adjusted Health Coefficients on Self-Rated Health",
+#   y_label = "Adjusted Coefficient on SRH",
+#   legend_position = c(0.76, 0.18)
+# )
+# Access results:
+# coef_results$plot           # The plot
+# coef_results$plotted_data   # Coefficients that are plotted
+# coef_results$full_model_data # All coefficients including adjustment variables
+
+# Example 2: Prevalence/Average plot with custom legend labels
+# prev_results <- plot_survey_trends(
+#   svy_data = svy_brfss,
+#   plot_type = "prevalence",
+#   variables = c("physical_health_good_days", "mental_health_good_days", 
+#                 "usual_activities_health_good_days"),
+#   age_var = "age_decade_cat",
+#   year_var = "year",
+#   legend_labels = c("Physical Health Days", "Mental Health Days", "Functional Days"),
+#   overall_title = "Trends in Health Measures",
+#   y_label = "Average Good Days",
+#   legend_position = c(0.76, 0.18)
+# )
+
+# Example 3: Prevalence plot for binary variables with custom labels
+# binary_results <- plot_survey_trends(
+#   svy_data = svy_brfss,
+#   plot_type = "prevalence",
+#   variables = c("diabetes_dx", "htn_dx", "dep_dx"),
+#   age_var = "age_decade_cat",
+#   year_var = "year",
+#   legend_labels = c("Diabetes", "Hypertension", "Depression"),  # Custom clean labels
+#   colors = c("#FF5722", "#9C27B0", "#00BCD4"),  # Custom colors
+#   overall_title = "Disease Prevalence Trends",
+#   y_label = "Prevalence (%)",
+#   legend_title = "Condition",
+#   legend_position = c(0.76, 0.18)
+# )
+
+# Example 4: Single predictor with multiple adjustment covariates
+# adjusted_results <- plot_survey_trends(
+#   svy_data = svy_brfss,
+#   plot_type = "coefficient",
+#   predictors = "diabetes_dx",  # Just plot diabetes coefficient
+#   adjust_for = c("sex", "htn_dx", "physical_health", "mental_health"),  # Adjust for these
+#   outcome = "srh",
+#   legend_labels = c("Diabetes (adjusted)"),
+#   overall_title = "Association of Diabetes with SRH (Fully Adjusted Model)",
+#   y_label = "Adjusted Coefficient"
+# )
+
+# Example 5: With custom formatting and legend labels
+# custom_results <- plot_survey_trends(
+#   svy_data = svy_brfss,
+#   plot_type = "coefficient",
+#   predictors = c("physical_health", "mental_health"),
+#   outcome = "srh",
+#   legend_labels = c("Physical Health\n(Good Days)", "Mental Health\n(Good Days)"),
+#   legend_position = c(0.80, 0.15),      # Adjust legend position
+#   title_bold = FALSE,                   # Unbold title
+#   strip_text_bold = FALSE,              # Unbold facet labels
+#   strip_text_size = 10,                 # Smaller facet labels
+#   title_size = 12,                      # Smaller title
+#   facet_rows = 3,                       # 3 rows instead of 2
+#   confidence_level = 0.99,              # 99% confidence intervals
+#   min_n = 50                            # Require at least 50 observations
+# )
+
+```
+
+# Create Plots of Interest
+
+## Good Health Days (Mental, Physical, Functional)
+
+```{r}
+# ============================================================================
+# USAGE EXAMPLES
+# ============================================================================
+# Use legend_labels = c("Label1", "Label2", "Label3") to manually set legend names
+# The labels must be in the same order as your predictors/variables
+
+health_days_measures <- c("physical_health", "mental_health", "usual_activities_health")
+health_days_measures_good_days <- c("physical_health_good_days", "mental_health_good_days", "usual_activities_health_good_days")
+labels_for_health_days <- c("Physical Health", "Mental Health", "Usual Activities")
+colors_for_health_days <- c("cornflowerblue", "violetred", "chartreuse3")
+
+# Coefficient plot of good health days
+coef_results_health_days <- plot_survey_trends_2(
+  svy_data = svy_brfss,
+  plot_type = "coefficient",
+  predictors = health_days_measures,
+#  predictors = c("physical_health", "mental_health", "usual_activities_health"),
+  outcome = "srh",
+  age_var = "age_decade_cat",
+  year_var = "year",
+  legend_labels = labels_for_health_days,
+  colors = colors_for_health_days,
+#  legend_labels = c("Physical", "Mental", "Functional"),  # Custom legend labels
+#  legend_labels = c("Physical Health", "Mental Health", "Functional Days"),
+  overall_title = "Coefficients of Good Health Days Measure on SRH",
+  y_label = "Coefficient on SRH"
+)
+
+coef_results_health_days$plot
+
+# Prevalence/Average plot of good health days
+prev_results_health_days <- plot_survey_trends_2(
+  svy_data = svy_brfss,
+  plot_type = "prevalence",
+  variables = health_days_measures,
+#  variables = c("physical_health_good_days", "mental_health_good_days",
+#                "usual_activities_health_good_days"),
+  age_var = "age_decade_cat",
+  year_var = "year",
+  legend_labels = labels_for_health_days,
+  colors = colors_for_health_days,
+#  legend_labels = c("Physical Health", "Mental Health", "Functional Days"),
+#  overall_title = "Trends of Good Health Days Measure",
+  y_label = "Average Good Days"
+)
+
+prev_results_health_days$plot
+```
+
+## Diagnosed Conditions 
+
+```{r}
+
+conditions_of_interest <- c("diabetes_dx", "chd_dx", "asthma", "dep_dx", 
+                            "stroke_dx", "prediab_dx", "cancer_skin_dx", "cancer_other_dx")
+                            # "mi_dx", "htn_dx", "arthritis_dx")
+labels_for_conditions <- c("Diabetes", "CHD", "Asthma", "Depression",
+                           "Stroke", "Prediabetes", "Skin Cancer", "Non-Skin Cancer")
+                           # "MI", "HTN", "Arthritis")
+colors_for_conditions <- c("cornflowerblue", "gold", "darkorange2", "violetred",
+                           "chartreuse3", "skyblue", "lightpink", "mediumpurple1")
+
+
+# Coefficient plot of diagnosed health conditions
+coef_results_conditions <- plot_survey_trends_2(
+  svy_data = svy_brfss,
+  plot_type = "coefficient",
+  predictors = conditions_of_interest,
+#  predictors = c("diabetes_dx", "chd_dx", "htn_dx", "dep_dx", "stroke_dx", "mi_dx", "asthma", "arthritis_dx"),
+  outcome = "srh",
+  age_var = "age_decade_cat",
+  year_var = "year",
+  legend_labels = labels_for_conditions,
+  colors = colors_for_conditions,
+#  legend_labels = c("Diabetes", "CHD", "HTN", "Depression", "Stroke", "MI", "Asthma", "Arthritis"),
+  overall_title = "Coefficients of Diagnosed Condition on SRH",
+  y_label = "Coefficient on SRH"
+)
+
+coef_results_conditions$plot
+
+# Prevalence (%) Plot of Self-Reported Diagnosed Health Conditions 
+prev_results_conditions <- plot_survey_trends_2(
+  svy_data = svy_brfss,
+  plot_type = "prevalence",
+  variables = conditions_of_interest,
+#  variables = c("diabetes_dx", "chd_dx", "htn_dx", "dep_dx", "stroke_dx", "mi_dx", "asthma", "arthritis_dx"),
+  age_var = "age_decade_cat",
+  year_var = "year",
+  legend_labels = labels_for_conditions,
+  colors = colors_for_conditions,
+#  legend_labels = c("Diabetes", "CHD", "HTN", "Depression", 
+              #      "Stroke", "MI", "Asthma", "Arthritis"),  # Custom clean labels
+#  colors = c("#FF5722", "#9C27B0", "#00BCD4"),  # Custom colors
+  overall_title = "Trends of Diagnosed Condition Prevalence",
+  y_label = "Prevalence (%)",
+  legend_title = "Diagnosed Condition"
+)
+
+prev_results_conditions$plot
+
+```
+
+# One figure
+```{r}
+
+coef_results_health_days$plot
+prev_results_health_days$plot
+coef_results_conditions$plot
+prev_results_conditions$plot
+
+```
+
+
+# Adjusting
+```{r}
+
+coef_results_conditions <- plot_survey_trends_2(
+  svy_data = svy_brfss,
+  plot_type = "coefficient",
+  predictors = conditions_of_interest,
+  adjust_for = c("dep_dx")
+#  predictors = c("diabetes_dx", "chd_dx", "htn_dx", "dep_dx", "stroke_dx", "mi_dx", "asthma", "arthritis_dx"),
+  outcome = "srh",
+  age_var = "age_decade_cat",
+  year_var = "year",
+  legend_labels = labels_for_conditions,
+  colors = colors_for_conditions,
+#  legend_labels = c("Diabetes", "CHD", "HTN", "Depression", "Stroke", "MI", "Asthma", "Arthritis"),
+  overall_title = "Coefficients of Diagnosed Condition on SRH",
+  y_label = "Coefficient on SRH"
+)
+
+```
+
+```{r}
+coef_results_conditions <- plot_survey_trends_2(
+  svy_data = svy_brfss,
+  plot_type = "coefficient",
+  predictors = conditions_of_interest,
+  adjust_for = c("dep_dx"),
+#  predictors = c("diabetes_dx", "chd_dx", "htn_dx", "dep_dx", "stroke_dx", "mi_dx", "asthma", "arthritis_dx"),
+  outcome = "srh",
+  age_var = "age_decade_cat",
+  year_var = "year",
+  legend_labels = labels_for_conditions,
+  colors = colors_for_conditions,
+#  legend_labels = c("Diabetes", "CHD", "HTN", "Depression", "Stroke", "MI", "Asthma", "Arthritis"),
+  overall_title = "Adjusted for DEPRESSION DX",
+  y_label = "Coefficient on SRH"
+)
+```
+
+```{r}
+
+
+coef_results_conditions <- plot_survey_trends_2(
+  svy_data = svy_brfss,
+  plot_type = "coefficient",
+  predictors = conditions_of_interest,
+ # adjust_for = c("dep_dx"),
+  adjust_for = c("diabetes_dx", "chd_dx", "htn_dx", "dep_dx", "stroke_dx", "mi_dx", "asthma", "arthritis_dx"),
+  outcome = "srh",
+  age_var = "age_decade_cat",
+  year_var = "year",
+  legend_labels = labels_for_conditions,
+  colors = colors_for_conditions,
+#  legend_labels = c("Diabetes", "CHD", "HTN", "Depression", "Stroke", "MI", "Asthma", "Arthritis"),
+  overall_title = "Adjusted for COMORBIDITIES DX",
+  y_label = "Coefficient on SRH"
+)
+```
+
+
+```{r}
+
+coef_results_conditions <- plot_survey_trends_2(
+  svy_data = svy_brfss,
+  plot_type = "coefficient",
+  predictors = "srh",
+  adjust_for = c("dep_dx"),
+#  adjust_for = c("diabetes_dx", "chd_dx", "htn_dx", "dep_dx", "stroke_dx", "mi_dx", "asthma", "arthritis_dx"),
+  outcome = "mental_health_good_days",
+  age_var = "age_decade_cat",
+  year_var = "year",
+  legend_labels = labels_for_conditions,
+  colors = colors_for_conditions,
+#  legend_labels = c("Diabetes", "CHD", "HTN", "Depression", "Stroke", "MI", "Asthma", "Arthritis"),
+  overall_title = "Adjusted for DEP DX",
+  y_label = "Coefficient of SRH on MH GOOD DAYS"
+)
+```
+
+
+```{r}
+
+coef_results_conditions <- plot_survey_trends_2(
+  svy_data = svy_brfss,
+  plot_type = "coefficient",
+  predictors = "dep_dx",
+  adjust_for = c("srh"),
+#  adjust_for = c("diabetes_dx", "chd_dx", "htn_dx", "dep_dx", "stroke_dx", "mi_dx", "asthma", "arthritis_dx"),
+  outcome = "mental_health_good_days",
+  age_var = "age_decade_cat",
+  year_var = "year",
+  legend_labels = labels_for_conditions,
+  colors = colors_for_conditions,
+#  legend_labels = c("Diabetes", "CHD", "HTN", "Depression", "Stroke", "MI", "Asthma", "Arthritis"),
+  overall_title = "Adjusted for SRH",
+  y_label = "Coefficient of DEP DX on MH GOOD DAYS"
+)
+```
+
+
+
+```{r}
+
+coef_results_adj2 <- plot_survey_trends_2(
+  svy_data = svy_brfss,
+  plot_type = "coefficient",
+  predictors = "dep_dx",
+  adjust_for = c("srh"),
+#  adjust_for = c("diabetes_dx", "chd_dx", "htn_dx", "dep_dx", "stroke_dx", "mi_dx", "asthma", "arthritis_dx"),
+  outcome = "mental_health_good_days",
+  age_var = "age_decade_cat",
+  year_var = "year",
+#  legend_labels = labels_for_conditions,
+#  colors = colors_for_conditions,
+#  legend_labels = c("Diabetes", "CHD", "HTN", "Depression", "Stroke", "MI", "Asthma", "Arthritis"),
+  overall_title = "Coef of Dep on MH Days Adjusted for SRH",
+  y_label = "Coefficient of DEP DX on MH GOOD DAYS"
+)
+
+coef_results_adj2$plot
+```
+
+```{r}
+
+coef_results_adj <- plot_survey_trends_2(
+  svy_data = svy_brfss,
+  plot_type = "coefficient",
+  predictors = "srh",
+  adjust_for = c("dep_dx"),
+#  adjust_for = c("diabetes_dx", "chd_dx", "htn_dx", "dep_dx", "stroke_dx", "mi_dx", "asthma", "arthritis_dx"),
+  outcome = "mental_health_good_days",
+  age_var = "age_decade_cat",
+  year_var = "year",
+#  legend_labels = labels_for_conditions,
+#  colors = colors_for_conditions,
+#  legend_labels = c("Diabetes", "CHD", "HTN", "Depression", "Stroke", "MI", "Asthma", "Arthritis"),
+  overall_title = "Coef of SRH on MH Days Adjusted for Dep Dx",
+  y_label = "Coefficient of SRH on MH GOOD DAYS"
+)
+coef_results_adj$plot
+
+```
+
+```{r}
+
+coef_results_adj_3 <- plot_survey_trends_2(
+  svy_data = svy_brfss,
+  plot_type = "coefficient",
+  predictors = "mental_health_good_days",
+  adjust_for = c("dep_dx"),
+#  adjust_for = c("diabetes_dx", "chd_dx", "htn_dx", "dep_dx", "stroke_dx", "mi_dx", "asthma", "arthritis_dx"),
+  outcome = "srh",
+  age_var = "age_decade_cat",
+  year_var = "year",
+#  legend_labels = labels_for_conditions,
+#  colors = colors_for_conditions,
+#  legend_labels = c("Diabetes", "CHD", "HTN", "Depression", "Stroke", "MI", "Asthma", "Arthritis"),
+  overall_title = "Coef of MH Good Days on SRH Adjusted for Dep Dx",
+  y_label = "Coefficient of MH GOOD DAYS on SRH"
+)
+coef_results_adj_3$plot
+
+```
+
+
+```{r}
+
+coef_results_adj_4 <- plot_survey_trends_2(
+  svy_data = svy_brfss,
+  plot_type = "coefficient",
+  predictors = "physical_health_good_days",
+ # adjust_for = c("dep_dx"),
+  adjust_for = c("diabetes_dx", "chd_dx", "htn_dx", "dep_dx", "stroke_dx", "mi_dx", "asthma", "arthritis_dx"),
+  outcome = "srh",
+  age_var = "age_decade_cat",
+  year_var = "year",
+#  legend_labels = labels_for_conditions,
+#  colors = colors_for_conditions,
+#  legend_labels = c("Diabetes", "CHD", "HTN", "Depression", "Stroke", "MI", "Asthma", "Arthritis"),
+  overall_title = "Coef of Phys Health Good Days on SRH Adjusted for Comorb",
+  y_label = "Coefficient of Phys Health GOOD DAYS on SRH"
+)
+coef_results_adj_4$plot
+
+```
+
+
+```{r}
+
+coef_results_adj_5 <- plot_survey_trends_2(
+  svy_data = svy_brfss,
+  plot_type = "coefficient",
+  predictors = "physical_health_good_days",
+ # adjust_for = c("dep_dx"),
+  adjust_for = c("diabetes_dx", "chd_dx", "htn_dx", "dep_dx", "stroke_dx", "mi_dx", "asthma", "arthritis_dx"),
+  outcome = "srh",
+  age_var = "age_decade_cat",
+  year_var = "year",
+#  legend_labels = labels_for_conditions,
+#  colors = colors_for_conditions,
+#  legend_labels = c("Diabetes", "CHD", "HTN", "Depression", "Stroke", "MI", "Asthma", "Arthritis"),
+  overall_title = "Coef of Phys Health Good Days on SRH Adjusted for Comorb",
+  y_label = "Coefficient of Phys Health GOOD DAYS on SRH"
+)
+coef_results_adj_5$plot
+
+```
+
+
+```{r}
+
+coef_results_adj_5 <- plot_survey_trends_2(
+  svy_data = svy_brfss,
+  plot_type = "coefficient",
+  predictors = "srh",
+ # adjust_for = c("dep_dx"),
+  adjust_for = c("diabetes_dx", "chd_dx", "htn_dx", "dep_dx", "stroke_dx", "mi_dx", "asthma", "arthritis_dx"),
+  outcome = "physical_health_good_days",
+  age_var = "age_decade_cat",
+  year_var = "year",
+#  legend_labels = labels_for_conditions,
+#  colors = colors_for_conditions,
+#  legend_labels = c("Diabetes", "CHD", "HTN", "Depression", "Stroke", "MI", "Asthma", "Arthritis"),
+  overall_title = "Coef of SRH on Phys Health Good Days Adjusted for Comorb",
+  y_label = "Coefficient of SRH on Phys Health GOOD DAYS"
+)
+coef_results_adj_5$plot
+
+```
+
+```{r}
+
+hist(as.numeric(data_brfss$mental_health_cat))
+hist(data_brfss$mental_health_good_days)
+hist(data_brfss$physical_health_good_days)
+hist(data_brfss$usual_activities_health_good_days)
+hist(data_brfss$healthy_days)
+
+
+```
+

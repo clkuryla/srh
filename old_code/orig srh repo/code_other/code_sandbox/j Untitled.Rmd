@@ -1,0 +1,200 @@
+---
+title: "SRH BRFSS/MEPS Covariates -- Health Types and Comorbidities"
+author: "Christine Lucille Kuryla"
+date: "2025-12-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(here)
+library(broom)
+library(srvyr)
+library(tidyverse)
+
+colors <- c("cornflowerblue", "mediumvioletred", "chartreuse3", "darkgoldenrod1",
+                "mediumpurple1", "lightpink", "darkorange2", 
+                "aquamarine", "gray", "gold")
+
+```
+
+```{r}
+
+source(here("code_functions/plot_prev_or_coeff_over_years_facet_age.R"))
+
+```
+
+
+```{r}
+
+data_brfss <- 
+  
+svy_brfss <- 
+
+data_meps <- 
+  
+svy_meps <- 
+
+```
+
+```{r}
+
+# MEPS
+
+mental_health_meps <- 
+
+conditions_meps <- c()
+
+```
+
+
+```{r}
+
+# 30 day dep
+var_meps_30_days <- c("ANERVOUS", #	How often felt nervous, past 30 days (adults)
+                      "ARESTLESS", #	How often felt restless, past 30 days (adults)
+                      "AEFFORT", # Felt everything an effort, past 30 days 2004-2023
+                      "AHOPELESS", # How often felt hopeless, past 30 days
+                      "ASAD", #	How often felt sad, past 30 days (adults)
+                      "AWORTHLESS" #	How often felt worthless, past 30 days (adults)
+                      )
+labels_meps_30_days <- c("Felt nervous",
+                         "Felt restless",
+                         "Everything is an effort",
+                         "Felt hopeless",
+                         "Felt sad",
+                         "Felt worthless")
+
+var_phq_2_weeks <- c(
+                      "PHQINTR", #	Little interest in doing things: past two weeks
+                      "PHQDEP", #	Feeling down, depressed, or hopeless: past two weeks
+   
+   "ADDAYA", #	Health now limits moderate activities
+   "ADCLIM", #	Health now limits climbing several flights of stairs
+   
+   "ADPALS_harm", #	Accomplished less because of physical health: past 4 weeks
+   "ADPWLM_harm", #	Limited in kind of work because of physical health: past 4 weeks
+   "ADMALS_harm", #	Accomplished less because of emotional problems: past 4 weeks
+   "ADMWLM_harm", #	Did work less carefully because of emotional problems: past 4 weeks
+   "ADPAIN", #	Pain interfered with normal work: past 4 weeks
+   "ADSOCA_harm", #	Physical or emotional health interfered with social activities: past 4 weeks
+   
+   "PHQ2")
+
+
+```
+
+
+```{r}
+
+fctn_plot_prev_or_coeff_over_yrs_facet_age(svy_data = svy_brfss,
+                                           plot_type = "prevalence",
+                                           variables = health_days_measures
+                                           )
+
+prev_30_days <- fctn_plot_prev_or_coeff_over_yrs_facet_age(svy_data = subset(svy_meps, year >= 2004),
+                                           plot_type = "prevalence",
+                                           variables = var_meps_30_days,
+                                           legend_labels = labels_meps_30_days,
+                                           overall_title = "Feelings in the Past 30 Days",
+                                           y_label = "Average Days out of 30 Days",
+                                           age_var = "age_group_char",
+                                           year_var = "year")
+prev_30_days$plot
+
+
+coef_30_days <- fctn_plot_prev_or_coeff_over_yrs_facet_age(svy_data = subset(svy_meps, year >= 2004),
+                                           plot_type = "coefficient",
+                                           predictors = var_meps_30_days,
+                                           outcome = "srh",
+                                           legend_labels = labels_meps_30_days,
+                                           overall_title = "Coefficients of Days on SRH",
+                                           y_label = "Coefficient on SRH",
+                                           age_var = "age_group_char",
+                                           year_var = "year")
+coef_30_days$plot
+```
+
+```{r}
+
+c("ADPALS", "ADPAIN", "ADPWLM")
+c("ADMALS", "ADMWLM", "ADSOCA")
+
+prev_limit_4weeks <- fctn_plot_prev_or_coeff_over_yrs_facet_age(svy_data = subset(svy_meps, year >= 2003),
+                                           plot_type = "prevalence",
+                                           variables = c("calm_peaceful", "energy", "depressed"),
+                        #                   legend_labels = labels_meps_30_days,
+         #                                  overall_title = "Feelings in the Past 30 Days",
+                        #                   y_label = "Average Days out of 30 Days",
+                                           age_var = "age_group_char",
+                                           year_var = "year")
+prev_limit_4weeks$plot
+
+
+
+```
+
+```{r}
+
+
+prev_comorb <- fctn_plot_prev_or_coeff_over_yrs_facet_age(svy_data = subset(svy_meps, year >= 2004),
+                                           plot_type = "prevalence",
+                                           variables = meps_vars_comorb[4:10],
+                                           age_var = "age_group_char",
+                                           year_var = "year")
+prev_comorb$plot
+
+
+coef_comorb <- fctn_plot_prev_or_coeff_over_yrs_facet_age(svy_data = subset(svy_meps, year >= 2009),
+                                           plot_type = "coefficient",
+                                           predictors = meps_vars_comorb[4:8],
+                                           outcome = "srh",
+                                           age_var = "age_group_char",
+                                           year_var = "year")
+coef_comorb$plot
+
+```
+
+```{r}
+
+prev_phq <- fctn_plot_prev_or_coeff_over_yrs_facet_age(svy_data = subset(svy_meps, year >= 2004),
+                                           plot_type = "prevalence",
+                                           variables = "PHQ2",
+                                           age_var = "age_group_char",
+                                           year_var = "year")
+prev_phq$plot
+
+
+coef_phq <- fctn_plot_prev_or_coeff_over_yrs_facet_age(svy_data = subset(svy_meps, year >= 2004),
+                                           plot_type = "coefficient",
+                                           predictors = "PHQ2",
+                                           outcome = "srh",
+                                           age_var = "age_group_char",
+                                           year_var = "year")
+coef_phq$plot
+
+```
+
+
+
+```{r}
+prev_x <- fctn_plot_prev_or_coeff_over_yrs_facet_age(svy_data = subset(svy_meps, year >= 2004),
+                                           plot_type = "prevalence",
+                                           variables = meps_vars_health_limit,
+                                           age_var = "age_group_char",
+                                           year_var = "year")
+prev_x$plot
+
+
+coef_x <- fctn_plot_prev_or_coeff_over_yrs_facet_age(svy_data = subset(svy_meps, year >= 2009),
+                                           plot_type = "coefficient",
+                                           predictors = meps_vars_health_limit,
+                                           outcome = "srh",
+                                           age_var = "age_group_char",
+                                           year_var = "year")
+coef_x$plot
+```
+

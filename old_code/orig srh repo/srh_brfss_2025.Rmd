@@ -1,0 +1,748 @@
+---
+title: "BRFSS New"
+author: "Christine Lucille Kuryla"
+date: "2025-01-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here)
+
+```
+
+
+
+For reference, here is the data aggregation process.
+```{r, eval = FALSE}
+
+library(haven)
+
+# intersect col 1993 to 2023
+all_year_col <- c( "_STATE",   "_STSTR",   "_PSU",     "IDATE" , "IYEAR"  ,  "DISPCODE" , "GENHLTH",  "PHYSHLTH", "MENTHLTH", "POORHLTH", "SEATBELT", "CHILDREN", "SMOKE100",
+"MARITAL" , "EDUCA"  , "PREGNANT", "_AGEG5YR") # "EXEROFT1" "EXERHMM1" "EXEROFT2", "EXERHMM2"
+
+# more col
+more_col <- c("_AGE80", "AGE", "_AGE", "SEX", "_SEX", "_IMPAGE", "_LLCPWT")
+
+# file list
+brfss_year_to_file <- read_csv(here("big_data/BRFSS/BRFSS_year_file_key.csv"))
+
+# data_brfss_1993 <- read_xpt(here("big_data/BRFSS/CDBRFS93.XPT"))
+
+file_paths <- brfss_year_to_file %>% 
+  filter(!(brfss_year %in% 1990:1992)) %>% 
+  pull(file_name) 
+
+
+# Not all variables are in every year
+safe_select <- function(df, cols) {
+  # 1. Identify which columns from cols are missing in df
+  missing_cols <- setdiff(cols, names(df))
+  # 2. Create those missing columns in df filled with NA
+  if (length(missing_cols) > 0) {
+    df[missing_cols] <- NA
+  }
+  # 3. Finally, select and return only the columns in col_list  (now we are assured they exist, even if NA)
+  df %>% select(all_of(cols))
+}
+
+# columns of interest
+col_list <- vctrs::vec_c(all_year_col, more_col)
+
+# create an empty list to store processed data frames
+all_dfs <- vector("list", length = length(file_paths))
+
+# get data from files
+for (i in seq_along(file_paths)) {
+  
+  tmp_df <- read_xpt(paste0(here("big_data/BRFSS/"), file_paths[i], ".XPT"))
+  
+  # Safely select our columns of interest (any columns not in tmp_df will be NA)
+  tmp_df_selected <- safe_select(tmp_df, col_list)
+  
+  # Store processed data frame
+  all_dfs[[i]] <- tmp_df_selected
+}
+
+data_brfss_raw <- bind_rows(all_dfs)
+
+# write_csv(data_brfss_raw, here("big_data/BRFSS/brfss_selected_not_recoded_20230111.csv"))
+
+```
+
+### Load data
+
+```{r}
+
+data_brfss_raw <- read_csv(here("big_data/BRFSS/brfss_selected_not_recoded_20230111.csv"))
+
+data_brfss <- data_brfss_raw %>% 
+  filter(GENHLTH <= 5) %>% 
+  mutate(srh = 6 - GENHLTH) %>% # recode for intuitive order
+  mutate(srh_cat = factor(
+    srh,
+    levels = 1:5,
+    labels = c(
+      "Poor",
+      "Fair",
+      "Good",
+      "Very Good",
+      "Excellent"
+    ))) %>% 
+  filter(`_AGEG5YR` != 14) %>%  # 14 = unknown
+  mutate(
+    # 1) age_5yr_cat: ordered factor with intuitive labels
+    age_5yr_cat = factor(
+      `_AGEG5YR`,
+      levels = 1:13,  # Must match all possible codes
+      labels = c(
+        "18-24",    # 1
+        "25-29",    # 2
+        "30-34",    # 3
+        "35-39",    # 4
+        "40-44",    # 5
+        "45-49",    # 6
+        "50-54",    # 7
+        "55-59",    # 8
+        "60-64",    # 9
+        "65-69",    # 10
+        "70-74",    # 11
+        "75-79",    # 12
+        "80+" # 13
+      ),
+      ordered = TRUE  # Make it an ordered factor
+    ),
+    
+    # 2) age_5yr_num: a numeric version based on the midpoint of each age band
+    #    (or NA for unknown/refused)
+    age_5yr_num = case_when(
+      `_AGEG5YR` == 1  ~ (18 + 24)/2,   # 21
+      `_AGEG5YR` == 2  ~ (25 + 29)/2,   # 27
+      `_AGEG5YR` == 3  ~ (30 + 34)/2,   # 32
+      `_AGEG5YR` == 4  ~ (35 + 39)/2,   # 37
+      `_AGEG5YR` == 5  ~ (40 + 44)/2,   # 42
+      `_AGEG5YR` == 6  ~ (45 + 49)/2,   # 47
+      `_AGEG5YR` == 7  ~ (50 + 54)/2,   # 52
+      `_AGEG5YR` == 8  ~ (55 + 59)/2,   # 57
+      `_AGEG5YR` == 9  ~ (60 + 64)/2,   # 62
+      `_AGEG5YR` == 10 ~ (65 + 69)/2,   # 67
+      `_AGEG5YR` == 11 ~ (70 + 74)/2,   # 72
+      `_AGEG5YR` == 12 ~ (75 + 79)/2,   # 77
+      `_AGEG5YR` == 13 ~ (80 + 99)/2,   # 89.5 (if your codebook upper bound is 99)
+      `_AGEG5YR` == 14 ~ NA_real_       # Unknown
+    ),
+    
+    # 3) age_decade_cat: ordered factor collapsing adjacent age_5yr codes 
+    #    into ~10-year bands (plus "80+" and "Unknown")
+    age_decade_cat = case_when(
+      `_AGEG5YR` %in% c(1,2)   ~ "18-29",
+      `_AGEG5YR` %in% c(3,4)   ~ "30-39",
+      `_AGEG5YR` %in% c(5,6)   ~ "40-49",
+      `_AGEG5YR` %in% c(7,8)   ~ "50-59",
+      `_AGEG5YR` %in% c(9,10)  ~ "60-69",
+      `_AGEG5YR` %in% c(11,12) ~ "70-79",
+      `_AGEG5YR` == 13         ~ "80+",
+      `_AGEG5YR` == 14         ~ NA
+    )
+  ) %>%
+  mutate(
+    # Convert the decade-level variable to an ordered factor
+    age_decade_cat = factor(
+      age_decade_cat,
+      levels = c("18-29", "30-39", "40-49", "50-59", 
+                 "60-69", "70-79", "80+", "Unknown"),
+      ordered = TRUE
+    )
+  ) %>% 
+  mutate(year = case_when(
+    IYEAR == 93 ~ 1993,
+    IYEAR == 94 ~ 1994,
+    IYEAR == 95 ~ 1995,
+    IYEAR == 96 ~ 1996,
+    IYEAR == 97 ~ 1997,
+    IYEAR == 98 ~ 1998,
+    TRUE ~ IYEAR
+    ))
+
+# # ---- Sanity checks ----
+# # 1) Check that all categories are present and coded as expected:
+# table(data_brfss$`_AGEG5YR`, useNA = "always")
+# table(data_brfss$age_5yr_cat, useNA = "always")
+# table(data_brfss$age_decade_cat, useNA = "always")
+# 
+# # 2) Brief check of numeric distribution:
+# summary(data_brfss$age_5yr_num)
+# 
+# # 3) Look at a cross-tab to confirm consistency across new variables:
+# with(data_brfss, table(age_5yr_cat, age_decade_cat))
+
+# This is for color palette purposes
+# Convert all ordered factors to regular factors while preserving level order
+data_brfss <- data_brfss %>% 
+  mutate(across(where(is.ordered),
+                ~factor(as.character(.), 
+                       levels = levels(.), 
+                       ordered = FALSE)))
+
+# Verify - check classes of all factor columns
+sapply(data_brfss, class)
+
+
+# If want mental, physical, and activities health recoded
+
+data_brfss <- data_brfss %>% 
+  mutate(mental_health_good_days = case_when( # Now thinking about your mental health, which includes stress, depression, and problems with emotions, for how many days during the past 30 days was your mental health not good?
+    MENTHLTH == 88 ~ 31,  # 88 = No bad days
+    MENTHLTH <= 30 ~ 31 - MENTHLTH, # MENTHLTH is number of bad mental health days in past 30 days
+    MENTHLTH == 77 ~ NA_real_, # 77 = Don't Know / Not Sure
+    MENTHLTH == 99 ~ NA_real_, # 99 = Refused
+    TRUE ~ NA_real_
+  )) %>% 
+mutate(mental_health =  case_when(
+  MENTHLTH == 88 ~ 3,
+  MENTHLTH >= 1 & MENTHLTH <= 14 ~ 2,
+  MENTHLTH > 14 & MENTHLTH <= 30 ~ 1,
+  MENTHLTH == 99 ~ NA,
+  TRUE ~ NA)) %>% 
+mutate(physical_health_good_days = case_when( # Now thinking about your physical health, which includes physical illness and injury, for how many days during the past 30 days was your physical health not good?
+    PHYSHLTH == 88 ~ 31,  # 88 = No bad days
+    PHYSHLTH <= 30 ~ 31 - PHYSHLTH, # MENTHLTH is number of bad mental health days in past 30 days
+    PHYSHLTH == 77 ~ NA_real_, # 77 = Don't Know / Not Sure
+    PHYSHLTH == 99 ~ NA_real_, # 99 = Refused
+    TRUE ~ NA_real_
+  )) %>% 
+mutate(physical_health =  case_when(
+  PHYSHLTH == 88 ~ 3,
+  PHYSHLTH >= 1 & PHYSHLTH <= 14 ~ 2,
+  PHYSHLTH > 14 & PHYSHLTH <= 30 ~ 1,
+  PHYSHLTH == 99 ~ NA,
+  TRUE ~ NA)) %>%
+mutate(usual_activities_health_good_days = case_when( #During the past 30 days, for about how many days did poor physical or mental health keep you from doing your usual activities, such as self-care, work, or recreation?
+    POORHLTH == 88 ~ 31,  # 88 = No bad days
+    POORHLTH <= 30 ~ 31 - POORHLTH, # MENTHLTH is number of bad mental health days in past 30 days
+    POORHLTH == 77 ~ NA_real_, # 77 = Don't Know / Not Sure
+    POORHLTH == 99 ~ NA_real_, # 99 = Refused
+    TRUE ~ NA
+  )) %>% 
+mutate(usual_activities_health =  case_when(
+  POORHLTH == 88 ~ 3,
+  POORHLTH >= 1 & POORHLTH <= 14 ~ 2,
+  POORHLTH > 14 & POORHLTH <= 30 ~ 1,
+  POORHLTH == 99 ~ NA,
+  TRUE ~ NA))
+
+# 
+
+with(data_brfss, table(MENTHLTH, mental_health))
+with(data_brfss, table(PHYSHLTH, physical_health))
+with(data_brfss, table(POORHLTH, usual_activities_health))
+                                             
+#  select(!(MENTHLTH %in% c(77, 88, 99))) %>% 
+#  mutate(mental_health_good_days = 31 - MENTHLTH) # MENTLHLTH is number of bad mental health days in month 
+
+rm(data_brfss_raw)
+
+```
+
+
+# Unweighted
+```{r}
+
+data_brfss %>%
+  group_by(year) %>%
+  summarize(
+    mean_health = mean(srh, na.rm = TRUE),
+    .groups = "drop"
+  ) %>% 
+  ggplot(aes(x = year, y = mean_health)) +
+  geom_line(size = 1, color = "cornflowerblue") +
+  geom_point(size = 2, color = "darkblue") +
+  labs(
+    title = "Self-Rated Health",
+    x = "Year",
+    y = "Mean SRH",
+    subtitle = "BRFSS Dataset"
+  ) +
+  theme_minimal()
+
+data_brfss %>%
+  group_by(year) %>%
+  summarize(
+    mean_health = mean(physical_health, na.rm = TRUE),
+    .groups = "drop"
+  ) %>% 
+  ggplot(aes(x = year, y = mean_health)) +
+  geom_line(size = 1, color = "cornflowerblue") +
+  geom_point(size = 2, color = "darkblue") +
+  labs(
+    title = "Physical Health",
+    x = "Year",
+    y = "Mean Physical Health",
+    subtitle = "BRFSS Dataset"
+  ) +
+  theme_minimal()
+
+data_brfss %>%
+  group_by(year) %>%
+  summarize(
+    mean_health = mean(mental_health, na.rm = TRUE),
+    .groups = "drop"
+  ) %>% 
+  ggplot(aes(x = year, y = mean_health)) +
+  geom_line(size = 1, color = "cornflowerblue") +
+  geom_point(size = 2, color = "darkblue") +
+  labs(
+    title = "Mental Health",
+    x = "Year",
+    y = "Mean Mental Health",
+    subtitle = "BRFSS Dataset"
+  ) +
+  theme_minimal()
+
+
+data_brfss %>%
+  group_by(year) %>%
+  summarize(
+    mean_health = mean(usual_activities_health, na.rm = TRUE),
+    .groups = "drop"
+  ) %>% 
+  ggplot(aes(x = year, y = mean_health)) +
+  geom_line(size = 1, color = "cornflowerblue") +
+  geom_point(size = 2, color = "darkblue") +
+  labs(
+    title = "Functional Health",
+    x = "Year",
+    y = "Mean Functional Health",
+    subtitle = "BRFSS Dataset"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+
+
+data_brfss %>% 
+  group_by(age_group, year) %>% 
+  summarize(mean_health = mean(srh, na.rm = TRUE)) %>% 
+  ggplot(aes(x = year, y = mean_health, color = age_group)) +
+  geom_line() +
+  labs(title = "Average SRH for Each Age Group",
+       subtitle = "BRFSS 1993 - 2023 Dataset",
+       y = "Average Self-Rated Health", 
+       x = "Year",
+       color = "Age Group") +
+  theme_minimal() #+
+#  scale_color_brewer(palette = "Set2")
+
+data_brfss %>% 
+  group_by(age_decade_cat, year) %>% 
+  summarize(mean_health = mean(physical_health_good_days, na.rm = TRUE)) %>% 
+  ggplot(aes(x = year, y = mean_health, color = age_decade_cat)) +
+  geom_line() +
+  labs(title = "Average Days of Good Physical Health Per Month for Each Age Group",
+       subtitle = "BRFSS 1993 - 2023 Dataset",
+       y = "Average Days of Good Physical Health Per Month", 
+       x = "Year",
+       color = "Age Group") +
+  theme_minimal() 
+
+data_brfss %>% 
+  group_by(age_decade_cat, year) %>% 
+  summarize(mean_health = mean(mental_health_good_days, na.rm = TRUE)) %>% 
+  ggplot(aes(x = year, y = mean_health, color = age_decade_cat)) +
+  geom_line() +
+  labs(title = "Average Days of Good Mental Health Per Month for Each Age Group",
+       subtitle = "BRFSS 1993 - 2023 Dataset",
+       y = "Average Days of Good Health Per Month", 
+       x = "Year",
+       color = "Age Group") +
+  theme_minimal() 
+
+data_brfss %>% 
+  group_by(age_decade_cat, year) %>% 
+  summarize(mean_health = mean(usual_activities_health_good_days, na.rm = TRUE)) %>% 
+  ggplot(aes(x = year, y = mean_health, color = age_decade_cat)) +
+  geom_line() +
+  labs(title = "Average Functional Days Per Month for Each Age Group",
+       subtitle = "BRFSS 1993 - 2023 Dataset",
+       y = "Average Days Health Allowed Normal Functioning", 
+       x = "Year",
+       color = "Age Group") +
+  theme_minimal() 
+
+```
+
+```{r}
+lm_health_v_age_0 <- data_brfss %>%
+  group_by(year) %>%
+  do(broom::tidy(lm(srh ~ age_5yr_num, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "age_5yr_num") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value)
+
+# View the results with confidence intervals, se, t statistic, and p value
+# print(lm_health_v_age_0)
+knitr::kable(lm_health_v_age_0,
+             caption = "BRFSS 1993 - 2023 Dataset")
+
+# Plot coefficients
+ggplot(lm_health_v_age_0, aes(x = year, y = coef)) +
+  geom_point() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Age' Coefficient Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Age"
+  ) +
+  theme_minimal()
+
+# Plot coefficients with CI
+ggplot(lm_health_v_age_0, aes(x = year, y = coef)) +
+  geom_line() +
+  geom_point() +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +  # Add shaded area for confidence intervals
+  labs(
+    title = "Change in 'Age' Coefficient Over Years with Confidence Intervals",
+    subtitle = "BRFSS 2004 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Age"
+  ) +
+  theme_minimal()
+
+# Perform linear regression of 'coef' (age coefficient) vs 'year'
+lm_coef_vs_year <- lm(coef ~ year, data = lm_health_v_age_0)
+
+```
+
+```{r}
+
+data_brfss %>%
+  group_by(year) %>%
+  do(broom::tidy(lm(srh ~ physical_health_good_days, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "physical_health_good_days") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef)) +
+  geom_point() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Physical Health' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Physical Health on SRH"
+  ) +
+  theme_minimal()
+
+data_brfss %>%
+  group_by(year) %>%
+  do(broom::tidy(lm(srh ~ mental_health_good_days, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "mental_health_good_days") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef)) +
+  geom_point() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Mental Health' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Mental Health on SRH"
+  ) +
+  theme_minimal()
+
+data_brfss %>%
+  group_by(year) %>%
+  do(broom::tidy(lm(srh ~ usual_activities_health_good_days, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "usual_activities_health_good_days") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef)) +
+  geom_point() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Functional Health' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Functional Health on SRH"
+  ) +
+  theme_minimal()
+
+
+# Recoded
+
+data_brfss %>%
+  group_by(year) %>%
+  do(broom::tidy(lm(srh ~ physical_health, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "physical_health") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef)) +
+  geom_point() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Physical Health' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Physical Health on SRH"
+  ) +
+  theme_minimal()
+
+data_brfss %>%
+  group_by(year) %>%
+  do(broom::tidy(lm(srh ~ mental_health, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "mental_health") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef)) +
+  geom_point() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Mental Health' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Mental Health on SRH"
+  ) +
+  theme_minimal()
+
+data_brfss %>%
+  group_by(year) %>%
+  do(broom::tidy(lm(srh ~ usual_activities_health, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "usual_activities_health") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef)) +
+  geom_point() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Functional Health' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Functional Health on SRH"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+
+data_brfss %>%
+  mutate(age = cut(age_5yr_num, breaks = 6)) %>% 
+  group_by(year, age) %>%
+  do(broom::tidy(lm(srh ~ age_5yr_num, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "age_5yr_num") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef, color = age)) +
+  geom_point() +
+  geom_line() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Age' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Functional Health on SRH"
+  ) +
+  scale_color_discrete() +
+  theme_minimal() 
+
+
+data_brfss %>%
+  group_by(year, age_decade_cat) %>%
+  do(broom::tidy(lm(srh ~ physical_health, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "physical_health") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef, color = age_decade_cat)) +
+  geom_point() +
+  geom_line() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Physical Health' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Physical Health on SRH"
+  ) +
+  scale_color_discrete() +
+  theme_minimal() 
+
+data_brfss %>%
+  group_by(year, age_decade_cat) %>%
+  do(broom::tidy(lm(srh ~ mental_health, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "mental_health") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef, color = age_decade_cat)) +
+  geom_point() +
+  geom_line() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Mental Health' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Mental Health on SRH"
+  ) +
+  scale_color_discrete() +
+  theme_minimal() 
+
+data_brfss %>%
+  group_by(year, age_decade_cat) %>%
+  do(broom::tidy(lm(srh ~ usual_activities_health, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "usual_activities_health") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef, color = age_decade_cat)) +
+  geom_point() +
+  geom_line() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Functional Health' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Functional Health on SRH"
+  ) +
+  scale_color_discrete() +
+  theme_minimal() 
+```
+
+
+# Regression
+
+```{r}
+
+lm(srh ~ physical_health + mental_health + usual_activities_health,
+   data = data_brfss)
+
+lm(srh ~ physical_health + mental_health + usual_activities_health +
+     physical_health*mental_health + physical_health*usual_activities_health + mental_health*usual_activities_health,
+   data = data_brfss)
+
+
+
+```
+
+```{r}
+
+library(dplyr)          # For data manipulation
+library(broom)          # For tidying model outputs
+library(ggplot2)        # For plotting
+library(purrr)          # For functional programming utilities
+library(tidyr)          # For reshaping data
+# If you haven't already installed these packages, install them with:
+# install.packages(c("dplyr", "broom", "ggplot2", "purrr", "tidyr"))
+
+# --- Data Preparation and Model Fitting ---
+
+# Suppose your data frame is called data_brfss and has the columns:
+#   - srh (the response variable)
+#   - physical_health
+#   - mental_health
+#   - usual_activities_health
+#   - year (the grouping variable)
+
+# 1) Group data by 'year'
+# 2) Fit a linear model srh ~ physical_health + mental_health + usual_activities_health within each year
+# 3) Use broom::tidy() to get coefficient estimates, standard errors, confidence intervals, etc.
+
+model_results <- data_brfss %>%
+    group_by(year) %>%
+    do(
+        broom::tidy(
+            lm(srh ~ physical_health + mental_health + usual_activities_health, 
+               data = .), 
+            conf.int = TRUE
+        )
+    ) %>%
+    ungroup() %>%
+    # 4) Filter only the terms of interest
+    filter(term %in% c("physical_health", "mental_health", "usual_activities_health"))
+
+# Now 'model_results' has multiple rows per 'year':
+#   - one for the intercept
+#   - one for physical_health
+#   - one for mental_health
+#   - one for usual_activities_health
+# We keep only the three predictors.
+
+# Inspect the resulting data frame:
+head(model_results)
+
+# --- Summarize or Explore the Results ---
+
+# For convenience, let's rename some columns and keep relevant ones
+model_results_clean <- model_results %>%
+    select(
+        year,
+        term,
+        estimate,
+        conf.low,
+        conf.high,
+        std.error,
+        statistic,
+        p.value
+    )
+
+# This clean version can be used for tabular summary or plotting.
+# Example tabular summary:
+model_results_clean
+
+# --- Plotting the Coefficients ---
+
+# Approach A: Facet by predictor
+# This will place each predictor's time-series coefficient plot in its own facet.
+ggplot(model_results_clean, 
+       aes(x = year, y = estimate)) +
+    geom_point() +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), 
+                  width = 0.2) +
+    facet_wrap(~ term, scales = "free_y") +
+    labs(
+        title = "Time Trends in Coefficients for Multiple Predictors on SRH",
+        subtitle = "BRFSS 1993 - 2023 Dataset (Example)",
+        x = "Year",
+        y = "Coefficient Estimate"
+    ) +
+    theme_minimal()
+
+# Approach B: Single Plot, Different Colors by Predictor
+# This will overlay lines for the different predictors on the same plot.
+# (May be less clear if the scales differ, but it can be a useful comparison.)
+ggplot(model_results_clean, 
+       aes(x = year, y = estimate, color = term)) +
+    geom_point() +
+    geom_line() +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), 
+                  width = 0.2) +
+    labs(
+        title = "Time Trends in Coefficients for Multiple Predictors on SRH",
+        subtitle = "BRFSS 1993 - 2023 Dataset (Example)",
+        x = "Year",
+        y = "Coefficient Estimate",
+        color = "Predictor"
+    ) +
+    theme_minimal()
+
+
+```
+
+```{r}
+
+model_fit_stats <- data_brfss %>%
+    group_by(year) %>%
+    do(
+        broom::glance(
+            lm(srh ~ physical_health + mental_health + usual_activities_health, data = .)
+        )
+    ) %>%
+    ungroup()
+
+colnames(model_fit_stats)
+model_fit_stats %>% ggplot(aes(x = year, y = adj.r.squared)) + geom_line()
+model_fit_stats %>% ggplot(aes(x = year, y = BIC)) + geom_line()
+
+```
+

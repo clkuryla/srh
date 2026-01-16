@@ -1,0 +1,531 @@
+---
+title: "NHANES 3 and 4"
+author: "Christine Lucille Kuryla"
+date: "2024-12-13"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+
+```
+
+In this document, we will look at SRH for NHANES III and NHANES IV. 
+
+I'm not sure how to incorporate weights for NHANES III or if it's even comparable to NHANES IV, so we will not weight.
+
+# Import and check data
+
+For reference:
+### NHANES 3 
+```{r, eval = FALSE}
+
+library(SAScii)
+# nhanes3.tf <- tempfile()
+daturl <- "https://wwwn.cdc.gov/nchs/data/nhanes3/1a/adult.dat"
+code_url ="https://wwwn.cdc.gov/nchs/data/nhanes3/1a/adult.sas"
+# Sas_code <- url(code_url)
+# writeLines ( readLines(Sas_code) , con = nhanes3.tf )
+# nhanes3.fwf.parameters <- parse.SAScii( nhanes3.tf , beginline = 5 )
+# str( nhanes3.fwf.parameters )
+# #-----
+# 'data.frame':   90 obs. of  4 variables:
+#   $ varname: chr  "SEQN" "HYK1A" "HYK1B" "HYK2A" ...
+# $ width  : num  5 1 1 2 2 2 2 4 4 2 ...
+# $ char   : logi  FALSE FALSE FALSE FALSE FALSE FALSE ...
+# $ divisor: num  1 1 1 1 1 1 1 1 1 1 ...
+# #------
+
+daturl <- "https://wwwn.cdc.gov/nchs/data/nhanes3/1a/adult.dat"
+in.nhanes3 <- read.fwf(daturl, widths=nhanes3.fwf.parameters$width,
+                     col.names= nhanes3.fwf.parameters$varname)
+
+in2 <- read.SAScii( daturl, code_url)
+
+#write_csv(in2, "big_data/NHANES/nhanes_3/nhanes3.csv")
+
+nhanes3_data <- read_csv("big_data/NHANES/nhanes_3/nhanes3.csv")
+
+nhanes3_selected <- nhanes3_data %>% 
+  select(SEQN, 
+         DMPFSEQ, 
+         HSAGEIR, # age in years
+         HAB1, # self-rated health: 1:excellent, very good, good, fair, 5: poor (get rid of 6 and 7)
+         HSSEX, # 1 male, 2 female
+         SDPPHASE, # 1 1988-1991, 2 1991-1994 
+         HSDOIMO, # date of screener (month)
+         HSAGEU, # age unit
+         HSAITMOR # age in months at interview (screener)
+         ) %>% 
+  filter(HAB1 %in% 1:5) %>% 
+  mutate(age = HSAGEIR,
+         sex = ifelse(HSSEX == 1, "Male", "Female"),
+         year = ifelse(SDPPHASE == 1, 1989.5, 1992.5),
+         srh = 6 - HAB1)
+
+glimpse(nhanes3_selected)
+
+#write_csv(nhanes3_selected, "data/nhanes3_selected.csv")
+
+```
+
+### NHANES 4
+```{r, eval = FALSE}
+
+nhanes4_key <- read_csv("big_data/NHANES/nhanes_4/nhanes4_key.csv")
+
+library(tidyverse)
+library(haven)
+
+# Assume nhanes4_key is loaded
+
+# Separate keys by type of file (DEMO, HUQ) for simplicity
+demo_key <- nhanes4_key %>% filter(str_detect(nhanes_file, "^DEMO"))
+huq_key <- nhanes4_key %>% filter(str_detect(nhanes_file, "^HUQ"))
+
+# A helper function to read and process a given domain of files
+read_nhanes_domain <- function(key_table) {
+  # Get unique files for this domain
+  files <- key_table %>% distinct(nhanes_file)
+  
+  domain_data <- files %>%
+    mutate(
+      data = map(nhanes_file, ~ {
+        vars_for_file <- key_table %>% filter(nhanes_file == .x)
+        needed_vars <- c("SEQN", unique(vars_for_file$nhanes_var))
+        
+        file_path <- paste0("big_data/NHANES/nhanes_4/", .x, ".xpt")
+        
+        # Read and select needed variables
+        df <- read_xpt(file_path) %>%
+          select(any_of(needed_vars)) %>%
+          # Rename nhanes_var to my_var
+          rename_with(
+            .fn = ~ vars_for_file$my_var[match(., vars_for_file$nhanes_var)],
+            .cols = vars_for_file$nhanes_var
+          ) %>%
+          mutate(
+            nhanes_yr_1 = vars_for_file$nhanes_yr_1[1],
+            nhanes_yr_2 = vars_for_file$nhanes_yr_2[1]
+          )
+        
+        df
+      })
+    ) %>%
+    unnest(cols = data)  # Unnest after renaming done
+  
+  domain_data
+}
+
+
+# Read DEMO and HUQ data separately
+demo_data <- read_nhanes_domain(demo_key)
+huq_data <- read_nhanes_domain(huq_key)
+
+# Now join demo and huq data by SEQN and cycle years.
+# Note: If multiple cycles overlap, you may need to use both SEQN and nhanes_yr_1/nhanes_yr_2 as join keys.
+# Typically SEQN is unique within a cycle, so joining on SEQN and year information might be prudent.
+final_data <- demo_data %>%
+  full_join(huq_data, by = c("SEQN", "nhanes_yr_1", "nhanes_yr_2"))
+
+# Now select the columns you need:
+final_data <- final_data %>%
+  select(
+    SEQN,
+    age,
+    srh_huq010,
+    SDDSRVYR,
+    nhanes_yr_1,
+    nhanes_yr_2
+  )
+
+glimpse(final_data)
+
+nhanes4_selected <- final_data %>%
+  filter(srh_huq010 %in% 1:5) %>% 
+  filter(age >= 18) %>% 
+  mutate(srh = 6 - srh_huq010) %>% 
+  mutate(year = (nhanes_yr_1 + nhanes_yr_2 ) / 2 ) %>% 
+  mutate(cohort = year - age)
+
+glimpse(nhanes4_selected)
+
+write_csv(nhanes4_selected, "big_data/NHANES/nhanes_4/nhanes4_selected_apcsrh.csv")
+write_csv(nhanes4_selected, "data/nhanes4_selected_apcsrh.csv")
+
+```
+
+## Import and check formatted data
+
+```{r}
+
+nhanes3 <- read_csv("data/nhanes3_selected.csv") %>% 
+  select(SEQN, age, year, cohort, srh)
+
+nhanes4 <- read_csv("data/nhanes4_selected_apcsrh.csv") %>% 
+  select(SEQN, age, year, cohort, srh)
+
+data_nhanes <- rbind(nhanes3, nhanes4) 
+
+data_nhanes <- data_nhanes %>% 
+  na.omit() %>% 
+  filter(age >= 18)
+
+glimpse(data_nhanes)
+
+table(data_nhanes$srh)
+table(data_nhanes$year)
+table(data_nhanes$cohort)
+hist(data_nhanes$age)
+hist(data_nhanes$year)
+hist(data_nhanes$cohort)
+hist(data_nhanes$srh)
+
+```
+
+# NHANES III and IV
+
+```{r}
+data_nhanes %>%
+    mutate(age = cut(age, breaks = 6)) %>% # Create cohorts with 6 breaks
+    group_by(age, year) %>% 
+    dplyr::summarize(mean_health = mean(srh, na.rm = TRUE), .groups = "drop") %>% 
+    ggplot(aes(x = year, y = mean_health, color = age)) +
+    geom_line() +
+    geom_point() +
+    theme_minimal() +
+    labs(title = "Average SRH Per Year for Each Age Group",
+         subtitle = "NHANES III and IV Datasets",
+         x = "Year", 
+         y = "Average SRH")
+```
+
+
+
+```{r}
+
+data_nhanes %>% 
+  group_by(age, year) %>% 
+  summarize(mean_health = mean(srh)) %>% 
+  ggplot(aes(x = age, y = mean_health)) +
+  geom_line(color = "cornflowerblue") +
+  facet_wrap(~ year) +
+  labs(title = "Self-Rated Health By Age (Per Year)",
+       subtitle = "NHANES III and IV Datasets",
+       x = "Age of Respondent", 
+       y = "Average SRH",
+       )
+
+```
+
+```{r}
+
+library(broom)
+
+# Aggregate slopes
+
+# Perform linear regression for each year and extract the coefficient of 'age' with confidence intervals, se, t stat, p val
+lm_health_v_age_0 <- data_nhanes %>%
+  group_by(year) %>%
+  do(tidy(lm(srh ~ age, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "age") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value)
+
+# View the results with confidence intervals, se, t statistic, and p value
+# print(lm_health_v_age_0)
+knitr::kable(lm_health_v_age_0, 
+             caption = "NHANES III and IV Datasets")
+
+```
+
+```{r}
+
+# Plot coefficients
+ggplot(lm_health_v_age_0, aes(x = year, y = coef)) +
+  geom_point() +
+  labs(
+    title = "Change in 'Age' Coefficient Over Years",
+    subtitle = "NHANES III and IV Datasets",
+    x = "Year",
+    y = "Coefficient of Age"
+  ) +
+  theme_minimal()
+
+```
+
+
+```{r}
+
+## Regress the srh vs age coefficients from each year on the year of the survey
+
+
+# Visualize
+ggplot(lm_health_v_age_0, aes(x = year, y = coef)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE) +  # Adds the regression line with standard error shading
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +  # Confidence intervals for the coefficients
+  labs(
+    title = "Regression of 'Age' Coefficient Over Years",
+    subtitle = "NHANES III and IV Datasets",
+    x = "Year",
+    y = "Coefficient of Age"
+  ) +
+  theme_minimal()
+
+# Perform linear regression of 'coef' (age coefficient) vs 'year'
+lm_coef_vs_year <- lm(coef ~ year, data = lm_health_v_age_0)
+
+# View the summary of the regression
+summary(lm_coef_vs_year)
+
+```
+
+
+
+
+```{r}
+# Self-Rated Health Category Distribution
+data_nhanes %>%
+  mutate(health = srh) %>% 
+  select(year, health) %>%
+  filter(!is.na(health)) %>%
+  mutate(
+    srh = factor(health, 
+                    levels = 1:5,
+                    labels = c("Poor", "Fair", "Good", "Very Good", "Excellent"))) %>% 
+  # Remove missing values
+  # Calculate percentages by year
+  group_by(year) %>%
+  count(srh) %>%
+  mutate(percent = n / sum(n) * 100) %>%
+  ungroup() %>% 
+  ggplot(aes(x = year, y = percent, color = srh)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Self-Rated Health Category Distribution",
+       subtitle = "GSS Dataset",
+       y = "Percent",
+       x = "Year") +
+  theme_minimal()
+
+
+# Self-Rated Health Category Distribution by Age Group
+data_nhanes %>%
+  mutate(age_group = cut(age, breaks = 6)) %>% # Create cohorts with 6 breaks
+  mutate(health = srh) %>% 
+  select(year, health, age_group) %>%
+  filter(!is.na(health)) %>%
+  mutate(
+    srh = factor(health, 
+                    levels = 1:5,
+                    labels = c("Poor", "Fair", "Good", "Very Good", "Excellent"))) %>% 
+  # Remove missing values
+  # Calculate percentages by year
+  group_by(year, age_group) %>%
+  count(srh) %>%
+  mutate(percent = n / sum(n) * 100) %>%
+  ungroup() %>% 
+  ggplot(aes(x = year, y = percent, color = srh)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Self-Rated Health Category Distribution",
+       subtitle = "GSS Dataset",
+       y = "Percent",
+       x = "Year") +
+  facet_wrap(~age_group) +
+  theme_minimal()
+
+
+```
+
+
+Maybe the different NHANES studies aren't comparable -- let's try only NHANES 4
+
+# NHANES IV Only
+
+
+```{r}
+
+nhanes4 <- nhanes4 %>% 
+  filter(age >= 18) %>% 
+  na.omit()
+
+nhanes4 %>%
+    mutate(age = cut(age, breaks = 6)) %>% # Create cohorts with 6 breaks
+    group_by(age, year) %>% 
+    dplyr::summarize(mean_health = mean(srh, na.rm = TRUE), .groups = "drop") %>% 
+    ggplot(aes(x = year, y = mean_health, color = age)) +
+    geom_line() +
+    geom_point() +
+    labs(title = "Average SRH Per Year for Each Age Group",
+         subtitle = "NHANES IV",
+         x = "Year", 
+         y = "Average SRH")
+
+```
+
+
+```{r}
+
+nhanes4 %>% 
+  group_by(age, year) %>% 
+  summarize(mean_health = mean(srh)) %>% 
+  ggplot(aes(x = age, y = mean_health)) +
+  geom_line(color = "cornflowerblue") +
+  geom_smooth() +
+  facet_wrap(~ year) +
+  labs(title = "Self-Rated Health By Age (Per Year)",
+       subtitle = "NHANES IV Dataset",
+       x = "Age of Respondent", 
+       y = "Average SRH",
+       )
+
+nhanes4 %>% 
+  group_by(age, year) %>% 
+  summarize(mean_health = mean(srh)) %>% 
+  ggplot(aes(x = age, y = mean_health)) +
+  geom_line(color = "cornflowerblue") +
+  geom_smooth() +
+  facet_wrap(~ year) +
+  labs(title = "Self-Rated Health By Age (Per Year)",
+       subtitle = "NHANES IV Dataset",
+       x = "Age of Respondent", 
+       y = "Average SRH",
+       )
+
+nhanes4 %>% 
+  group_by(age, year) %>% 
+  summarize(mean_health = mean(srh)) %>% 
+  ggplot(aes(x = age, y = mean_health)) +
+  geom_line(color = "cornflowerblue") +
+  geom_smooth(method = "lm") +
+  facet_wrap(~ year) +
+  labs(title = "Self-Rated Health By Age (Per Year)",
+       subtitle = "NHANES IV Dataset",
+       x = "Age of Respondent", 
+       y = "Average SRH",
+       )
+```
+
+```{r}
+
+library(broom)
+
+# Aggregate slopes
+
+# Perform linear regression for each year and extract the coefficient of 'age' with confidence intervals, se, t stat, p val
+lm_health_v_age_0 <- nhanes4 %>%
+  group_by(year) %>%
+  do(tidy(lm(srh ~ age, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "age") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value)
+
+# View the results with confidence intervals, se, t statistic, and p value
+# print(lm_health_v_age_0)
+knitr::kable(lm_health_v_age_0, 
+             caption = "NHANES IV")
+
+```
+
+```{r}
+
+# Plot coefficients
+ggplot(lm_health_v_age_0, aes(x = year, y = coef)) +
+  geom_point() +
+  labs(
+    title = "Change in 'Age' Coefficient Over Years",
+    subtitle = "NHANES IV Dataset",
+    x = "Year",
+    y = "Coefficient of Age"
+  ) +
+  theme_minimal()
+
+```
+
+
+```{r}
+
+## Regress the srh vs age coefficients from each year on the year of the survey
+
+
+# Visualize
+ggplot(lm_health_v_age_0, aes(x = year, y = coef)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE) +  # Adds the regression line with standard error shading
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +  # Confidence intervals for the coefficients
+  labs(
+    title = "Regression of 'Age' Coefficient Over Years",
+    subtitle = "NHANES IV Dataset",
+    x = "Year",
+    y = "Coefficient of Age"
+  ) +
+  theme_minimal()
+
+# Perform linear regression of 'coef' (age coefficient) vs 'year'
+lm_coef_vs_year <- lm(coef ~ year, data = lm_health_v_age_0)
+
+# View the summary of the regression
+summary(lm_coef_vs_year)
+
+```
+
+
+```{r}
+
+# Self-Rated Health Category Distribution
+nhanes4 %>%
+  mutate(health = srh) %>% 
+  select(year, health) %>%
+  filter(!is.na(health)) %>%
+  mutate(
+    srh = factor(health, 
+                    levels = 1:5,
+                    labels = c("Poor", "Fair", "Good", "Very Good", "Excellent"))) %>% 
+  # Remove missing values
+  # Calculate percentages by year
+  group_by(year) %>%
+  count(srh) %>%
+  mutate(percent = n / sum(n) * 100) %>%
+  ungroup() %>% 
+  ggplot(aes(x = year, y = percent, color = srh)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Self-Rated Health Category Distribution",
+       subtitle = "GSS Dataset",
+       y = "Percent",
+       x = "Year") +
+  theme_minimal()
+
+
+# Self-Rated Health Category Distribution by Age Group
+nhanes4 %>%
+  mutate(age_group = cut(age, breaks = 6)) %>% # Create cohorts with 6 breaks
+  mutate(health = srh) %>% 
+  select(year, health, age_group) %>%
+  filter(!is.na(health)) %>%
+  mutate(
+    srh = factor(health, 
+                    levels = 1:5,
+                    labels = c("Poor", "Fair", "Good", "Very Good", "Excellent"))) %>% 
+  # Remove missing values
+  # Calculate percentages by year
+  group_by(year, age_group) %>%
+  count(srh) %>%
+  mutate(percent = n / sum(n) * 100) %>%
+  ungroup() %>% 
+  ggplot(aes(x = year, y = percent, color = srh)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Self-Rated Health Category Distribution",
+       subtitle = "GSS Dataset",
+       y = "Percent",
+       x = "Year") +
+  facet_wrap(~age_group) +
+  theme_minimal()
+
+```
+

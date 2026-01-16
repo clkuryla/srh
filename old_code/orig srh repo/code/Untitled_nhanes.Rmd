@@ -1,0 +1,167 @@
+---
+title: "NHANES Again"
+author: "Christine Lucille Kuryla"
+date: "2024-12-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+nhanes4_key <- read_csv("big_data/NHANES/nhanes_4/nhanes4_key.csv") %>% 
+  select(-nhanes_yr_1, -nhanes_yr_2, -year)
+
+print(nhanes4_key, n = 36)
+
+
+# Load libraries
+library(tidyverse)
+library(haven)
+
+# We assume nhanes4_key is in your environment
+# nhanes4_key has columns: my_var, nhanes_var, nhanes_file
+# Example: nhanes4_key
+
+# Separate keys for DEMO and HUQ
+demo_key <- nhanes4_key %>% 
+  filter(str_detect(nhanes_file, "^DEMO") | nhanes_file == "P_DEMO")
+
+huq_key <- nhanes4_key %>%
+  filter(str_detect(nhanes_file, "^HUQ") | nhanes_file == "P_HUQ")
+
+# Identify unique DEMO and HUQ files
+demo_files <- unique(demo_key$nhanes_file)
+huq_files  <- unique(huq_key$nhanes_file)
+
+# From the key, we know we have multiple possible NHANES age variables:
+# For age (my_var = "age"), NHANES vars can be: DMDHRAGE, RIDAGEYR, DMDHRAGZ
+# For SDDSRVYR, NHANES var is always SDDSRVYR.
+
+# We'll extract these known variables:
+age_vars <- c("DMDHRAGE", "RIDAGEYR", "DMDHRAGZ")
+srvyr_var <- "SDDSRVYR"
+
+# A helper function to safely read a DEMO file and select the needed variables
+read_demo_file <- function(file) {
+  path <- paste0("big_data/NHANES/nhanes_4/", file, ".xpt")
+  df <- read_xpt(path)
+  
+  # Convert names to uppercase to be consistent
+  names(df) <- toupper(names(df))
+  
+  # Select SEQN, any age variable present, and SDDSRVYR if present
+  vars_to_select <- c("SEQN", age_vars, srvyr_var)
+  df_selected <- df %>%
+    select(any_of(vars_to_select))
+  
+  # Return the selected dataframe
+  df_selected
+}
+
+# Read all DEMO files and combine
+demo_df <- demo_files %>%
+  map_df(read_demo_file)
+
+# Now coalesce the age variables into a single column "age"
+demo_df <- demo_df %>%
+  mutate(age = coalesce(!!!syms(age_vars))) %>%
+  select(SEQN, age, SDDSRVYR = SDDSRVYR)  # rename SDDSRVYR explicitly
+
+# HUQ data: we only need HUQ010 (my_var = "srh_huq010")
+# A helper function to read HUQ files
+read_huq_file <- function(file) {
+  path <- paste0("big_data/NHANES/nhanes_4/", file, ".xpt")
+  df <- read_xpt(path)
+  names(df) <- toupper(names(df))
+  
+  # We need SEQN and HUQ010 if present
+  df_selected <- df %>%
+    select(SEQN, HUQ010 = HUQ010)  # rename right here if HUQ010 present
+  
+  df_selected
+}
+
+# Read all HUQ files and combine
+huq_df <- huq_files %>%
+  map_df(read_huq_file) %>%
+  rename(srh_huq010 = HUQ010)
+
+# Merge DEMO and HUQ data by SEQN
+final_df <- full_join(demo_df, huq_df, by = "SEQN")
+
+# final_df now has SEQN, age, SDDSRVYR, srh_huq010
+final_df
+
+
+```
+
+
+```{r}
+
+table(final_df$SDDSRVYR)
+
+final_df %>%
+  na.omit() %>% 
+  filter(age >= 18) %>% 
+  filter(SDDSRVYR != 66) %>% 
+  mutate(srh = 6 - srh_huq010) %>% 
+    mutate(age = cut(age, breaks = 6)) %>% # Create cohorts with 6 breaks
+    group_by(age, SDDSRVYR) %>% 
+    dplyr::summarize(mean_health = mean(srh, na.rm = TRUE), .groups = "drop") %>% 
+    ggplot(aes(x = SDDSRVYR, y = mean_health, color = age)) +
+    geom_line() +
+    geom_point() +
+    labs(title = "Average SRH Per Year for Each Age Group",
+         subtitle = "NHANES",
+         x = "Year", 
+         y = "Average SRH")
+
+
+```
+
+
+
+```{r}
+glimpse(data_nhanes)
+
+table(data_nhanes$srh)
+table(data_nhanes$year)
+table(data_nhanes$cohort)
+hist(data_nhanes$age)
+table(data_nhanes$age)
+hist(data_nhanes$year)
+hist(data_nhanes$cohort)
+hist(data_nhanes$srh)
+```
+
+
+```{r}
+# Calculate weighted proportions of each health category by, say, age_group and year
+health_props <- data_nhanes %>%
+  group_by(age_group, period_decade, health_cat) %>%
+  summarize(
+    prop = survey_prop(na.rm = TRUE, vartype = "se")
+  )
+
+
+# health_props now contains weighted proportions of each health category for each (age_group, year)
+
+# Plotting these as a stacked bar chart, for instance, by year and age_group:
+ggplot(health_props %>% mutate(health_cat = fct_rev(health_cat)),
+       aes(x = factor(period_decade), y = prop, fill = health_cat)) +
+  geom_col(position = "fill") +
+  facet_wrap(~ age_group) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Distribution of Health Categories by Year and Age Group (Weighted)",
+    x = "Year",
+    y = "Proportion of Respondents",
+    fill = "Health"
+  ) +
+  theme_minimal()
+
+```
+

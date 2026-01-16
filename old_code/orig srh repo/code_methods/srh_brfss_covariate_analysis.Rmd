@@ -1,0 +1,402 @@
+---
+title: "BRFSS Trends and Analyses"
+author: "Christine Lucille Kuryla"
+date: "2025-09-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Load data and create survey object
+
+First, load data into data_brfss. See Rmd for data loading, cleaning, wrangling. 
+
+```{r}
+
+library(tidyverse)
+library(here)
+read_csv(here("big_data/BRFSS/brfss_selected_20250916.csv")) #check this
+
+```
+
+Create survey object.
+
+```{r}
+
+# Create svy object to enable weighted analysis
+svy_brfss <- data_brfss %>%
+  select(psu, wt, srh, year, age_decade_cat_6) %>% #age_decade_cat, age_decade_cat_6) %>% 
+  as_survey_design(
+    ids    = psu,
+   # strata = ststr, # For the plots, we will not use the strata because the memory times out after 32 GB. This only changes the SE so the point estimates will be correct and that's sufficient for visualization. 
+    weights = wt#,
+  #  nest = TRUE
+  )
+
+```
+
+# Define function for prevalance and regression coefficient plots
+
+```{r}
+library(tidyverse)
+library(survey)
+library(broom)
+
+# Master function for creating survey-weighted trend plots
+plot_survey_trends <- function(svy_data,
+                               plot_type = c("coefficient", "prevalence"),
+                               variables = NULL,        # For prevalence plots
+                               predictors = NULL,       # For coefficient plots  
+                               outcome = NULL,          # For coefficient plots
+                               age_var = "age_decade_cat",
+                               year_var = "year",
+                               colors = NULL,
+                               legend_labels = NULL,    # Custom legend labels
+                               overall_title = NULL,
+                               y_label = NULL,
+                               x_label = "Year",
+                               legend_title = NULL,
+                               legend_position = c(0.76, 0.18),
+                               legend_justification = c(0, 0),
+                               title_bold = TRUE,
+                               strip_text_size = 11,
+                               strip_text_bold = TRUE,
+                               title_size = 14,
+                               facet_rows = 2,
+                               confidence_level = 0.95,
+                               min_n = 30) {
+  
+  # Validate plot type
+  plot_type <- match.arg(plot_type)
+  
+  # Default colors if not provided
+  if(is.null(colors)) {
+  #  colors <- c("#E91E63", "#8BC34A", "#2196F3", "#FF9800", "#9C27B0", 
+  #              "lightpink", "gold", "turquoise2", "gray", "mediumpurple1")
+    colors <- c("cornflowerblue", "mediumvioletred", "chartreuse3", "darkgoldenrod1",
+                "mediumpurple1", "darkorange2", 
+                "lightpink", "gold", "aquamarine", "gray")
+  }
+  
+  # Set default titles based on plot type
+  if(is.null(overall_title)) {
+    overall_title <- ifelse(plot_type == "coefficient", 
+                            "Coefficient Trends by Age Group",
+                            "Health Measure Trends by Age Group")
+  }
+  
+  if(is.null(y_label)) {
+    y_label <- ifelse(plot_type == "coefficient", 
+                      "Coefficient", 
+                      "Average Value")
+  }
+  
+  if(is.null(legend_title)) {
+    legend_title <- ifelse(plot_type == "coefficient", 
+                           "Predictor", 
+                           "Health Measure")
+  }
+  
+  # Get unique age groups and years
+  age_groups <- unique(svy_data$variables[[age_var]])
+  age_groups <- age_groups[!is.na(age_groups)]
+  
+  years <- unique(svy_data$variables[[year_var]])
+  years <- sort(years[!is.na(years)])
+  
+  # Initialize results data frame
+  results_df <- data.frame()
+  
+  # Branch based on plot type
+  if(plot_type == "coefficient") {
+    # Coefficient plot logic
+    if(is.null(predictors) || is.null(outcome)) {
+      stop("For coefficient plots, both 'predictors' and 'outcome' must be specified")
+    }
+    
+    # Loop through age groups and years
+    for(age in age_groups) {
+      for(yr in years) {
+        # Subset survey data
+        svy_subset <- subset(svy_data, 
+                             get(age_var) == age & get(year_var) == yr)
+        
+        # Check if subset has enough data
+        if(nrow(svy_subset$variables) > min_n) {
+          # Build formula
+          formula_str <- paste(outcome, "~", paste(predictors, collapse = " + "))
+          formula_obj <- as.formula(formula_str)
+          
+          # Try to fit model
+          tryCatch({
+            model <- svyglm(formula_obj, design = svy_subset)
+            
+            # Extract coefficients with confidence intervals
+            coef_summary <- tidy(model, conf.int = TRUE, conf.level = confidence_level)
+            
+            # Add metadata
+            coef_summary$age_group <- as.character(age)
+            coef_summary$year <- yr
+            
+            # Filter to only the predictors of interest
+            coef_summary <- coef_summary[coef_summary$term %in% predictors, ]
+            
+            # Bind to results
+            results_df <- rbind(results_df, coef_summary)
+          }, error = function(e) {
+            # Skip if model fails
+            NULL
+          })
+        }
+      }
+    }
+    
+    # Rename for consistency
+    results_df <- results_df %>%
+      rename(
+        variable = term,
+        value = estimate,
+        se = std.error,
+        ci_lower = conf.low,
+        ci_upper = conf.high
+      )
+    
+    # Variables to use for plotting
+    plot_vars <- predictors
+    
+  } else {
+    # Prevalence/average plot logic
+    if(is.null(variables)) {
+      stop("For prevalence plots, 'variables' must be specified")
+    }
+    
+    # Loop through variables, age groups, and years
+    for(var in variables) {
+      # Check variable type
+      var_values <- svy_data$variables[[var]]
+      is_binary <- all(var_values %in% c(0, 1, NA))
+      
+      for(age in age_groups) {
+        for(yr in years) {
+          # Subset survey data
+          svy_subset <- subset(svy_data, 
+                               get(age_var) == age & get(year_var) == yr)
+          
+          # Check if subset has enough data
+          if(nrow(svy_subset$variables) > min_n) {
+            tryCatch({
+              # Calculate weighted mean (works for both binary and continuous)
+              result <- svymean(as.formula(paste("~", var)), 
+                                design = svy_subset, 
+                                na.rm = TRUE)
+              estimate <- as.numeric(result)[1]
+              se <- as.numeric(sqrt(attr(result, "var")))[1]
+              
+              # Calculate confidence intervals
+              z_score <- qnorm(1 - (1 - confidence_level) / 2)
+              ci_lower <- estimate - z_score * se
+              ci_upper <- estimate + z_score * se
+              
+              # If binary, convert to percentage
+              if(is_binary) {
+                estimate <- estimate * 100
+                ci_lower <- ci_lower * 100
+                ci_upper <- ci_upper * 100
+                se <- se * 100
+              }
+              
+              # Add to results
+              new_row <- data.frame(
+                variable = var,
+                age_group = as.character(age),
+                year = yr,
+                value = estimate,
+                se = se,
+                ci_lower = ci_lower,
+                ci_upper = ci_upper,
+                type = ifelse(is_binary, "prevalence", "mean")
+              )
+              
+              results_df <- rbind(results_df, new_row)
+              
+            }, error = function(e) {
+              # Skip if calculation fails
+              NULL
+            })
+          }
+        }
+      }
+    }
+    
+    # Variables to use for plotting
+    plot_vars <- variables
+  }
+  
+  # Create named color vector for proper mapping
+  color_mapping <- setNames(colors[1:length(plot_vars)], plot_vars)
+  
+  # Create legend labels - use custom if provided, otherwise auto-generate
+  if(!is.null(legend_labels)) {
+    # Check if the right number of labels were provided
+    if(length(legend_labels) != length(plot_vars)) {
+      stop(paste("Number of legend_labels (", length(legend_labels), 
+                 ") must match number of variables/predictors (", 
+                 length(plot_vars), ")", sep = ""))
+    }
+    label_mapping <- setNames(legend_labels, plot_vars)
+  } else {
+    # Auto-generate nice labels
+    label_mapping <- setNames(
+      stringr::str_to_title(gsub("_", " ", plot_vars)),
+      plot_vars
+    )
+  }
+  
+  # Create the plot
+  p <- ggplot(results_df, aes(x = year, y = value, color = variable)) +
+    geom_line(linewidth = 1.2, alpha = 0.8) +
+    geom_point(size = 0.8, alpha = 0.6) +
+    geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper, fill = variable), 
+                alpha = 0.4, linetype = 0) +
+   # facet_wrap(~ age_group, nrow = facet_rows) +
+    facet_wrap(~ age_group, nrow = 1) +
+    scale_color_manual(values = color_mapping, labels = label_mapping) +
+    scale_fill_manual(values = color_mapping, labels = label_mapping) +
+    labs(
+      title = overall_title,
+      x = x_label,
+      y = y_label,
+      color = legend_title,
+      fill = legend_title
+    ) +
+    theme_minimal() +
+    theme(
+    #  legend.position = "inside",  # First specify that legend should be inside
+    #  legend.position.inside = legend_position,  # Then specify where inside
+    #  legend.justification = legend_justification,
+      legend.position = "bottom",
+      legend.background = element_rect(fill = "white", color = NA),
+      legend.key.size = unit(0.8, "lines"),
+      strip.text = element_text(
+        size = strip_text_size, 
+        face = ifelse(strip_text_bold, "bold", "plain")
+      ),
+      panel.grid.minor = element_blank(),
+      plot.title = element_text(
+        hjust = 0.5, 
+        size = title_size, 
+        face = ifelse(title_bold, "bold", "plain")
+      )
+    )
+  
+  # Create summary table
+  if(plot_type == "coefficient") {
+    summary_table <- results_df %>%
+      select(age_group, year, variable, value, se, p.value, ci_lower, ci_upper) %>%
+      rename(coefficient = value) %>%
+      mutate(across(where(is.numeric), ~round(., 4)))
+  } else {
+    summary_table <- results_df %>%
+      select(age_group, year, variable, value, se, ci_lower, ci_upper, type) %>%
+      mutate(across(where(is.numeric), ~round(., 2)))
+  }
+  
+  # Print first rows of summary table
+  cat("\nSummary of results (first 20 rows):\n")
+  print(head(summary_table, 20))
+  
+  return(list(plot = p, data = summary_table))
+}
+
+# Helper function to combine multiple plots if needed
+combine_plots <- function(plot_list, 
+                          ncol = 2, 
+                          main_title = "Combined Analysis") {
+  
+  library(patchwork)
+  
+  # Combine plots using patchwork
+  combined <- wrap_plots(plot_list, ncol = ncol) +
+    plot_annotation(
+      title = main_title,
+      theme = theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"))
+    )
+  
+  return(combined)
+}
+
+# ============================================================================
+# USAGE EXAMPLES
+# ============================================================================
+# Use legend_labels = c("Label1", "Label2", "Label3") to manually set legend names
+# The labels must be in the same order as your predictors/variables
+
+# Example 1: Coefficient plot with custom legend labels
+coef_results_flat <- plot_survey_trends(
+  svy_data = svy_brfss,
+  plot_type = "coefficient",
+  predictors = c("physical_health", "mental_health", "usual_activities_health"),
+  outcome = "srh",
+  age_var = "age_decade_cat",
+  year_var = "year",
+  legend_labels = c("Physical", "Mental", "Functional"),  # Custom legend labels
+  overall_title = "Health Coefficients on Self-Rated Health",
+  y_label = "Coefficient on SRH",
+#  legend_position = c(0.76, 0.18),
+  title_bold = FALSE  # If you want to unbold the title
+)
+
+coef_results$plot
+
+# Example 2: Prevalence/Average plot with custom legend labels
+prev_results <- plot_survey_trends(
+  svy_data = svy_brfss,
+  plot_type = "prevalence",
+  variables = c("physical_health_good_days", "mental_health_good_days",
+                "usual_activities_health_good_days"),
+  age_var = "age_decade_cat",
+  year_var = "year",
+  legend_labels = c("Physical Health Days", "Mental Health Days", "Functional Days"),
+  overall_title = "Trends in Health Measures",
+  y_label = "Average Good Days"#,
+ # legend_position = c(0.76, 0.18)
+)
+
+prev_results$plot
+
+# Example 3: Prevalence plot for binary variables with custom labels
+# binary_results <- plot_survey_trends(
+#   svy_data = svy_brfss,
+#   plot_type = "prevalence",
+#   variables = c("diabetes_dx", "htn_dx", "dep_dx"),
+#   age_var = "age_decade_cat",
+#   year_var = "year",
+#   legend_labels = c("Diabetes", "Hypertension", "Depression"),  # Custom clean labels
+#   colors = c("#FF5722", "#9C27B0", "#00BCD4"),  # Custom colors
+#   overall_title = "Disease Prevalence Trends",
+#   y_label = "Prevalence (%)",
+#   legend_title = "Condition",
+#   legend_position = c(0.76, 0.18)
+# )
+
+# Example 4: With custom formatting and legend labels
+# custom_results <- plot_survey_trends(
+#   svy_data = svy_brfss,
+#   plot_type = "coefficient",
+#   predictors = c("physical_health", "mental_health"),
+#   outcome = "srh",
+#   legend_labels = c("Physical Health\n(Good Days)", "Mental Health\n(Good Days)"),
+#   legend_position = c(0.80, 0.15),      # Adjust legend position
+#   title_bold = FALSE,                   # Unbold title
+#   strip_text_bold = FALSE,              # Unbold facet labels
+#   strip_text_size = 10,                 # Smaller facet labels
+#   title_size = 12,                      # Smaller title
+#   facet_rows = 3,                       # 3 rows instead of 2
+#   confidence_level = 0.99,              # 99% confidence intervals
+#   min_n = 50                            # Require at least 50 observations
+# )
+```
+

@@ -1,0 +1,1548 @@
+---
+title: "BRFSS New"
+author: "Christine Lucille Kuryla"
+date: "2025-01-11"
+output:
+  github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here)
+
+```
+
+
+
+For reference, here is the data aggregation process.
+```{r, eval = FALSE}
+
+library(haven)
+
+# intersect col 1993 to 2023
+all_year_col <- c( "_STATE",   "_STSTR",   "_PSU",     "IDATE" , "IYEAR"  ,  "DISPCODE" , "GENHLTH",  "PHYSHLTH", "MENTHLTH", "POORHLTH", "SEATBELT", "CHILDREN", "SMOKE100",
+"MARITAL" , "EDUCA"  , "PREGNANT", "_AGEG5YR") # "EXEROFT1" "EXERHMM1" "EXEROFT2", "EXERHMM2"
+
+# more col
+more_col <- c("_AGE80", "AGE", "_AGE", "SEX", "_SEX", "_IMPAGE", "_LLCPWT", "_MMSA", "_MMSAWT", "_MMSANAM", "ADJMMSA", "ZIPCODE1", "CTYCODE2", "EXERANY2")
+
+# file list
+brfss_year_to_file <- read_csv(here("big_data/BRFSS/BRFSS_year_file_key.csv"))
+
+# data_brfss_1993 <- read_xpt(here("big_data/BRFSS/CDBRFS93.XPT"))
+
+file_paths <- brfss_year_to_file %>% 
+  filter(!(brfss_year %in% 1990:1992)) %>% 
+  pull(file_name) 
+
+
+# Not all variables are in every year
+safe_select <- function(df, cols) {
+  # 1. Identify which columns from cols are missing in df
+  missing_cols <- setdiff(cols, names(df))
+  # 2. Create those missing columns in df filled with NA
+  if (length(missing_cols) > 0) {
+    df[missing_cols] <- NA
+  }
+  # 3. Finally, select and return only the columns in col_list  (now we are assured they exist, even if NA)
+  df %>% select(all_of(cols))
+}
+
+# columns of interest
+col_list <- vctrs::vec_c(all_year_col, more_col)
+
+# create an empty list to store processed data frames
+all_dfs <- vector("list", length = length(file_paths))
+
+# get data from files
+for (i in seq_along(file_paths)) {
+  
+  tmp_df <- read_xpt(paste0(here("big_data/BRFSS/"), file_paths[i], ".XPT"))
+  
+  # Safely select our columns of interest (any columns not in tmp_df will be NA)
+  tmp_df_selected <- safe_select(tmp_df, col_list)
+  
+  # Store processed data frame
+  all_dfs[[i]] <- tmp_df_selected
+}
+
+data_brfss_raw <- bind_rows(all_dfs)
+
+# write_csv(data_brfss_raw, here("big_data/BRFSS/brfss_selected_not_recoded_20230111.csv"))
+
+```
+
+### Load data
+
+```{r}
+
+data_brfss_raw <- read_csv(here("big_data/BRFSS/brfss_selected_not_recoded_20230111.csv"))
+
+data_brfss <- data_brfss_raw %>% 
+  filter(GENHLTH <= 5) %>% 
+  mutate(srh = 6 - GENHLTH) %>% # recode for intuitive order
+  mutate(srh_cat = factor(
+    srh,
+    levels = 1:5,
+    labels = c(
+      "Poor",
+      "Fair",
+      "Good",
+      "Very Good",
+      "Excellent"
+    ))) %>% 
+  filter(`_AGEG5YR` != 14) %>%  # 14 = unknown
+  mutate(
+    # 1) age_5yr_cat: ordered factor with intuitive labels
+    age_5yr_cat = factor(
+      `_AGEG5YR`,
+      levels = 1:13,  # Must match all possible codes
+      labels = c(
+        "18-24",    # 1
+        "25-29",    # 2
+        "30-34",    # 3
+        "35-39",    # 4
+        "40-44",    # 5
+        "45-49",    # 6
+        "50-54",    # 7
+        "55-59",    # 8
+        "60-64",    # 9
+        "65-69",    # 10
+        "70-74",    # 11
+        "75-79",    # 12
+        "80+" # 13
+      ),
+      ordered = TRUE  # Make it an ordered factor
+    ),
+    
+    # 2) age_5yr_num: a numeric version based on the midpoint of each age band
+    #    (or NA for unknown/refused)
+    age_5yr_num = case_when(
+      `_AGEG5YR` == 1  ~ (18 + 24)/2,   # 21
+      `_AGEG5YR` == 2  ~ (25 + 29)/2,   # 27
+      `_AGEG5YR` == 3  ~ (30 + 34)/2,   # 32
+      `_AGEG5YR` == 4  ~ (35 + 39)/2,   # 37
+      `_AGEG5YR` == 5  ~ (40 + 44)/2,   # 42
+      `_AGEG5YR` == 6  ~ (45 + 49)/2,   # 47
+      `_AGEG5YR` == 7  ~ (50 + 54)/2,   # 52
+      `_AGEG5YR` == 8  ~ (55 + 59)/2,   # 57
+      `_AGEG5YR` == 9  ~ (60 + 64)/2,   # 62
+      `_AGEG5YR` == 10 ~ (65 + 69)/2,   # 67
+      `_AGEG5YR` == 11 ~ (70 + 74)/2,   # 72
+      `_AGEG5YR` == 12 ~ (75 + 79)/2,   # 77
+      `_AGEG5YR` == 13 ~ (80 + 99)/2,   # 89.5 (if your codebook upper bound is 99)
+      `_AGEG5YR` == 14 ~ NA_real_       # Unknown
+    ),
+    
+    # 3) age_decade_cat: ordered factor collapsing adjacent age_5yr codes 
+    #    into ~10-year bands (plus "80+" and "Unknown")
+    age_decade_cat = case_when(
+      `_AGEG5YR` %in% c(1,2)   ~ "18-29",
+      `_AGEG5YR` %in% c(3,4)   ~ "30-39",
+      `_AGEG5YR` %in% c(5,6)   ~ "40-49",
+      `_AGEG5YR` %in% c(7,8)   ~ "50-59",
+      `_AGEG5YR` %in% c(9,10)  ~ "60-69",
+      `_AGEG5YR` %in% c(11,12) ~ "70-79",
+      `_AGEG5YR` == 13         ~ "80+",
+      `_AGEG5YR` == 14         ~ NA
+    )) %>% 
+      mutate(
+    # Convert the decade-level variable to an ordered factor
+    age_decade_cat = factor(
+      age_decade_cat,
+      levels = c("18-29", "30-39", "40-49", "50-59", 
+                 "60-69", "70-79", "80+", "Unknown"),
+      ordered = TRUE
+    )
+  ) %>% 
+mutate( age_decade_cat_2 = case_when(
+      `_AGEG5YR` %in% c(1)     ~ "18-24",
+      `_AGEG5YR` %in% c(2,3)   ~ "25-34",
+      `_AGEG5YR` %in% c(4,5)   ~ "35-44",
+      `_AGEG5YR` %in% c(6,7)   ~ "45-54",
+      `_AGEG5YR` %in% c(8,9)   ~ "55-64",
+      `_AGEG5YR` %in% c(10,11) ~ "65-74",
+      `_AGEG5YR` %in% c(12,13) ~ "75+",
+      `_AGEG5YR` == 14         ~ NA
+    
+  )) %>%
+    mutate(
+    # Convert the decade-level variable to an ordered factor
+    age_decade_cat_2 = factor(
+      age_decade_cat_2,
+      levels = c("18-24", "25-34", "35-44", "45-54", 
+                 "55-64", "65-74", "75+", "Unknown"),
+      ordered = TRUE
+    )
+  ) %>% 
+  mutate(year = case_when(
+    IYEAR == 93 ~ 1993,
+    IYEAR == 94 ~ 1994,
+    IYEAR == 95 ~ 1995,
+    IYEAR == 96 ~ 1996,
+    IYEAR == 97 ~ 1997,
+    IYEAR == 98 ~ 1998,
+    TRUE ~ IYEAR
+    ))
+
+# # ---- Sanity checks ----
+# # 1) Check that all categories are present and coded as expected:
+# table(data_brfss$`_AGEG5YR`, useNA = "always")
+# table(data_brfss$age_5yr_cat, useNA = "always")
+# table(data_brfss$age_decade_cat, useNA = "always")
+# 
+# # 2) Brief check of numeric distribution:
+# summary(data_brfss$age_5yr_num)
+# 
+# # 3) Look at a cross-tab to confirm consistency across new variables:
+# with(data_brfss, table(age_5yr_cat, age_decade_cat))
+
+
+
+
+# If want mental, physical, and activities health recoded
+
+data_brfss <- data_brfss %>% 
+  mutate(mental_health_good_days = case_when( # Now thinking about your mental health, which includes stress, depression, and problems with emotions, for how many days during the past 30 days was your mental health not good?
+    MENTHLTH == 88 ~ 31,  # 88 = No bad days
+    MENTHLTH <= 30 ~ 31 - MENTHLTH, # MENTHLTH is number of bad mental health days in past 30 days
+    MENTHLTH == 77 ~ NA_real_, # 77 = Don't Know / Not Sure
+    MENTHLTH == 99 ~ NA_real_, # 99 = Refused
+    TRUE ~ NA_real_
+  )) %>% 
+mutate(mental_health =  case_when(
+  MENTHLTH == 88 ~ 3,
+  MENTHLTH >= 1 & MENTHLTH <= 14 ~ 2,
+  MENTHLTH > 14 & MENTHLTH <= 30 ~ 1,
+  MENTHLTH == 99 ~ NA,
+  TRUE ~ NA)) %>% 
+mutate(physical_health_good_days = case_when( # Now thinking about your physical health, which includes physical illness and injury, for how many days during the past 30 days was your physical health not good?
+    PHYSHLTH == 88 ~ 31,  # 88 = No bad days
+    PHYSHLTH <= 30 ~ 31 - PHYSHLTH, # MENTHLTH is number of bad mental health days in past 30 days
+    PHYSHLTH == 77 ~ NA_real_, # 77 = Don't Know / Not Sure
+    PHYSHLTH == 99 ~ NA_real_, # 99 = Refused
+    TRUE ~ NA_real_
+  )) %>% 
+mutate(physical_health =  case_when(
+  PHYSHLTH == 88 ~ 3,
+  PHYSHLTH >= 1 & PHYSHLTH <= 14 ~ 2,
+  PHYSHLTH > 14 & PHYSHLTH <= 30 ~ 1,
+  PHYSHLTH == 99 ~ NA,
+  TRUE ~ NA)) %>%
+mutate(usual_activities_health_good_days = case_when( #During the past 30 days, for about how many days did poor physical or mental health keep you from doing your usual activities, such as self-care, work, or recreation?
+    POORHLTH == 88 ~ 31,  # 88 = No bad days
+    POORHLTH <= 30 ~ 31 - POORHLTH, # MENTHLTH is number of bad mental health days in past 30 days
+    POORHLTH == 77 ~ NA_real_, # 77 = Don't Know / Not Sure
+    POORHLTH == 99 ~ NA_real_, # 99 = Refused
+    TRUE ~ NA
+  )) %>% 
+mutate(usual_activities_health =  case_when(
+  POORHLTH == 88 ~ 3,
+  POORHLTH >= 1 & POORHLTH <= 14 ~ 2,
+  POORHLTH > 14 & POORHLTH <= 30 ~ 1,
+  POORHLTH == 99 ~ NA,
+  TRUE ~ NA)) %>% 
+filter(SEX != 9) %>% 
+mutate(sex = case_when(
+  year <= 2018 ~ SEX,
+  year >= 2019 ~ `_SEX`,
+  TRUE ~ NA)) %>% 
+filter(EDUCA != 9)
+
+# 
+
+with(data_brfss, table(MENTHLTH, mental_health))
+with(data_brfss, table(PHYSHLTH, physical_health))
+with(data_brfss, table(POORHLTH, usual_activities_health))
+                                             
+#  select(!(MENTHLTH %in% c(77, 88, 99))) %>% 
+#  mutate(mental_health_good_days = 31 - MENTHLTH) # MENTLHLTH is number of bad mental health days in month 
+
+rm(data_brfss_raw)
+
+```
+
+
+# Unweighted
+```{r}
+
+data_brfss %>%
+  group_by(year) %>%
+  summarize(
+    mean_health = mean(srh, na.rm = TRUE),
+    .groups = "drop"
+  ) %>% 
+  ggplot(aes(x = year, y = mean_health)) +
+  geom_line(size = 1, color = "cornflowerblue") +
+  geom_point(size = 2, color = "darkblue") +
+  labs(
+    title = "Self-Rated Health",
+    x = "Year",
+    y = "Mean SRH",
+    subtitle = "BRFSS Dataset"
+  ) +
+  theme_minimal()
+
+data_brfss %>%
+  group_by(year) %>%
+  summarize(
+    mean_health = mean(physical_health, na.rm = TRUE),
+    .groups = "drop"
+  ) %>% 
+  ggplot(aes(x = year, y = mean_health)) +
+  geom_line(size = 1, color = "cornflowerblue") +
+  geom_point(size = 2, color = "darkblue") +
+  labs(
+    title = "Physical Health",
+    x = "Year",
+    y = "Mean Physical Health",
+    subtitle = "BRFSS Dataset"
+  ) +
+  theme_minimal()
+
+data_brfss %>%
+  group_by(year) %>%
+  summarize(
+    mean_health = mean(mental_health, na.rm = TRUE),
+    .groups = "drop"
+  ) %>% 
+  ggplot(aes(x = year, y = mean_health)) +
+  geom_line(size = 1, color = "cornflowerblue") +
+  geom_point(size = 2, color = "darkblue") +
+  labs(
+    title = "Mental Health",
+    x = "Year",
+    y = "Mean Mental Health",
+    subtitle = "BRFSS Dataset"
+  ) +
+  theme_minimal()
+
+
+data_brfss %>%
+  group_by(year) %>%
+  summarize(
+    mean_health = mean(usual_activities_health, na.rm = TRUE),
+    .groups = "drop"
+  ) %>% 
+  ggplot(aes(x = year, y = mean_health)) +
+  geom_line(size = 1, color = "cornflowerblue") +
+  geom_point(size = 2, color = "darkblue") +
+  labs(
+    title = "Functional Health",
+    x = "Year",
+    y = "Mean Functional Health",
+    subtitle = "BRFSS Dataset"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+
+data_brfss %>% 
+  group_by(age_decade_cat, year) %>% 
+  summarize(mean_health = mean(srh, na.rm = TRUE)) %>% 
+  ggplot(aes(x = year, y = mean_health, color = age_decade_cat)) +
+  geom_line() +
+  labs(title = "Average SRH Per Year for Each Age Group",
+       subtitle = "BRFSS 1993 - 2023 Dataset",
+       y = "Average SRH", 
+       x = "Year",
+       color = "Age Group") +
+  scale_color_discrete() +
+  theme_minimal() #+
+#  scale_color_brewer(palette = "Set2")
+
+data_brfss %>% 
+  group_by(age_decade_cat, year) %>% 
+  summarize(mean_health = mean(physical_health_good_days, na.rm = TRUE)) %>% 
+  ggplot(aes(x = year, y = mean_health, color = age_decade_cat)) +
+  geom_line() +
+  labs(title = "Average Days of Good Physical Health Per Year for Each Age Group",
+       subtitle = "BRFSS 1993 - 2023 Dataset",
+       y = "Average Days of Good Physical Health", 
+       x = "Year",
+       color = "Age Group") +
+  scale_color_discrete() +
+  theme_minimal() 
+
+data_brfss %>% 
+  group_by(age_decade_cat, year) %>% 
+  summarize(mean_health = mean(physical_health, na.rm = TRUE)) %>% 
+  ggplot(aes(x = year, y = mean_health, color = age_decade_cat)) +
+  geom_line() +
+  labs(title = "Average Physical Health Per Year for Each Age Group",
+       subtitle = "BRFSS 1993 - 2023 Dataset",
+       y = "Average Physical Health", 
+       x = "Year",
+       color = "Age Group") +
+  scale_color_discrete() +
+  theme_minimal() 
+
+data_brfss %>% 
+  group_by(age_decade_cat, year) %>% 
+  summarize(mean_health = mean(mental_health_good_days, na.rm = TRUE)) %>% 
+  ggplot(aes(x = year, y = mean_health, color = age_decade_cat)) +
+  geom_line() +
+  labs(title = "Average Days of Good Mental Health Per Year for Each Age Group",
+       subtitle = "BRFSS 1993 - 2023 Dataset",
+       y = "Average Days of Good Mental Health", 
+       x = "Year",
+       color = "Age Group") +
+  scale_color_discrete() +
+  theme_minimal() 
+
+data_brfss %>% 
+  group_by(age_decade_cat, year) %>% 
+  summarize(mean_health = mean(mental_health, na.rm = TRUE)) %>% 
+  ggplot(aes(x = year, y = mean_health, color = age_decade_cat)) +
+  geom_line() +
+  labs(title = "Average Mental Health Per Year for Each Age Group",
+       subtitle = "BRFSS 1993 - 2023 Dataset",
+       y = "Average Mental Health", 
+       x = "Year",
+       color = "Age Group") +
+  scale_color_discrete() +
+  theme_minimal() 
+
+data_brfss %>% 
+  group_by(age_decade_cat, year) %>% 
+  summarize(mean_health = mean(usual_activities_health_good_days, na.rm = TRUE)) %>% 
+  ggplot(aes(x = year, y = mean_health, color = age_decade_cat)) +
+  geom_line() +
+  labs(title = "Average Functional Days Per Year for Each Age Group",
+       subtitle = "BRFSS 1993 - 2023 Dataset",
+       y = "Average Days with Functional Health", 
+       x = "Year",
+       color = "Age Group") +
+  scale_color_discrete() +
+  theme_minimal() 
+
+data_brfss %>% 
+  group_by(age_decade_cat, year) %>% 
+  summarize(mean_health = mean(usual_activities_health, na.rm = TRUE)) %>% 
+  ggplot(aes(x = year, y = mean_health, color = age_decade_cat)) +
+  geom_line() +
+  labs(title = "Average Functional Health for Each Age Group",
+       subtitle = "BRFSS 1993 - 2023 Dataset",
+       y = "Average Functional Health", 
+       x = "Year",
+       color = "Age Group") +
+  scale_color_discrete() +
+  theme_minimal() 
+
+```
+
+```{r}
+lm_health_v_age_0 <- data_brfss %>%
+  group_by(year) %>%
+  do(broom::tidy(lm(srh ~ age_5yr_num, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "age_5yr_num") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value)
+
+# View the results with confidence intervals, se, t statistic, and p value
+# print(lm_health_v_age_0)
+knitr::kable(lm_health_v_age_0,
+             caption = "BRFSS 1993 - 2023 Dataset")
+
+# Plot coefficients
+ggplot(lm_health_v_age_0, aes(x = year, y = coef)) +
+  geom_point() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Age' Coefficient Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Age"
+  ) +
+  theme_minimal()
+
+# Plot coefficients with CI
+ggplot(lm_health_v_age_0, aes(x = year, y = coef)) +
+  geom_line() +
+  geom_point() +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +  # Add shaded area for confidence intervals
+  labs(
+    title = "Change in 'Age' Coefficient Over Years with Confidence Intervals",
+    subtitle = "BRFSS 2004 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Age"
+  ) +
+  theme_minimal()
+
+# Perform linear regression of 'coef' (age coefficient) vs 'year'
+lm_coef_vs_year <- lm(coef ~ year, data = lm_health_v_age_0)
+
+```
+
+```{r}
+
+data_brfss %>%
+  group_by(year) %>%
+  do(broom::tidy(lm(srh ~ physical_health_good_days, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "physical_health_good_days") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef)) +
+  geom_point() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Physical Health' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Physical Health on SRH"
+  ) +
+  theme_minimal()
+
+data_brfss %>%
+  group_by(year) %>%
+  do(broom::tidy(lm(srh ~ mental_health_good_days, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "mental_health_good_days") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef)) +
+  geom_point() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Mental Health' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Mental Health on SRH"
+  ) +
+  theme_minimal()
+
+data_brfss %>%
+  group_by(year) %>%
+  do(broom::tidy(lm(srh ~ usual_activities_health_good_days, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "usual_activities_health_good_days") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef)) +
+  geom_point() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Functional Health' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Functional Health on SRH"
+  ) +
+  theme_minimal()
+
+
+# Recoded
+
+data_brfss %>%
+  group_by(year) %>%
+  do(broom::tidy(lm(srh ~ physical_health, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "physical_health") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef)) +
+  geom_point() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Physical Health' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Physical Health on SRH"
+  ) +
+  theme_minimal()
+
+data_brfss %>%
+  group_by(year) %>%
+  do(broom::tidy(lm(srh ~ mental_health, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "mental_health") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef)) +
+  geom_point() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Mental Health' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Mental Health on SRH"
+  ) +
+  theme_minimal()
+
+data_brfss %>%
+  group_by(year) %>%
+  do(broom::tidy(lm(srh ~ usual_activities_health, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "usual_activities_health") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef)) +
+  geom_point() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Functional Health' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Functional Health on SRH"
+  ) +
+  theme_minimal()
+
+```
+
+# Coefficients of Predictors over Time Subsetted by Age
+
+```{r}
+
+# data_brfss %>%
+#   mutate(age = cut(age_5yr_num, breaks = 6)) %>% 
+#   group_by(year, age) %>%
+#   do(broom::tidy(lm(srh ~ age_5yr_num, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+#   filter(term == "age_5yr_num") %>%
+#   select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+# ggplot(aes(x = year, y = coef, color = age)) +
+#   geom_point() +
+#   geom_line() +
+#   geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+#                  position=position_dodge(0.05)) +
+#   labs(
+#     title = "Change in 'Age' Coefficient on SRH Over Years",
+#     subtitle = "BRFSS 1993 - 2023 Dataset",
+#     x = "Year",
+#     y = "Coefficient of Age on SRH"
+#   ) +
+#   scale_color_discrete() +
+#   theme_minimal() 
+
+
+data_brfss %>%
+  group_by(year, age_decade_cat) %>%
+  do(broom::tidy(lm(srh ~ physical_health, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "physical_health") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef, color = age_decade_cat)) +
+  geom_point() +
+  geom_line() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Physical Health' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Physical Health on SRH"
+  ) +
+  scale_color_discrete() +
+  theme_minimal() 
+
+data_brfss %>%
+  group_by(year, age_decade_cat) %>%
+  do(broom::tidy(lm(srh ~ mental_health, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "mental_health") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef, color = age_decade_cat)) +
+  geom_point() +
+  geom_line() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Mental Health' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Mental Health on SRH"
+  ) +
+  scale_color_discrete() +
+  theme_minimal() 
+
+data_brfss %>%
+  group_by(year, age_decade_cat) %>%
+  do(broom::tidy(lm(srh ~ usual_activities_health, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "usual_activities_health") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value) %>% 
+ggplot(aes(x = year, y = coef, color = age_decade_cat)) +
+  geom_point() +
+  geom_line() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Functional Health' Coefficient on SRH Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Functional Health on SRH"
+  ) +
+  scale_color_discrete() +
+  theme_minimal() 
+```
+
+## Plots of the coefficients over time 
+
+```{r}
+
+# Load required packages
+library(tidyverse)  # For data manipulation and plotting
+library(broom)      # For tidying model outputs
+library(purrr)      # For functional programming (e.g., mapping over groups)
+
+# =============================================================================
+# Define a helper function to run a regression of srh on a given predictor
+# for each year and age group, extract the coefficient along with its standard
+# error, t-statistic, p-value, and confidence intervals, and then add a new
+# column labeling the predictor.
+# =============================================================================
+run_regression <- function(pred, label) {
+  # Use group_by to split data by year and age group, then run lm() for each subset.
+  data_brfss %>%
+    group_by(year, age_decade_cat) %>%
+    # The do() function runs a model per subgroup.
+    do(tidy(
+      lm(as.formula(paste("srh ~", pred)), data = .), 
+      conf.int = TRUE  # Include 95% confidence intervals
+    )) %>%
+    # Filter to retain only the coefficient for our predictor variable.
+    filter(term == pred) %>%
+    # Add a column to indicate which predictor this row corresponds to.
+    mutate(predictor = label) %>%
+    # Select and rename columns for clarity.
+    select(
+      year, 
+      age_decade_cat, 
+      predictor, 
+      coef = estimate, 
+      conf.low, 
+      conf.high, 
+      se = std.error, 
+      t_statistic = statistic,  
+      p_value = p.value
+    ) %>%
+    ungroup()
+}
+
+# =============================================================================
+# Run separate regressions for each of the three health dimensions:
+#
+# - "physical_health" becomes "Physical Health"
+# - "mental_health" becomes "Mental Health"
+# - "usual_activities_health" is interpreted as a measure of "Functional Health"
+# =============================================================================
+
+results_physical   <- run_regression("physical_health", "Physical Health")
+results_mental     <- run_regression("mental_health", "Mental Health")
+results_functional <- run_regression("usual_activities_health", "Functional Health")
+
+# Combine the results for all predictors into one data frame.
+results_all <- bind_rows(results_physical, results_mental, results_functional)
+
+# =============================================================================
+# Sanity Check: Check sample sizes per year and age group.
+# This helps verify that the data are adequate for running separate regressions.
+# =============================================================================
+sample_sizes <- data_brfss %>%
+  group_by(year, age_decade_cat) %>%
+  summarise(n = n(), .groups = "drop")
+print(sample_sizes)
+
+# =============================================================================
+# Create separate figures for each age group.
+#
+# We split the combined regression results by age group and then, for each group,
+# produce a ggplot showing the regression coefficient (with 95% CIs) for each 
+# health dimension over the years.
+#
+# Note: In each plot, the x-axis represents the year, and separate lines/points
+# represent the health dimensions (color-coded).
+# =============================================================================
+plots <- results_all %>%
+  split(.$age_decade_cat) %>%
+  map(~{
+    # Get the current age group label
+    age_label <- unique(.x$age_decade_cat)
+    
+    # Create the plot for this age group.
+    ggplot(.x, aes(x = year, y = coef, color = predictor, group = predictor)) +
+      geom_point(size = 2) +  # Plot the coefficient points
+      geom_line() +           # Connect the points with lines
+      geom_errorbar(
+        aes(ymin = conf.low, ymax = conf.high), 
+        width = 0.2, 
+        position = position_dodge(0.05)
+      ) +
+      labs(
+         title = "Health Dimensions Coefficient on SRH Over Years",
+         subtitle = paste("Age Group:", age_label, "(BRFSS 1993 - 2023)"),
+         x = "Year",
+         y = "Coefficient on SRH",
+         color = "Health Dimension"
+      ) +
+      theme_minimal()  # Use a clean minimal theme
+  })
+
+# =============================================================================
+# Display the plots.
+#
+# If you're running this code interactively, the walk() function will print
+# each plot one after the other. Alternatively, you could arrange them in a grid
+# or save them to files.
+# =============================================================================
+walk(plots, print)
+
+# =============================================================================
+# OPTIONAL: Saving each plot to a separate file (e.g., PNG)
+# Uncomment and modify the code below if you wish to export the figures.
+# =============================================================================
+# i <- 1
+# for(p in plots) {
+#   ggsave(
+#     filename = paste0("health_coefficients_age_group_", names(plots)[i], ".png"), 
+#     plot = p, 
+#     width = 8, height = 6, dpi = 300
+#   )
+#   i <- i + 1
+# }
+
+
+# Load required packages
+library(tidyverse)  # For data manipulation and plotting
+library(patchwork)  # For combining ggplot objects
+
+# -----------------------------------------------------------------------------
+# 1. Compute common axis limits based on the entire results_all data frame.
+#
+# This ensures that every subplot uses the same x and y axis ranges.
+# -----------------------------------------------------------------------------
+
+# Calculate x-axis limits (years)
+x_limits <- range(results_all$year, na.rm = TRUE)
+
+# Calculate y-axis limits using the coefficient values and their confidence intervals.
+y_limits <- range(c(results_all$coef, results_all$conf.low, results_all$conf.high), na.rm = TRUE)
+
+# -----------------------------------------------------------------------------
+# 2. Update each plot in the 'plots' list to enforce the common axis limits.
+#
+# We use purrr::map() to loop over each plot and add the same scale_x_continuous
+# and scale_y_continuous layers.
+# -----------------------------------------------------------------------------
+
+plots_fixed <- map(plots, ~ .x +
+  scale_x_continuous(limits = x_limits) +
+  scale_y_continuous(limits = y_limits)
+)
+
+# -----------------------------------------------------------------------------
+# 3. Combine all the fixed plots into one figure.
+#
+# The wrap_plots() function from patchwork makes it simple to combine multiple
+# ggplot objects into one cohesive layout. Here, we arrange them in 2 columns.
+# -----------------------------------------------------------------------------
+
+combined_plot <- wrap_plots(plots_fixed, ncol = 2)
+
+# Display the combined plot
+print(combined_plot)
+
+# -----------------------------------------------------------------------------
+# OPTIONAL: Save the combined plot to a file.
+#
+# Uncomment the following code to save the figure as a PNG.
+# -----------------------------------------------------------------------------
+# ggsave(
+#   filename = "combined_health_coefficients_by_age_group.png",
+#   plot = combined_plot,
+#   width = 12, height = 8, dpi = 300
+# )
+
+# Load required packages
+library(tidyverse)  # For data manipulation and plotting
+
+# -----------------------------------------------------------------------------
+# 1. Compute the average coefficient (and averaged confidence limits) for each 
+# predictor within each age group over all years.
+#
+# This assumes that the data frame `results_all` contains:
+#   - year
+#   - age_decade_cat
+#   - predictor (the predictor's name)
+#   - coef (the estimated coefficient)
+#   - conf.low and conf.high (the 95% CI limits)
+#
+# NOTE: Averaging confidence intervals is for exploratory purposes only.
+# -----------------------------------------------------------------------------
+averaged_results <- results_all %>%
+  group_by(age_decade_cat, predictor) %>%
+  summarise(
+    avg_coef     = mean(coef, na.rm = TRUE),
+    avg_conf_low = mean(conf.low, na.rm = TRUE),
+    avg_conf_high= mean(conf.high, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# -----------------------------------------------------------------------------
+# 2. Create a grouped bar plot using the averaged coefficients.
+#
+# In this plot:
+#   - The x-axis shows the age groups.
+#   - Within each age group, bars for the different predictors (with different
+#     colors) are placed side by side.
+#   - The height of each bar is the average coefficient.
+#   - Error bars (optional) show the averaged lower and upper confidence limits.
+# -----------------------------------------------------------------------------
+bar_plot <- ggplot(averaged_results, aes(x = age_decade_cat, y = avg_coef, fill = predictor)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +  # Draw the bars
+  geom_errorbar(aes(ymin = avg_conf_low, ymax = avg_conf_high),
+                position = position_dodge(width = 0.9), 
+                width = 0.2) +  # Add error bars for the confidence intervals
+  labs(
+    title = "Average Coefficients for Predictors on SRH",
+    subtitle = "Averaged over All Years, Grouped by Age Group",
+    x = "Age Group",
+    y = "Average Coefficient on SRH",
+    fill = "Predictor"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Tilt x-axis labels for clarity
+  )
+
+# -----------------------------------------------------------------------------
+# 3. Display the bar plot.
+# -----------------------------------------------------------------------------
+print(bar_plot)
+
+# -----------------------------------------------------------------------------
+# OPTIONAL: Save the bar plot to a file.
+# -----------------------------------------------------------------------------
+# ggsave(
+#   filename = "average_predictor_coefficients_grouped_by_age.png",
+#   plot = bar_plot,
+#   width = 10,
+#   height = 8,
+#   dpi = 300
+# )
+
+
+```
+
+# Add sex and education as covariates to adjust for
+
+```{r}
+
+# Load required packages
+library(tidyverse)  # For data manipulation and plotting
+library(broom)      # For tidying model outputs
+library(purrr)      # For functional programming
+library(patchwork)  # For combining ggplot objects
+
+# =============================================================================
+# 1. Define a helper function to run the regression for a given predictor.
+#
+# For each subgroup (by year and age_decade_cat), we fit a linear model:
+#   srh ~ [predictor] + sex + EDUCA
+#
+# We then extract the coefficient for the primary predictor using broom::tidy()
+# with confidence intervals.
+# =============================================================================
+run_regression <- function(pred, label) {
+  data_brfss %>%
+    group_by(year, age_decade_cat) %>%  # Split data by year and age group
+    do(
+      tidy(
+        lm(as.formula(paste("srh ~", pred)), data = .),
+        lm(as.formula(paste("srh ~", pred, "+ sex + EDUCA")), data = .),
+        conf.int = TRUE  # Request 95% confidence intervals
+      )
+    ) %>%
+    filter(term == pred) %>%  # Extract only the row for our main predictor
+    mutate(predictor = label) %>%  # Add a descriptive label
+    select(
+      year,
+      age_decade_cat,
+      predictor,
+      coef = estimate,
+      conf.low,
+      conf.high,
+      se = std.error,
+      t_statistic = statistic,
+      p_value = p.value
+    ) %>%
+    ungroup()
+}
+
+# =============================================================================
+# 2. Run separate regressions for each health dimension with adjustments:
+#
+# - physical_health becomes "Physical Health"
+# - mental_health becomes "Mental Health"
+# - usual_activities_health (interpreted as "Functional Health")
+# =============================================================================
+results_physical   <- run_regression("physical_health", "Physical Health")
+results_mental     <- run_regression("mental_health", "Mental Health")
+results_functional <- run_regression("usual_activities_health", "Functional Health")
+
+# Combine the results into one data frame.
+results_all <- bind_rows(results_physical, results_mental, results_functional)
+
+# =============================================================================
+# 3. Sanity Check: Verify sample sizes per year and age group.
+# This helps ensure that there are enough observations in each subgroup.
+# =============================================================================
+sample_sizes <- data_brfss %>%
+  group_by(year, age_decade_cat) %>%
+  summarise(n = n(), .groups = "drop")
+print(sample_sizes)
+
+# =============================================================================
+# 4. Create separate plots for each age group (using the original order).
+#
+# Each plot shows the regression coefficient (with 95% CIs) for each health
+# dimension over the years. The x-axis represents the year, and each health
+# dimension is color-coded.
+# =============================================================================
+plots <- results_all %>%
+  split(.$age_decade_cat) %>%  # Split the combined results by age group
+  map(~{
+    # Get the current age group label
+    age_label <- unique(.x$age_decade_cat)
+    
+    # Create a ggplot for this age group
+    ggplot(.x, aes(x = year, y = coef, color = predictor, group = predictor)) +
+      geom_point(size = 2) +  # Plot coefficient points
+      geom_line() +           # Connect points with lines
+      geom_errorbar(
+        aes(ymin = conf.low, ymax = conf.high),
+        width = 0.2,
+        position = position_dodge(0.05)
+      ) +
+      labs(
+        title = "Health Dimensions Coefficient on SRH Over Years",
+        subtitle = paste("Age Group:", age_label, "(BRFSS 1993 - 2023)"),
+        x = "Year",
+        y = "Coefficient on SRH",
+        color = "Health Dimension"
+      ) +
+      theme_minimal()
+  })
+
+# =============================================================================
+# 5. Compute common axis limits to ensure consistency across plots.
+#
+# This makes it easier to compare coefficient estimates across age groups.
+# =============================================================================
+x_limits <- range(results_all$year, na.rm = TRUE)
+y_limits <- range(c(results_all$coef, results_all$conf.low, results_all$conf.high), na.rm = TRUE)
+
+# Update each plot to use these common x and y axis limits.
+plots_fixed <- map(plots, ~ .x +
+  scale_x_continuous(limits = x_limits) +
+  scale_y_continuous(limits = y_limits)
+)
+
+# =============================================================================
+# 6. Combine the plots into one figure.
+#
+# Since we are keeping the original order, we simply combine the list as is.
+# Here we arrange the plots in 2 columns.
+# =============================================================================
+combined_plot <- wrap_plots(plots_fixed, ncol = 2)
+
+# Display the combined plot
+print(combined_plot)
+
+# =============================================================================
+# 7. OPTIONAL: Save the combined plot to a file.
+# Uncomment and adjust the code below if you wish to export the figure.
+# =============================================================================
+# ggsave(
+#   filename = "combined_health_coefficients_with_adjustments.png",
+#   plot = combined_plot,
+#   width = 12, height = 8, dpi = 300
+# )
+
+# Load required packages
+library(tidyverse)  # For data manipulation and plotting
+
+# -----------------------------------------------------------------------------
+# 1. Compute the average coefficient (and averaged confidence limits) for each 
+# predictor within each age group over all years.
+#
+# This assumes that the data frame `results_all` contains:
+#   - year
+#   - age_decade_cat
+#   - predictor (the predictor's name)
+#   - coef (the estimated coefficient)
+#   - conf.low and conf.high (the 95% CI limits)
+#
+# NOTE: Averaging confidence intervals is for exploratory purposes only.
+# -----------------------------------------------------------------------------
+averaged_results <- results_all %>%
+  group_by(age_decade_cat, predictor) %>%
+  summarise(
+    avg_coef     = mean(coef, na.rm = TRUE),
+    avg_conf_low = mean(conf.low, na.rm = TRUE),
+    avg_conf_high= mean(conf.high, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# -----------------------------------------------------------------------------
+# 2. Create a grouped bar plot using the averaged coefficients.
+#
+# In this plot:
+#   - The x-axis shows the age groups.
+#   - Within each age group, bars for the different predictors (with different
+#     colors) are placed side by side.
+#   - The height of each bar is the average coefficient.
+#   - Error bars (optional) show the averaged lower and upper confidence limits.
+# -----------------------------------------------------------------------------
+bar_plot <- ggplot(averaged_results, aes(x = age_decade_cat, y = avg_coef, fill = predictor)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +  # Draw the bars
+  geom_errorbar(aes(ymin = avg_conf_low, ymax = avg_conf_high),
+                position = position_dodge(width = 0.9), 
+                width = 0.2) +  # Add error bars for the confidence intervals
+  labs(
+    title = "Average Coefficients for Predictors on SRH",
+    subtitle = "Averaged over All Years, Grouped by Age Group",
+    x = "Age Group",
+    y = "Average Coefficient on SRH",
+    fill = "Predictor"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Tilt x-axis labels for clarity
+  )
+
+# -----------------------------------------------------------------------------
+# 3. Display the bar plot.
+# -----------------------------------------------------------------------------
+print(bar_plot)
+
+# -----------------------------------------------------------------------------
+# OPTIONAL: Save the bar plot to a file.
+# -----------------------------------------------------------------------------
+# ggsave(
+#   filename = "average_predictor_coefficients_grouped_by_age.png",
+#   plot = bar_plot,
+#   width = 10,
+#   height = 8,
+#   dpi = 300
+# )
+
+```
+
+
+
+## Add sex and education as predictors
+
+```{r}
+# Load required packages
+library(tidyverse)  # For data manipulation and plotting
+library(broom)      # For tidying model outputs
+library(purrr)      # For functional programming (e.g., mapping over lists)
+library(patchwork)  # For combining ggplot objects
+
+# =============================================================================
+# 1. Define a helper function to run a regression for a given predictor.
+#
+# For each subgroup (by year and age_decade_cat), we fit a simple linear model:
+#    srh ~ [predictor]
+#
+# The function extracts the coefficient (with its confidence interval) for
+# the predictor of interest.
+# =============================================================================
+run_regression <- function(pred, label) {
+  data_brfss %>%
+    group_by(year, age_decade_cat) %>%  # Subset data by year and age group
+    do(
+      tidy(
+        lm(as.formula(paste("srh ~", pred)), data = .),
+        conf.int = TRUE  # Request 95% confidence intervals
+      )
+    ) %>%
+    filter(term == pred) %>%  # Keep only the row for the predictor
+    mutate(predictor = label) %>%  # Add a descriptive label for plotting
+    select(
+      year,
+      age_decade_cat,
+      predictor,
+      coef = estimate,
+      conf.low,
+      conf.high,
+      se = std.error,
+      t_statistic = statistic,
+      p_value = p.value
+    ) %>%
+    ungroup()
+}
+
+# =============================================================================
+# 2. Run separate regressions for each predictor.
+#
+# Here, we run five separate regressions:
+#   - Physical Health: variable "physical_health"
+#   - Mental Health: variable "mental_health"
+#   - Functional Health: variable "usual_activities_health"
+#   - Sex: variable "sex"
+#   - Education: variable "EDUCA"
+# =============================================================================
+results_physical   <- run_regression("physical_health", "Physical Health")
+results_mental     <- run_regression("mental_health", "Mental Health")
+results_functional <- run_regression("usual_activities_health", "Functional Health")
+results_sex        <- run_regression("sex", "Sex")
+results_edu        <- run_regression("EDUCA", "Education")
+
+# Combine all regression results into one data frame
+results_all <- bind_rows(
+  results_physical,
+  results_mental,
+  results_functional,
+  results_sex,
+  results_edu
+)
+
+# =============================================================================
+# 3. Sanity Check: Check the sample sizes per subgroup.
+#
+# This is useful to ensure there are enough observations in each (year, age) cell.
+# =============================================================================
+sample_sizes <- data_brfss %>%
+  group_by(year, age_decade_cat) %>%
+  summarise(n = n(), .groups = "drop")
+print(sample_sizes)
+
+# =============================================================================
+# 4. Create separate plots for each age group (using the original order).
+#
+# For each age group, we plot the coefficient estimates over time for all five 
+# predictors. Points represent estimates and error bars show the 95% CIs.
+# =============================================================================
+plots <- results_all %>%
+  split(.$age_decade_cat) %>%  # Split results by age group
+  map(~{
+    # Extract the age group label
+    age_label <- unique(.x$age_decade_cat)
+    
+    # Create the plot for this age group
+    ggplot(.x, aes(x = year, y = coef, color = predictor, group = predictor)) +
+      geom_point(size = 2) +        # Plot coefficient points
+      geom_line() +                 # Connect points over years
+      geom_errorbar(
+        aes(ymin = conf.low, ymax = conf.high),
+        width = 0.2,
+        position = position_dodge(0.05)
+      ) +
+      labs(
+        title = "Health & Demographic Predictors of SRH Over Years",
+        subtitle = paste("Age Group:", age_label, "(BRFSS 1993 - 2023)"),
+        x = "Year",
+        y = "Coefficient on SRH",
+        color = "Predictor"
+      ) +
+      theme_minimal()
+  })
+
+# =============================================================================
+# 5. Compute common axis limits so that each subplot has the same scales.
+#
+# This makes it easier to compare the coefficients across age groups.
+# =============================================================================
+x_limits <- range(results_all$year, na.rm = TRUE)
+y_limits <- range(c(results_all$coef, results_all$conf.low, results_all$conf.high), na.rm = TRUE)
+
+# Update each plot to enforce the common x and y limits
+plots_fixed <- map(plots, ~ .x +
+  scale_x_continuous(limits = x_limits) +
+  scale_y_continuous(limits = y_limits)
+)
+
+# =============================================================================
+# 6. Combine the plots into one figure.
+#
+# Here, we use patchwork's wrap_plots() to combine all the age group plots.
+# We maintain the original order (no reordering is done) and arrange them in two columns.
+# =============================================================================
+combined_plot <- wrap_plots(plots_fixed, ncol = 2)
+
+# Display the combined plot
+print(combined_plot)
+
+# =============================================================================
+# 7. OPTIONAL: Save the combined plot to a file.
+#
+# Uncomment and adjust the code below if you wish to export the figure.
+# =============================================================================
+# ggsave(
+#   filename = "combined_predictors_coefficients.png",
+#   plot = combined_plot,
+#   width = 12,
+#   height = 8,
+#   dpi = 300
+# )
+
+```
+
+# Trends in the covariates
+
+```{r}
+
+# Load required packages
+library(tidyverse)  # For data manipulation and plotting
+library(purrr)      # For functional programming (e.g., mapping over lists)
+
+# =============================================================================
+# 1. Create Trend Data: Average Health Measures by Year and Age Group
+#
+# For each combination of 'year' and 'age_decade_cat', compute the average values
+# for:
+#   - mental_health
+#   - physical_health
+#   - functional health (using usual_activities_health)
+#   - srh (self-rated health)
+#
+# Then pivot the data from wide to long format so that each row corresponds to one
+# health measure for a given year and age group.
+# =============================================================================
+
+trend_data <- data_brfss %>%
+  group_by(year, age_decade_cat) %>%
+  summarise(
+    avg_mental      = mean(mental_health_good_days, na.rm = TRUE),
+    avg_physical    = mean(physical_health_good_days, na.rm = TRUE),
+    avg_functional  = mean(usual_activities_health_good_days, na.rm = TRUE),
+ #   avg_srh         = mean(srh, na.rm = TRUE)  * (3/5),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(
+    cols = c(avg_mental, avg_physical, avg_functional),#, avg_srh),
+    names_to = "health_measure",
+    values_to = "average"
+  ) %>%
+  # Rename the health measure labels for clarity
+  mutate(health_measure = recode(health_measure,
+                                 avg_mental     = "Mental Health",
+                                 avg_physical   = "Physical Health",
+                                 avg_functional = "Functional Health"#,
+                            #     avg_srh        = "Self-Rated Health"
+                            ))
+
+# =============================================================================
+# 2. Create Trend Plots for Each Age Group
+#
+# For each age group, create a line plot (with points) showing the annual trend
+# in the average of each health measure.
+# =============================================================================
+
+# Split the trend data by age group and generate a list of plots
+trend_plots <- trend_data %>%
+  split(.$age_decade_cat) %>%
+  map(function(df) {
+    age_label <- unique(df$age_decade_cat)
+    
+    ggplot(df, aes(x = year, y = average, color = health_measure, group = health_measure)) +
+      geom_line(size = 1) +
+      geom_point(size = 2) +
+      labs(
+        title = paste("Trends in Health Measures for Age Group:", age_label),
+        x = "Year",
+        y = "Average Value",
+        color = "Health Measure"
+      ) +
+      theme_minimal()
+  })
+
+# Display each trend plot (in an interactive session, these will appear one after another)
+walk(trend_plots, print)
+
+# =============================================================================
+# 3. Create an Overall Bar Plot: Average Health Measures by Age Group
+#
+# Here, we compute the overall (across all years) average for each health measure
+# within each age group. Then we create a grouped bar plot where:
+#   - The x-axis shows the age groups.
+#   - Within each age group, different health measures are shown as side-by-side bars.
+# =============================================================================
+
+overall_avg <- data_brfss %>%
+  group_by(age_decade_cat) %>%
+  summarise(
+    avg_mental      = mean(mental_health_good_days, na.rm = TRUE),
+    avg_physical    = mean(physical_health_good_days, na.rm = TRUE),
+    avg_functional  = mean(usual_activities_health_good_days, na.rm = TRUE),
+   # avg_srh         = mean(srh, na.rm = TRUE) * (3/5),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(
+    cols = c(avg_mental, avg_physical, avg_functional),#, avg_srh),
+    names_to = "health_measure",
+    values_to = "average"
+  ) %>%
+  mutate(health_measure = recode(health_measure,
+                                 avg_mental     = "Mental Health",
+                                 avg_physical   = "Physical Health",
+                                 avg_functional = "Functional Health"#,
+                              #   avg_srh        = "Self-Rated Health"
+                                 ))
+
+# Create the grouped bar plot
+bar_plot <- ggplot(overall_avg, aes(x = age_decade_cat, y = average, fill = health_measure)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  labs(
+    title = "Overall Average Health Measures by Age Group",
+    x = "Age Group",
+    y = "Average Value",
+    fill = "Health Measure"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Display the overall bar plot
+print(bar_plot)
+
+# =============================================================================
+# OPTIONAL: Save the plots to files
+#
+# Uncomment and adjust the following code if you wish to save the plots to disk.
+# -----------------------------------------------------------------------------
+
+# Save each trend plot as a separate PNG file
+# walk2(names(trend_plots), trend_plots, ~ ggsave(filename = paste0("trend_plot_age_group_", .x, ".png"),
+#                                                   plot = .y, width = 8, height = 6, dpi = 300))
+
+# Save the overall bar plot
+# ggsave(filename = "overall_average_health_measures_by_age_group.png", plot = bar_plot,
+#        width = 10, height = 8, dpi = 300)
+
+
+```
+
+
+
+# Regression
+
+```{r}
+
+lm(srh ~ physical_health + mental_health + usual_activities_health,
+   data = data_brfss)
+
+lm(srh ~ physical_health + mental_health + usual_activities_health +
+     physical_health*mental_health + physical_health*usual_activities_health + mental_health*usual_activities_health,
+   data = data_brfss)
+
+
+
+```
+
+```{r}
+
+library(dplyr)          # For data manipulation
+library(broom)          # For tidying model outputs
+library(ggplot2)        # For plotting
+library(purrr)          # For functional programming utilities
+library(tidyr)          # For reshaping data
+# If you haven't already installed these packages, install them with:
+# install.packages(c("dplyr", "broom", "ggplot2", "purrr", "tidyr"))
+
+# --- Data Preparation and Model Fitting ---
+
+# Suppose your data frame is called data_brfss and has the columns:
+#   - srh (the response variable)
+#   - physical_health
+#   - mental_health
+#   - usual_activities_health
+#   - year (the grouping variable)
+
+# 1) Group data by 'year'
+# 2) Fit a linear model srh ~ physical_health + mental_health + usual_activities_health within each year
+# 3) Use broom::tidy() to get coefficient estimates, standard errors, confidence intervals, etc.
+
+model_results <- data_brfss %>%
+    group_by(year) %>%
+    do(
+        broom::tidy(
+            lm(srh ~ physical_health + mental_health + usual_activities_health, 
+               data = .), 
+            conf.int = TRUE
+        )
+    ) %>%
+    ungroup() %>%
+    # 4) Filter only the terms of interest
+    filter(term %in% c("physical_health", "mental_health", "usual_activities_health"))
+
+# Now 'model_results' has multiple rows per 'year':
+#   - one for the intercept
+#   - one for physical_health
+#   - one for mental_health
+#   - one for usual_activities_health
+# We keep only the three predictors.
+
+# Inspect the resulting data frame:
+head(model_results)
+
+# --- Summarize or Explore the Results ---
+
+# For convenience, let's rename some columns and keep relevant ones
+model_results_clean <- model_results %>%
+    select(
+        year,
+        term,
+        estimate,
+        conf.low,
+        conf.high,
+        std.error,
+        statistic,
+        p.value
+    )
+
+# This clean version can be used for tabular summary or plotting.
+# Example tabular summary:
+model_results_clean
+
+# --- Plotting the Coefficients ---
+
+# Approach A: Facet by predictor
+# This will place each predictor's time-series coefficient plot in its own facet.
+ggplot(model_results_clean, 
+       aes(x = year, y = estimate)) +
+    geom_point() +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), 
+                  width = 0.2) +
+    facet_wrap(~ term, scales = "free_y") +
+    labs(
+        title = "Time Trends in Coefficients for Multiple Predictors on SRH",
+        subtitle = "BRFSS 1993 - 2023 Dataset (Example)",
+        x = "Year",
+        y = "Coefficient Estimate"
+    ) +
+    theme_minimal()
+
+# Approach B: Single Plot, Different Colors by Predictor
+# This will overlay lines for the different predictors on the same plot.
+# (May be less clear if the scales differ, but it can be a useful comparison.)
+ggplot(model_results_clean, 
+       aes(x = year, y = estimate, color = term)) +
+    geom_point() +
+    geom_line() +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), 
+                  width = 0.2) +
+    labs(
+        title = "Time Trends in Coefficients for Multiple Predictors on SRH",
+        subtitle = "BRFSS 1993 - 2023 Dataset (Example)",
+        x = "Year",
+        y = "Coefficient Estimate",
+        color = "Predictor"
+    ) +
+    theme_minimal()
+
+
+```
+
+```{r}
+
+model_fit_stats <- data_brfss %>%
+    group_by(year) %>%
+    do(
+        broom::glance(
+            lm(srh ~ physical_health + mental_health + usual_activities_health, data = .)
+        )
+    ) %>%
+    ungroup()
+
+colnames(model_fit_stats)
+model_fit_stats %>% ggplot(aes(x = year, y = adj.r.squared)) + geom_line()
+model_fit_stats %>% ggplot(aes(x = year, y = BIC)) + geom_line()
+
+```
+

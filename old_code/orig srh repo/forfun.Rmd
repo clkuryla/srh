@@ -1,0 +1,563 @@
+---
+title: "FORFUN"
+author: "Christine Lucille Kuryla"
+date: "2024-12-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# Are higher self-rated health trends driven by boomers?
+
+I have noticed potential cohort trends in self-rated health (SRH) over time from my other analyses. I am going to look into it from a time series lens.
+
+https://chatgpt.com/share/675edfde-a4e8-8002-b0a5-af1d75d5b297 
+
+```{r}
+
+library(tidyverse)
+library(srvyr)
+library(QMSS)
+library(ggplot2)
+library(plyr)
+library(car)
+library(fUnitRoots)
+library(lmtest)
+library(corrplot)
+library(tidyverse)
+
+data_gss <- read_csv("data/extracted_gss_variables.csv") %>% 
+  filter(cohort != 9999) %>% 
+  select(-c(wtssps)) %>% 
+  select(-c("region", 
+         #   "marital", 
+         #   "partyid", 
+            "hispanic"
+            )) %>% 
+ # select(-wtssall) %>% 
+  na.omit() %>% 
+#  mutate(south = if_else(region %in% c(4, 5, 6, 7, 8), "South", "Not South")) %>% 
+#  mutate(south = as_factor(south)) %>% 
+#  mutate(region = as_factor(region)) %>% 
+  mutate(wrkstat = as_factor(wrkstat)) %>% 
+#  mutate(hispanic = as_factor(hispanic)) %>% 
+  mutate(marital = as_factor(marital)) %>% 
+  mutate(partyid = as_factor(partyid)) %>% 
+  mutate(health = 5 - health)  %>%  # reverse the coding so it's more intuitive (higher number for excellent, lower number for poor)
+  mutate(happy = 4 - happy) %>% # same
+  mutate(life = 4 - life) %>% # reverse again, these variables tend to be unintuitively ordered!!!
+  mutate(satfin = 4 - satfin) %>% # same again! %>% 
+ mutate(
+    age_group = cut(
+      age,
+      breaks = c(17, 29, 39, 49, 59, 69, Inf),
+      labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+      right = TRUE
+    )
+  ) %>% 
+       mutate(happiness = ifelse(happy == 1, 1, 0),
+              excellent_health = ifelse(health == 4, 1, 0),
+              good_health = ifelse(health == 3, 1, 0),
+              fair_health = ifelse(health == 2, 1, 0),
+              poor_health = ifelse(health == 1, 1, 0),
+              exciting_life = ifelse(life == 3, 1, 0),
+              nonextreme_views = ifelse(polviews %in% c(3, 4, 5), 1, 0),
+              extreme_views = ifelse(polviews %in% c(1, 2, 6, 7), 1, 0),
+              moderate_views = ifelse(polviews == 4, 1, 0),
+              cohort = floor(year - age),
+              over50 = ifelse(age >= 50, 1, 0),
+              boomer = ifelse(cohort >= 1946 & cohort <= 1964, 1, 0) ,
+              millenial = ifelse(cohort >= 1981 & cohort <= 1996, 1, 0) ,
+              bornin40s = ifelse(cohort >= 1940 & cohort <= 1949, 1, 0),
+              sat_w_finances = ifelse(satfin == 3, 1, 0),
+         #     income = realinc
+         ) %>% 
+ #   mutate(life = 4 - life) %>% # more intuitive
+    mutate(baplus = ifelse(degree >= 3, 1, 0)) #%>% # Dichotomise bachelors/graduate vs no bachelors/graduate 
+ #   mutate(exciting_life = ifelse(life == 1, 1, 0)) %>% 
+  #  mutate(happy = 4 - happy) %>% 
+ #   mutate(health = 5 - health) 
+
+
+data_gss_selected <- data_gss %>% 
+  select(year, health, age, cohort, life, happy, satfin, excellent_health, good_health, fair_health, poor_health, exciting_life, happiness,
+         polviews, extreme_views, moderate_views, boomer, bornin40s, over50, sat_w_finances,
+         wtsscomp)
+
+# Create a survey design object using wtssall for multi-year analysis
+gss_svy <- data_gss_selected %>%
+  as_survey_design(
+    ids = 1,           # PSU identifiers (use 1 if not available)
+    weights = wtsscomp  # wtssall pre 2018, wtsscomp combined //Use 'wtss' for single-year analysis
+  )
+
+
+```
+
+
+```{r}
+
+# gss_for_ts <- read_csv("data/gss_raw_subset_for_ts.csv") %>% 
+#   mutate(life = 4 - life) %>% # more intuitive
+#   mutate(baplus = ifelse(degree >= 3, 1, 0)) %>% # Dichotomise bachelors/graduate vs no bachelors/graduate 
+#   mutate(exciting_life = ifelse(life == 1, 1, 0)) %>% 
+#   mutate(happy = 4 - happy) %>% 
+#   mutate(health = 5 - health) 
+
+colnames(gss_for_ts)
+
+# Correlation between the variables?
+gss_for_ts %>% 
+  select(degree, life) %>% 
+  na.omit() %>% 
+  cor()
+
+# Yes, and it is positive.
+
+# Dichotomise bachelors vs no bachelors and visualize it
+gss_for_ts %>% 
+  select(baplus, life, year) %>% 
+  na.omit() %>% 
+  mutate(life = factor(life, 
+                      levels = 1:3,
+                      labels = c("Dull Life", "Routine Life", "Exciting Life"))) %>%
+  mutate(baplus = factor(baplus,
+                   levels = c(0, 1),
+                   labels = c("No Degree", "Degree"))) %>% 
+  count(life, baplus) %>%
+  group_by(baplus) %>%
+  mutate(percent = n / sum(n) * 100) %>%
+     ggplot(aes(x = factor(baplus), y = percent, fill = factor(life))) +
+     geom_bar(stat = "identity", position = "dodge") +
+     labs(
+         title = "Life Satisfaction by Education Level",
+         x = "Bachelors Degree",
+         y = "Percent",
+         fill = "Life Satisfaction"
+     ) +
+     theme_minimal()
+```
+
+# Time Series Analysis
+
+## Q1: Create time series and interpolate
+1. Create a multivariate time series; perform any interpolations.  
+
+```{r}
+
+# 
+# 
+# # get means by year
+# by.year <- aggregate(subset(gss_for_ts, sel = -year), list(year = sub$year), mean, na.rm = T) 
+
+###
+by.year <- gss_svy %>%
+  group_by(year) %>%
+  summarize(across(everything(), ~survey_mean(.x, na.rm = TRUE)))
+###
+
+
+
+# # interpolate for some missing years
+# 
+# # First, add the extra years
+# unique(data_gss$year) # years in dataset
+# extra_years <- setdiff(seq(1972, 2018), unique(gss_for_ts$year)) # years missing for a continus TS; skip 2020+ because of covid
+# dim(by.year)[1] # number of years in original data (34)
+# length(extra_years) # number of years to add (15)
+# dim(by.year)[1] + length(extra_years) # sum (49)
+# by.year[35:49, "year"] <- as.vector(extra_years) # add the extra years
+# by.year <- dplyr::arrange(by.year, year) # arrange by year
+# 
+# # Now make a time series object by.year.ts and interpolate using na.approx
+# by.year.ts <- ts(by.year)
+# by.year.ts <- na.approx(by.year.ts)
+# 
+
+###
+library(dplyr)
+library(tidyr)
+library(zoo)  # for na.approx()
+# 
+# # Suppose by.year is the result of your survey-weighted summarization
+# # and has a 'year' column plus several numeric columns. We'll:
+# # - Make sure every year from 1972 to 2018 is included
+# # - Interpolate missing values without leaving the tidyverse workflow
+# 
+# by.year <- by.year %>%
+#   # Ensure all years from 1972 to 2018 are present
+#   complete(year = 1972:2018) %>%
+#   arrange(year) %>%
+#   # Interpolate missing numeric columns
+#   # across(where(is.numeric)) selects all numeric columns except 'year'
+#   # na.approx() will fill NAs based on linear interpolation over 'year'
+#   mutate(across(where(is.numeric), ~ na.approx(., x = year, na.rm = FALSE)))
+
+# Now 'by.year' has all years from 1972 to 2018 and missing values interpolated.
+
+######### OR
+
+by.year <- by.year %>%
+  complete(year = 1974:2018) %>%
+#  filter(year >= 1984 & year <= 2018) %>% 
+  dplyr::arrange(year) %>% 
+  mutate(across(where(is.numeric), ~ na.approx(., x = year, na.rm = FALSE)))
+
+# # Convert to ts:
+# by.year.ts <- ts(by.year[,-1], start = min(by.year$year), end = max(by.year$year), frequency = 1)
+# by.year.ts <- na.approx(by.year.ts)
+
+
+# ###
+# # Convert back to a tibble if desired:
+# by.year <- as_tibble(by.year.ts) %>%
+#   mutate(year = 1972:2018) %>%
+#   select(year, everything())
+# 
+
+###
+
+
+# calculate pct 
+by.year.ts <- as.data.frame(by.year)
+by.year.ts <- mutate(by.year.ts,
+                     happy_pct = happiness*100,
+                     excellent_health_pct = excellent_health*100,
+                     good_health_pct = good_health*100,
+                     fair_health_pct = fair_health*100,
+                     poor_health_pct = poor_health*100,
+                     exciting_life_pct = exciting_life*100,
+                     boomer_pct = boomer*100,
+                     bornin40s_pct = bornin40s*100,
+                     sat_w_finances_pct = sat_w_finances*100 )#,
+    #millenial_pct = millenial*100,
+    #  ba_pct = baplus*100)
+
+# get rid of 1972,1973, after 2018 and convert back to time series object
+# subset after 1984 because we are interested in boomer composition
+ #by.year.ts <- ts(by.year.ts)
+
+by.year.ts
+colnames(by.year.ts)
+
+# correlations
+cor.vars <- c("exciting_life_pct", "age", "health", "happy", "year", "excellent_health", "boomer_pct", "bornin40s_pct")
+# cor.vars <- colnames(by.year.ts)
+cor.dat <- by.year.ts[, cor.vars]
+
+
+#install.packages("corrplot")
+library(corrplot)
+corrplot(cor(cor.dat))
+
+
+
+```
+
+
+## Q2: Graph relationships
+2. Graph the relationships between X and Y.  Explain how you think Y should relate to your key Xs.
+
+```{r}
+
+library(reshape2)
+
+
+meltMyTS <- function(mv.ts.object, time.var, keep.vars){
+  # mv.ts.object = a multivariate ts object
+  # keep.vars = character vector with names of variables to keep 
+  # time.var = character string naming the time variable
+  require(reshape2)
+  
+  if(missing(keep.vars)) {
+    melt.dat <- data.frame(mv.ts.object)
+  }
+  else {
+    if (!(time.var %in% keep.vars)){
+      keep.vars <- c(keep.vars, time.var)
+    }
+    melt.dat <- data.frame(mv.ts.object)[, keep.vars]
+  }
+  melt.dat <- melt(melt.dat, id.vars = time.var)
+  colnames(melt.dat)[which(colnames(melt.dat) == time.var)] <- "time"
+  return(melt.dat)
+}
+
+# Make a character vector naming the variables we might want to plot
+#keep.vars <- c("year", "happy_pct", "age", "ba_pct", "income", "excellent_health_pct", "exciting_life_pct")
+#keep.vars <- setdiff(colnames(by.year.ts), "year")
+
+# Use meltMyTS to transform the data to a 3-column dataset containing a column
+# for time, a column for variable names, and a column of values corresponding to
+# the variable names
+
+
+plot.dat <- meltMyTS(mv.ts.object = by.year.ts, time.var = "year")
+plot.dat
+
+# Use ggMyTS to plot any of the variables or multiple variables together
+
+
+ggMyTS <- function(df, varlist, line = TRUE, point = TRUE, pointsize = 3, linewidth = 1.25, ...){
+  require(ggplot2)
+  # varlist = character vector with names of variables to use
+  if(missing(varlist)){
+    gg <- ggplot(df, aes(time, value, colour = variable)) 
+  }
+  else{
+    include <- with(df, variable %in% varlist)
+    gg <- ggplot(df[include,], aes(time, value, colour = variable))   
+  }
+  if(line == FALSE & point == FALSE) {
+    stop("At least one of 'line' or 'point' must be TRUE") 
+  }
+  else{
+    if(line == TRUE) gg <- gg + geom_line(size = linewidth, aes(color = variable), ...)
+    if(point == TRUE) gg <- gg + geom_point(size = pointsize, aes(color = variable), ...)
+  }
+  
+  gg + xlab("") + theme(legend.position = "bottom") + scale_x_continuous(breaks = min(df$time):max(df$time))
+} 
+
+
+
+# Health
+
+ggMyTS(df = plot.dat, varlist = c("excellent_health_pct"))
+ggMyTS(df = plot.dat, varlist = c("good_health_pct"))
+ggMyTS(df = plot.dat, varlist = c("fair_health_pct"))
+ggMyTS(df = plot.dat, varlist = c("poor_health_pct"))
+
+# Percent Boomer 
+
+ggMyTS(df = plot.dat, varlist = c("boomer_pct"))
+
+# Age Composition
+
+ggMyTS(df = plot.dat, varlist = c("over50_pct"))
+
+# Life satisfaction
+
+ggMyTS(df = plot.dat, varlist = c("exciting_life_pct"))
+
+# Happiness
+
+(g_happy_pct <- ggMyTS(df = plot.dat, varlist = c("happy_pct")))
+
+# Let's first look at the percentage of the population with bachelor's or higher
+
+#ggMyTS(df = plot.dat, varlist = c("ba_pct"))
+
+
+(g_age <- ggMyTS(df = plot.dat, varlist = c("age")))
+
+
+#ggMyTS(df = plot.dat, varlist = c("moderate_views_pct"))
+#ggMyTS(df = plot.dat, varlist = c("extreme_views_pct"))
+#ggMyTS(df = plot.dat, varlist = c("exciting_life_pct"))
+
+
+
+```
+
+Boomer percent and excellent health percent are positively correlated.
+
+## Simple time series regression
+
+Excellent health and boomer percentage regression.
+
+```{r}
+
+
+# simplest regression
+lm.excellent_health <- lm(excellent_health_pct ~ boomer_pct, data = by.year.ts)
+summary(lm.excellent_health)
+
+# test for heteroskedasticity
+bptest(lm.excellent_health)
+
+# look for autocorrelation in errors
+e <- lm.excellent_health$resid
+acf(e) 
+acf(e, xlim = c(1,8), col = "red", lwd = 2) # can also customize acf output
+plot(e) # plot residuals over time
+dwtest(lm.excellent_health) # Durbin-Watson test
+bgtest(lm.excellent_health) # Breusch-Godfrey test
+durbinWatsonTest(lm.excellent_health, max.lag=3) # Durbin-Watson with more lags
+
+
+```
+
+There is heteroskedasticity, so OLS will be problematic. There is also strong autocorrelation.
+
+## Include Year Trend
+
+```{r}
+
+# include year trend
+lm.excellent_health2 <- update(lm.excellent_health, ~ . + year)
+summary(lm.excellent_health2)
+
+# look for autocorrelation
+e2 <- lm.excellent_health2$resid
+acf(e2, xlim = c(1,8), col = "red", lwd = 2)
+pacf(e2, xlim = c(1,8), col = "red", lwd = 2)
+plot(e2)
+dwtest(lm.excellent_health2)
+bgtest(lm.excellent_health2)
+durbinWatsonTest(lm.excellent_health2, max.lag=5)
+
+
+```
+
+The coefficient remains significant. 
+There is still autocorrelation at lag 1 and 2. 
+
+> summary(lm.excellent_health2)
+
+Call:
+lm(formula = excellent_health_pct ~ boomer_pct + year, data = by.year.ts)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-3.7946 -0.9099  0.1167  0.9786  3.7310 
+
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 426.76039   38.74655  11.014 5.81e-14 ***
+boomer_pct    0.14513    0.04631   3.133  0.00315 ** 
+year         -0.20115    0.01906 -10.554 2.19e-13 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 1.526 on 42 degrees of freedom
+Multiple R-squared:  0.8058,	Adjusted R-squared:  0.7966 
+F-statistic: 87.14 on 2 and 42 DF,  p-value: 1.13e-15
+
+> # look for autocorrelation
+> e2 <- lm.excellent_health2$resid
+> acf(e2, xlim = c(1,8), col = "red", lwd = 2)
+> pacf(e2, xlim = c(1,8), col = "red", lwd = 2)
+> plot(e2)
+> dwtest(lm.excellent_health2)
+
+	Durbin-Watson test
+
+data:  lm.excellent_health2
+DW = 0.97965, p-value = 2.535e-05
+alternative hypothesis: true autocorrelation is greater than 0
+
+> bgtest(lm.excellent_health2)
+
+	Breusch-Godfrey test for serial correlation of order up to 1
+
+data:  lm.excellent_health2
+LM test = 11.643, df = 1, p-value = 0.0006444
+
+> durbinWatsonTest(lm.excellent_health2, max.lag=5)
+ lag Autocorrelation D-W Statistic p-value
+   1      0.50621200     0.9796538   0.000
+   2      0.24721028     1.4755503   0.056
+   3     -0.03182275     1.9900854   0.960
+   4     -0.05417848     2.0254112   0.730
+   5     -0.21269325     2.3417447   0.092
+ Alternative hypothesis: rho[lag] != 0
+
+```{r}
+
+
+# add some more predictors
+lm.excellent_health3 <- update(lm.excellent_health2, ~ .  + exciting_life_pct + happy_pct)
+summary(lm.excellent_health3)
+
+
+vif(lm.excellent_health3) # variance inflation factor 
+durbinWatsonTest(lm.excellent_health3, max.lag=4)
+
+
+# ## Can I get rid of that spike at lag 2? ##
+# by.year.ts$is.even <- by.year.ts$year %% 2 == 0
+# lm.excellent_health5 <- update(lm.excellent_health2, ~ . + is.even)
+
+
+# summary(lm.excellent_health5)
+# vif(lm.excellent_health5) # variance inflation factor 
+# durbinWatsonTest(lm.excellent_health3, max.lag=5)
+
+
+```
+
+The coefficient for boomer percentage remains significant. There is still autocorrelation at lag 1. The VIFs are low, so colinearity is not a concern.
+
+> summary(lm.excellent_health3)
+
+Call:
+lm(formula = excellent_health_pct ~ boomer_pct + year + exciting_life_pct + 
+    happy_pct, data = by.year.ts)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-3.4652 -0.9219  0.0125  1.0338  3.1766 
+
+Coefficients:
+                    Estimate Std. Error t value Pr(>|t|)    
+(Intercept)       401.903851  61.301973   6.556 7.82e-08 ***
+boomer_pct          0.109233   0.047604   2.295   0.0271 *  
+year               -0.185880   0.034056  -5.458 2.73e-06 ***
+exciting_life_pct   0.003872   0.159001   0.024   0.9807    
+happy_pct          -0.384775   0.166586  -2.310   0.0261 *  
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 1.466 on 40 degrees of freedom
+Multiple R-squared:  0.8293,	Adjusted R-squared:  0.8122 
+F-statistic: 48.57 on 4 and 40 DF,  p-value: 7.783e-15
+
+> vif(lm.excellent_health3) # variance inflation factor 
+       boomer_pct              year exciting_life_pct         happy_pct 
+         1.354507          4.093795          3.707609          1.463052 
+         
+```{r}
+
+library(forecast)
+auto.arima(e2, trace=TRUE)
+
+
+xvars.fat <- by.year.ts[,c("boomer_pct", "year")]
+
+arima.001 <- arima(by.year.ts[,"excellent_health_pct"], order = c(1,0,0), xreg = xvars.fat)
+summary(arima.001)
+
+Box.test(resid(arima.001), lag = 20, type = c("Ljung-Box"), fitdf = 0)
+
+```
+
+
+```{r}
+
+## Use the first differences
+by.yearFD <- summarise(data.frame(by.year.ts),
+                       exciting_life_pct = firstD(exciting_life_pct), # using firstD functon from QMSS package
+                    #   age = firstD(age),
+                    #   ba_pct = firstD(ba_pct),
+                       boomer_pct = firstD(boomer_pct),
+                      excellent_health_pct = firstD(excellent_health_pct),
+                       happy_pct = firstD(happy_pct),
+                    #   income = firstD(income),
+                       year = year)
+
+lm.excellent_health4 <- update(lm.excellent_health2, data = by.yearFD)
+summary(lm.excellent_health4)
+e4 <- lm.excellent_health4$resid
+acf(e4, xlim = c(1,6), col = "red", lwd = 2)
+pacf(e4, xlim = c(1,6), col = "red", lwd = 2)
+
+
+# library(forecast)
+ auto.arima(e4, trace=TRUE)
+
+```
+

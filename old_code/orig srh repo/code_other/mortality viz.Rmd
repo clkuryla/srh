@@ -1,0 +1,310 @@
+---
+title: "Mortality GSS Viz"
+author: "Christine Lucille Kuryla"
+date: "2025-01-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+
+library(tidyverse)
+library(survey)
+library(broom)
+
+# Create age groups first
+df <- df %>%
+  mutate(
+    age_group = case_when(
+      age < 31 ~ "18-30",
+      age < 41 ~ "31-40",
+      age < 51 ~ "41-50",
+      age < 61 ~ "51-60",
+      age < 71 ~ "61-70",
+      TRUE ~ "70+"
+    ),
+    age_group = factor(age_group, levels = c("18-30","31-40", "41-50", "51-60", "61-70", "70+"))
+  )
+
+# Create survey design
+des <- svydesign(
+  id = ~1,
+  weights = ~wtsscomp,
+  data = df
+)
+
+# Fit the model 
+model_int <- svyglm(
+  formula = died_by_2014 ~ SRH * factor(period_10total) * factor(age_group) + time_at_risk,
+  design = des,
+  family = quasibinomial(link = "logit")
+)
+
+# Let's look at the model terms first to see what we're working with
+print("Model terms:")
+print(names(coef(model_int)))
+
+# Extract all coefficients
+coef_table <- tidy(model_int)
+print("First few coefficients:")
+print(head(coef_table))
+
+# Now let's extract and plot just the three-way interactions
+interaction_terms <- coef_table %>%
+  filter(grepl("SRH.*period_10total.*age_group|SRH.*age_group.*period_10total", term))
+
+print("Interaction terms:")
+print(interaction_terms)
+
+```
+
+```{r}
+
+# First, process the data to make it more interpretable
+interaction_plot_data <- interaction_terms %>%
+  mutate(
+    # Extract period and age group from term string
+    period = case_when(
+      grepl("1984-1988", term) ~ "1984-1988",
+      grepl("1989-1993", term) ~ "1989-1993",
+      grepl("1994-1998", term) ~ "1994-1998",
+      grepl("1999-2003", term) ~ "1999-2003",
+      grepl("2004-2008", term) ~ "2004-2008",
+      grepl("2009-2013", term) ~ "2009-2013",
+      TRUE ~ NA_character_
+    ),
+    age_group = case_when(
+      grepl("31-40", term) ~ "31-40",
+      grepl("41-50", term) ~ "41-50",
+      grepl("51-60", term) ~ "51-60",
+      grepl("61-70", term) ~ "61-70",
+      grepl("70\\+", term) ~ "70+",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(period) & !is.na(age_group))
+
+# Create main plot
+p1 <- ggplot(interaction_plot_data, 
+       aes(x = period, y = estimate, color = age_group, group = age_group)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50", alpha = 0.5) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = estimate - 1.96 * std.error,
+                    ymax = estimate + 1.96 * std.error),
+                width = 0.2) +
+  scale_color_viridis_d() +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank(),
+    legend.position = "right",
+    plot.title = element_text(face = "bold"),
+    plot.subtitle = element_text(face = "italic")
+  ) +
+  labs(
+    title = "Age Group Differences in SRH-Mortality Association Over Time",
+    subtitle = "Reference group: Ages 18-39",
+    x = "Survey Period",
+    y = "Interaction Effect (Log Odds)",
+    color = "Age Group"
+  )
+
+# Create significance plot
+p2 <- ggplot(interaction_plot_data, 
+       aes(x = period, y = age_group, fill = -log10(p.value))) +
+  geom_tile() +
+  scale_fill_viridis_c(option = "magma", 
+                       name = "-log10(p-value)",
+                       guide = guide_colorbar(title.position = "top")) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "right"
+  ) +
+  labs(
+    title = "Statistical Significance of Age-Period Interactions",
+    x = "Survey Period",
+    y = "Age Group"
+  )
+
+# Combine plots using patchwork
+library(patchwork)
+combined_plot <- p1 / p2 + plot_layout(heights = c(2, 1))
+
+# Display
+print(combined_plot)
+
+# Save if needed
+ggsave("age_period_interactions.png", combined_plot, width = 12, height = 10)
+
+# Print summary table of significant interactions
+significant_interactions <- interaction_plot_data %>%
+  mutate(
+    significance = case_when(
+      p.value < 0.001 ~ "***",
+      p.value < 0.01 ~ "**",
+      p.value < 0.05 ~ "*",
+      p.value < 0.1 ~ ".",
+      TRUE ~ "ns"
+    )
+  ) %>%
+  select(period, age_group, estimate, std.error, p.value, significance) %>%
+  arrange(period, age_group)
+
+print(significant_interactions)
+
+```
+
+```{r}
+
+# First, let's create some alternative visualizations that might be more intuitive
+
+# 1. "Heat Tiles" - Shows strength of SRH-mortality relationship
+# Each tile shows how strongly SRH predicts mortality for that age-period combination
+ggplot(interaction_plot_data %>% filter(period != "2009-2013"),
+       aes(x = period, y = age_group)) +
+  # Use tiles colored by effect size
+  geom_tile(aes(fill = estimate)) +
+  # Add the actual numbers
+  geom_text(aes(label = sprintf("%.2f", estimate),
+                color = abs(estimate) > 0.3)) +  # auto-color text for readability
+  scale_fill_gradient2(
+    low = "red",
+    mid = "white",
+    high = "blue",
+    midpoint = 0,
+    name = "Strength of\nAssociation"
+  ) +
+  scale_color_manual(values = c("black", "white"), guide = "none") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "right",
+    panel.grid = element_blank()
+  ) +
+  labs(
+    title = "How Well Does SRH Predict Mortality?",
+    subtitle = "Darker blue = Stronger prediction | Values show difference from baseline (18-39 age group)",
+    x = "Time Period",
+    y = "Age Group"
+  )
+
+# 2. "Bubble Plot" - Size shows precision, color shows effect
+ggplot(interaction_plot_data,
+       aes(x = period, y = age_group)) +
+  # Add reference grid
+  geom_vline(xintercept = 1:6, alpha = 0.1) +
+  geom_hline(yintercept = 1:3, alpha = 0.1) +
+  # Add bubbles
+  geom_point(aes(size = 1/std.error,  # bigger bubble = more precise
+                 fill = estimate),     # color shows effect
+             shape = 21,              # filled circle
+             color = "black") +
+  # Add effect size labels
+  geom_text(aes(label = sprintf("%.2f", estimate)),
+            size = 3) +
+  scale_size_continuous(
+    name = "Precision",
+    range = c(5, 15)
+  ) +
+  scale_fill_gradient2(
+    low = "red",
+    mid = "white",
+    high = "blue",
+    midpoint = 0,
+    name = "Effect\nStrength"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  labs(
+    title = "SRH as a Mortality Predictor: Strength and Certainty",
+    subtitle = "Bigger bubbles = More certain | Bluer colors = Stronger prediction",
+    x = "Time Period",
+    y = "Age Group"
+  )
+
+# 3. "Arrow Plot" - Direction and size shows change over time
+arrow_data <- interaction_plot_data %>%
+  group_by(age_group) %>%
+  arrange(period) %>%
+  summarise(
+    start_effect = first(estimate),
+    end_effect = last(estimate),
+    avg_effect = mean(estimate)
+  )
+
+ggplot(arrow_data) +
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.5) +
+  geom_segment(aes(x = age_group, xend = age_group,
+                   y = start_effect, yend = end_effect,
+                   color = avg_effect),
+               arrow = arrow(length = unit(0.3, "cm")),
+               size = 2) +
+  geom_point(aes(x = age_group, y = start_effect), size = 3) +
+  scale_color_gradient2(
+    low = "red",
+    mid = "white",
+    high = "blue",
+    midpoint = 0,
+    name = "Average\nEffect"
+  ) +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title = "How Has SRH's Predictive Power Changed?",
+    subtitle = "Arrow shows change from first to last period\nBluer = Stronger average prediction",
+    x = "Age Group",
+    y = "Effect Size (Change Over Time)"
+  )
+
+# Save all plots
+ggsave("srh_mortality_heat.png", plot1, width = 12, height = 8)
+ggsave("srh_mortality_bubbles.png", plot2, width = 12, height = 8)
+ggsave("srh_mortality_arrows.png", plot3, width = 12, height = 6)
+
+# Revised Bubble Plot with more intuitive color scheme
+ggplot(interaction_plot_data,
+       aes(x = period, y = age_group)) +
+  # Add reference grid
+  geom_vline(xintercept = 1:6, alpha = 0.1) +
+  geom_hline(yintercept = 1:3, alpha = 0.1) +
+  # Add bubbles - note reversed color scale
+  geom_point(aes(size = 1/std.error,     # bigger bubble = more precise
+                 fill = -estimate),       # negative of estimate so red = stronger
+             shape = 21,                  # filled circle
+             color = "black") +
+  # Add effect size labels
+  geom_text(aes(label = sprintf("%.2f", estimate)),
+            size = 3) +
+  scale_size_continuous(
+    name = "Precision",
+    range = c(5, 15)
+  ) +
+  scale_fill_gradient2(
+    low = "blue",     # now blue = weaker association (closer to zero)
+    mid = "white",
+    high = "red",     # now red = stronger association (more negative)
+    midpoint = 0,
+    name = "Strength of\nPrediction"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.subtitle = element_text(face = "italic")
+  ) +
+  labs(
+    title = "SRH as a Mortality Predictor: Strength and Certainty",
+    subtitle = "Redder colors = Stronger prediction (more negative coefficient)\nBigger bubbles = More precise estimate",
+    x = "Time Period",
+    y = "Age Group"
+  )
+
+```
+

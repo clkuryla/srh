@@ -1,0 +1,689 @@
+---
+title: "SRH Hierarchical APC Methods: Mixed Effects (Frequentist)"
+author: "Christine Lucille Kuryla"
+date: "2024-12-22"
+output: 
+  html_document:
+    self_contained: true
+    toc: true
+knit_root_dir: "docs"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(here)
+library(broom)
+library(Hmisc)
+library(tidyverse)
+library(lme4)
+library(lmerTest)
+
+```
+
+# Heirarchical Models - Mixed Effects
+
+APC heirarchical models can use frequentist or Bayesian approaches. We will begin with mixed-effects models (frequentist).
+
+
+# Overview of Age-Period-Cohort (APC) Analysis
+
+### *The Basic APC Problem*
+- Age effect: Reflects how outcomes vary as individuals grow older (e.g., SRH typically declines with age).
+
+- Period effect: Captures influences that affect all individuals living in a specific time period (e.g., economic recessions, pandemics, policy changes).
+
+- Cohort effect: Reflects variations between birth cohorts whose members are exposed to unique sets of social, economic, or environmental conditions as they come of age (e.g., those born during WWII versus Baby Boomers versus Millennials).
+
+
+The classic methodological challenge is that 
+
+Age = Period − Cohort
+
+Because age, period, and cohort are perfectly linearly dependent, we cannot estimate all three as purely fixed and independent effects without additional constraints or assumptions.
+
+### *The Rationale for Hierarchical APC Models*
+Hierarchical (or multilevel) APC models help address this identification problem by introducing random effects (also called random intercepts or random slopes) for periods and/or cohorts (and sometimes for age groups). Rather than forcing strict linear constraints or imposing a single (often arbitrary) identification choice, hierarchical APC models allow partial pooling and shrinkage of period and cohort estimates, increasing interpretability and stability:
+
+Partial pooling means that estimates for each period or cohort borrow information from all others, reducing the risk of extreme or unstable estimates—especially in sparse or unbalanced data.
+By specifying a random effect for period and/or cohort, you effectively treat periods/cohorts as samples from a larger population distribution, adding statistical “regularization.”
+Thus, hierarchical APC models are particularly useful when:
+
+- You have repeated cross-sectional or panel/longitudinal data over multiple periods.
+- You expect some correlation or partial overlap among time units (e.g., adjacent periods, similar cohorts).
+- You want estimates of period and cohort influences that do not rely on an arbitrary constraint (like forcing the effect of one period or cohort to be zero).
+- You aim to account for unbalanced designs (varying sample sizes across time points, missing years, etc.) without imposing rigid assumptions.
+
+
+## Structure of a Hierarchical APC Model
+
+Below is a simplified schematic of how you might specify a hierarchical APC model for SRH. Let iii index individuals, ppp index periods (years), and ccc index birth cohorts. (Age typically enters as a fixed effect or a set of spline terms, because it is the most straightforward to parameterize directly.)
+
+*Level-1 Model (Individual-Level):*
+
+\[
+SRH^*_{i,p,c} = \beta_0 + \beta_1(\text{Age}_{i,p,c}) + \beta_2(\mathbf{X}_{i,p,c}) + u_p + v_c + \epsilon_{i,p,c}
+\]
+
+where \(SRH^*_{i,p,c}\) could be (for instance) the latent scale of a logit or ordered logit model.
+
+*Level-2 Model (Random Effects):*
+
+\[
+u_p \sim N(0, \sigma^2_p), \quad
+v_c \sim N(0, \sigma^2_c), \quad
+\epsilon_{i,p,c} \sim N(0, \sigma^2_\epsilon)
+\]
+
+*Definitions:*
+- \(\beta_1(\text{Age})\): Fixed effect (or nonlinear spline) for age.
+- \(\mathbf{X}_{i,p,c}\): Other individual-level covariates (e.g., gender, race, education, biomarkers).
+- \(u_p\): Random intercept for period \(p\), capturing the global period-specific effect across all individuals in that period.
+- \(v_c\): Random intercept for cohort \(c\), capturing the global cohort-specific effect.
+- \(\epsilon_{i,p,c}\): Individual-level error term.
+
+
+This form (1) partially “resolves” the linear dependency among Age, Period, and Cohort by not treating period and cohort purely as separate fixed effects, (2) shrinks estimates of upu_pup​ and vcv_cvc​ toward zero, yielding more stable estimates than naive fixed-effects APC models.
+
+### Interpreting Hierarchical APC Models
+
+1. Fixed Effects (e.g., Age, Other Covariates)
+
+A significant negative coefficient for Age might imply that older individuals have lower SRH scores, all else being equal.
+Over time, you might see that these age slopes diminish or flatten, which could align with our preliminary observation that age has become a weaker predictor of SRH.
+
+2. Random Period Effects (\(u_p\))
+
+* You can interpret \(u_p\) as the (shrunk) deviation of period p’s overall health level from the grand mean, net of age and cohort.
+* Positive \(u_p\) would imply that, after adjusting for age and cohort differences, the period in question had higher-than-expected SRH.
+
+3. Random Cohort Effects (\(v_c\))
+
+Similarly, \(v_c\) captures the unique imprint of being born in cohort c.
+
+Negative values would indicate that a particular cohort experiences consistently worse SRH, beyond what would be explained by differences in age or period contexts they live in.
+
+4. Variance Components \((\sigma^2_p, \sigma^2_c)\)
+
+Indicate how much overall variability in SRH is explained by periods vs. cohorts.
+Larger variance for cohorts might suggest strong generational divides in health outcomes; larger variance for periods indicates strong temporal shocks or influences.
+
+5. Predicted Probabilities (or Means)
+
+For binary or ordered SRH outcomes, you can back-transform the linear predictor (e.g., via the logistic function) to interpret predicted probabilities for specific ages, cohorts, or periods.
+
+### Applying Hierarchical APC Models to SRH Project
+Alignment with Your Preliminary Observations
+Shifts in the Age-SRH Relationship
+
+A hierarchical APC model can directly test whether the age slope \((\beta_1)\) changes across periods or cohorts. You can also allow for random slopes by period or cohort if you suspect that the relationship between age and SRH varies across contexts.
+Diminishing Importance of Age Over Time
+
+The decreasing magnitude of the age coefficient in your standard regression analyses might be re-examined by fitting an interaction between Age 
+×
+× Period or Age 
+×
+× Cohort. In a hierarchical framework, you could allow random slopes for age across cohorts, for instance, testing if more recent cohorts “age differently.”
+Peak SRH in 1940s Cohorts, Decline in More Recent Generations
+
+Let the random cohort effects model how each cohort deviates from the overall mean. You’ll likely see positive random intercepts for the 1940s cohorts and negative for the more recent ones—confirming your observation with appropriate shrinkage (reducing the chance that small sample sizes in certain cohorts lead to large spurious effects).
+Consistency Across GSS, BRFSS, NHANES, IVS
+
+One advantage of hierarchical models is that you can pool data across surveys if the designs are compatible. You can also estimate cross-classified random effects (e.g., random intercepts for dataset-by-period or dataset-by-cohort) to capture systematic differences in how SRH is measured across surveys.
+
+
+
+
+# Load Packages, Data, and Wrangle
+
+```{r}
+
+library(lme4)
+library(lmerTest)
+
+data_gss <- read_csv(here("data/cleaned/gss_groups.csv")) %>% 
+    mutate(
+    health_cat = factor(health, 
+                        levels = 1:4,
+                        labels = c("Poor", "Fair", "Good", "Excellent")),
+    period_cut_6 = as.factor(cut(data_gss$year, 6)),
+    period_cut_10 = as.factor(cut(data_gss$year, 10)),
+    period_cut_12 = as.factor(cut(data_gss$year, 12)),
+    period_groups = as.factor(cut(data_gss$year, 12)),
+    period_10yr = as.factor(
+                            cut(
+                            year,
+                            breaks = c(1973, 1982, 1990, 1998, 2006, 2014, Inf),
+                            labels = c("1974-1982", "1982-1990", "1990-1998", 
+                                       "1998-2006", "2006-2014", "2014-2022"),
+                            right = TRUE
+                            )
+                          ),
+    period_decade = as.factor(
+                            cut(
+                            year,
+                            breaks = c(1973, 1979, 1989, 1999, 2009, 2019, Inf),
+                            labels = c("1974-1979", "1980-1989", "1990-1999",
+                                       "2000-2009", "2010-2019", "2020-2024"),
+                            right = TRUE
+                            )
+                          ),
+    age_group = as.factor( 
+                            cut(
+                            age,
+                            breaks = c(17, 29, 39, 49, 59, 69, Inf),
+                            labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            right = TRUE
+                          )),
+    age_groups = as.factor( 
+                            cut(
+                            age,
+                            breaks = c(17, 29, 39, 49, 59, 69, Inf),
+                            labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            right = TRUE
+                          )),
+    age_group_small = as.factor( 
+                            cut(
+                              age,
+                              breaks = c(seq(15, 75, by = 5), Inf),  # Define breaks up to 75 and include Inf for the last group
+                              labels = c("16-20", "21-25", "26-30", "31-35", "36-40", "41-45", "46-50", "51-55", "56-60", "61-65", "66-70", "71-75", "76+"),
+                              right = FALSE  # Makes intervals left-closed, i.e., [x, y)
+                            )
+                          )
+                          ,
+    generation = factor(
+      case_when(
+        cohort >= 1901 & cohort <= 1927 ~ "Greatest (1901-1927)",
+        cohort >= 1928 & cohort <= 1945 ~ "Silent (1928-1945)",
+        cohort >= 1946 & cohort <= 1964 ~ "Boomers (1946-1964)",
+        cohort >= 1965 & cohort <= 1980 ~ "Gen X (1965-1980)",
+        cohort >= 1981 & cohort <= 1996 ~ "Millennials (1981-1996)",
+        cohort >= 1997 & cohort <= 2012 ~ "Gen Z (1997-2012)",
+        TRUE ~ "Other"
+      ),
+      levels = c(
+        "Greatest (1901-1927)",
+        "Silent (1928-1945)",
+        "Boomers (1946-1964)",
+        "Gen X (1965-1980)",
+        "Millennials (1981-1996)",
+        "Gen Z (1997-2012)"#,
+     #   "Other"
+      )
+    ),
+    generation_two_sections = factor(
+      case_when(
+        generation == "Greatest (1901-1927)" & cohort <= 1914 ~ "Greatest Early (1901-1914)",
+        generation == "Greatest (1901-1927)" & cohort > 1914 ~ "Greatest Late (1915-1927)",
+        generation == "Silent (1928-1945)" & cohort <= 1936 ~ "Silent Early (1928-1936)",
+        generation == "Silent (1928-1945)" & cohort > 1936 ~ "Silent Late (1937-1945)",
+        generation == "Boomers (1946-1964)" & cohort <= 1955 ~ "Boomers Early (1946-1955)",
+        generation == "Boomers (1946-1964)" & cohort > 1955 ~ "Boomers Late (1956-1964)",
+        generation == "Gen X (1965-1980)" & cohort <= 1972 ~ "Gen X Early (1965-1972)",
+        generation == "Gen X (1965-1980)" & cohort > 1972 ~ "Gen X Late (1973-1980)",
+        generation == "Millennials (1981-1996)" & cohort <= 1988 ~ "Millennials Early (1981-1988)",
+        generation == "Millennials (1981-1996)" & cohort > 1988 ~ "Millennials Late (1989-1996)",
+        generation == "Gen Z (1997-2012)" & cohort <= 2004 ~ "Gen Z Early (1997-2004)",
+        generation == "Gen Z (1997-2012)" & cohort > 2004 ~ "Gen Z Late (2005-2012)",
+        TRUE ~ "Other"
+      ),
+      levels = c(
+        "Greatest Early (1901-1914)", "Greatest Late (1915-1927)",
+        "Silent Early (1928-1936)", "Silent Late (1937-1945)",
+        "Boomers Early (1946-1955)", "Boomers Late (1956-1964)",
+        "Gen X Early (1965-1972)", "Gen X Late (1973-1980)",
+        "Millennials Early (1981-1988)", "Millennials Late (1989-1996)",
+        "Gen Z Early (1997-2004)", "Gen Z Late (2005-2012)"#,
+     #   "Other"
+      )
+    ),
+    generation_three_sections = factor(
+      case_when(
+        generation == "Greatest (1901-1927)" & cohort <= 1910 ~ "Greatest Early (1901-1910)",
+        generation == "Greatest (1901-1927)" & cohort > 1910 & cohort <= 1918 ~ "Greatest Mid (1911-1918)",
+        generation == "Greatest (1901-1927)" & cohort > 1918 ~ "Greatest Late (1919-1927)",
+        generation == "Silent (1928-1945)" & cohort <= 1934 ~ "Silent Early (1928-1934)",
+        generation == "Silent (1928-1945)" & cohort > 1934 & cohort <= 1940 ~ "Silent Mid (1935-1940)",
+        generation == "Silent (1928-1945)" & cohort > 1940 ~ "Silent Late (1941-1945)",
+        generation == "Boomers (1946-1964)" & cohort <= 1951 ~ "Boomers Early (1946-1951)",
+        generation == "Boomers (1946-1964)" & cohort > 1951 & cohort <= 1958 ~ "Boomers Mid (1952-1958)",
+        generation == "Boomers (1946-1964)" & cohort > 1958 ~ "Boomers Late (1959-1964)",
+        generation == "Gen X (1965-1980)" & cohort <= 1970 ~ "Gen X Early (1965-1970)",
+        generation == "Gen X (1965-1980)" & cohort > 1970 & cohort <= 1976 ~ "Gen X Mid (1971-1976)",
+        generation == "Gen X (1965-1980)" & cohort > 1976 ~ "Gen X Late (1977-1980)",
+        generation == "Millennials (1981-1996)" & cohort <= 1986 ~ "Millennials Early (1981-1986)",
+        generation == "Millennials (1981-1996)" & cohort > 1986 & cohort <= 1992 ~ "Millennials Mid (1987-1992)",
+        generation == "Millennials (1981-1996)" & cohort > 1992 ~ "Millennials Late / Gen Z (1993-2004)",
+    #    generation == "Gen Z (1997-2012)" & cohort <= 2002 ~ "Gen Z Early (1997-2002)",
+    #    generation == "Gen Z (1997-2012)" & cohort > 2002 & cohort <= 2008 ~ "Gen Z Mid (2003-2008)",
+    #    generation == "Gen Z (1997-2012)" & cohort > 2008 ~ "Gen Z Late (2009-2012)",
+        TRUE ~ "Other"
+      ),
+      levels = c(
+        "Greatest Early (1901-1910)", "Greatest Mid (1911-1918)", "Greatest Late (1919-1927)",
+        "Silent Early (1928-1934)", "Silent Mid (1935-1940)", "Silent Late (1941-1945)",
+        "Boomers Early (1946-1951)", "Boomers Mid (1952-1958)", "Boomers Late (1959-1964)",
+        "Gen X Early (1965-1970)", "Gen X Mid (1971-1976)", "Gen X Late (1977-1980)",
+        "Millennials Early (1981-1986)", "Millennials Mid (1987-1992)", 
+        "Millennials Late / Gen Z (1993-2004)"
+        #"Millennials Late (1993-1996)",
+      #  "Gen Z Early (1997-2002)", "Gen Z Mid (2003-2008)", "Gen Z Late (2009-2012)" #,
+      #  "Other"
+      )
+    )
+  ) %>% 
+    mutate(srh_num = health,
+         srh_cat = health_cat) 
+
+glimpse(data_gss)
+
+```
+
+Note: Because Age + Cohort = Year, the three are collinear. The hierarchical approach will handle this by treating Period and Cohort (or sometimes Age and Cohort) as random effects, while typically modeling the third variable (Age or Period) as a fixed effect.
+
+# Model Specification
+
+Continuous: If you want to treat SRH 1–5 as “almost numeric,” you can use a linear mixed-effects model (lmer). This is a simplification but often used for demonstration.
+Ordinal: A more nuanced approach is to use an ordered logistic/probit model via packages like ordinal or brms.
+
+To begin our analysis, we’ll start with a simpler linear model for clarity, recognizing it may not perfectly respect the ordinal nature of SRH.
+
+```{r}
+# We'll create a numeric SRH outcome: srh_num in [1..5]
+summary(data_gss$srh_num)
+hist(data_gss$srh_num)
+
+```
+
+# Baseline Model: Just Age as a Fixed Effect
+
+As before in our EDA, let’s ignore Period and Cohort to see the overall effect of Age on SRH:
+
+```{r}
+
+model0 <- lm(srh_num ~ age, data = data_gss)
+summary(model0)
+
+```
+
+
+Interpretation: This simple regression only tells us if older individuals tend to have higher or lower SRH, ignoring period or cohort effects.
+
+The negative and highly significant coefficient means that older individuals tend to have lower SRH, which is quite intuitive.
+
+Of course, this is naive because we know that Period and Cohort also matter. This is where hierarchical (multilevel) APC models come in.
+
+# Hierarchicapl APC: Random Effects
+
+### 5.1. Basic Hierarchical APC Model
+
+A straightforward first attempt is:
+
+\[
+SRH_i = \beta_0 + \beta_1(\text{Age}_i) + u_{\text{Year}[i]} + v_{\text{Cohort}[i]} + \epsilon_i,
+\]
+
+where:
+- \(u_{\text{Year}[i]}\) is a random intercept for the Period (survey year),
+- \(v_{\text{Cohort}[i]}\) is a random intercept for the birth cohort,
+- \(\beta_1(\text{Age})\) is a fixed slope for Age.
+
+```{r}
+
+model1 <- lmer(
+  srh_num ~ age +                        # fixed effect for Age
+    (1 | year) +                         # random intercept by Period (Year)
+    (1 | cohort),                        # random intercept by Cohort
+  data = data_gss
+)
+
+summary(model1)
+
+
+model1.2 <- lmer(
+  srh_num ~ age +                        # fixed effect for Age
+                            # random intercept by Period (Year)
+    (1 | period_cut_12) +
+                         # random intercept by Cohort
+    (1 | generation_three_sections),
+  data = data_gss
+)
+
+summary(model1.2)
+
+```
+
+Interpretation of model1:
+Fixed Effect: \(\beta_1(\text{Age})\) (Age) is the overall average effect of Age on SRH, holding everything else constant.
+
+Random Intercepts:
+
+(1 | year): Allows each survey year to have its own baseline SRH, capturing period effects like macroeconomic changes, healthcare policy shifts, etc.
+
+(1 | cohort): Allows each birth cohort to have its own baseline, capturing generational differences beyond age and period.
+
+You’ll see variance estimates in the random effects output for year, cohort, and the residual. Higher random effect variance for cohort implies stronger generational differences; higher variance for year implies stronger period-level shocks.
+
+# Extending to Random Slopes for Age
+
+Do to our previous exploration, we suspect that the relationship between Age and SRH is **not the same** across cohorts, so we can add a random slope for Age by Cohort:
+
+\[
+SRH_i = \beta_0 + \beta_1 \cdot \text{Age}_i + u_{\text{Year}[i]} + \left[u_{0,\text{Cohort}[i]} + u_{1,\text{Cohort}[i]} \cdot \text{Age}_i\right] + \epsilon_i,
+\]
+
+where:
+- \(u_{0,\text{Cohort}[i]}\) is the random intercept for that cohort, and
+- \(u_{1,\text{Cohort}[i]}\) is the random slope for Age in that cohort.
+
+```{r}
+
+model2 <- lmer(
+  srh_num ~ age + 
+    (1 | year) + 
+    (1 + age | cohort),  # random intercept + random slope by cohort
+  data = data_gss
+)
+
+summary(model2)
+
+
+```
+
+
+```{r}
+
+model2.1 <- lmer(
+  srh_num ~ age_group_small + 
+    (1 | period_cut_12) + 
+    (1 + age_group_small | generation_three_sections),  # random intercept + random slope by cohort
+  data = data_gss
+)
+
+summary(model2.4)
+
+
+model2.1 <- lmer(
+  srh_num ~ age + 
+    (1 | period_cut_12) + 
+    (1 + age | generation_three_sections),  # random intercept + random slope by cohort
+  data = data_gss
+)
+
+summary(model2.4)
+
+model2.3 <- lmer(
+  srh_num ~ age_group + 
+    (1 | period_cut_12) + 
+    (1 + age | generation_three_sections),  # random intercept + random slope by cohort
+  data = data_gss
+)
+
+summary(model2.3)
+
+```
+
+
+
+Below are two alternative lme4 formulas illustrating how to drop the random slope or remove its correlation with the intercept. These approaches help address convergence issues when the random slope variance is near zero.
+
+```{r}
+
+# Original model
+
+model_original <- lmer(
+  srh_num ~ age +
+    (1 | period_cut_12) +
+    (1 + age | generation_three_sections),
+  data = data_gss
+)
+
+# failed to converge
+
+
+
+###########
+
+# 1. Dropping the Random Slope
+# If you suspect there’s no meaningful variation in the Age slope across groups (e.g., your generations) and the model is hitting convergence problems, you can remove the random slope entirely.
+
+# Original: (1 + age | generation_three_sections)
+# Dropped slope version: (1 | generation_three_sections)
+
+model_no_slope <- lmer(
+  srh_num ~ age + 
+    (1 | period_cut_12) + 
+    (1 | generation_three_sections), 
+  data = data_gss
+)
+
+# Interpretation: Now each generation still has its own random intercept, but Age has only a fixed effect for the whole sample.
+
+###################
+
+# 2. Specifying an Uncorrelated Random Slope
+# If, for theoretical reasons, you want each generation to have its own Age slope, but the high (or perfect) intercept-slope correlation is causing convergence issues, you can force the model not to estimate an intercept-slope correlation parameter:
+
+# Original: (1 + age | generation_three_sections)
+# Uncorrelated slopes version:
+#   (1 | generation_three_sections) + (0 + age | generation_three_sections)
+
+model_uncorr_slope <- lmer(
+  srh_num ~ age + 
+    (1 | period_cut_12) + 
+    (1 | generation_three_sections) +  # random intercept
+    (0 + age | generation_three_sections),  # random slope with NO correlation
+  data = data_gss
+)
+
+# Interpretation:
+# (1 | generation_three_sections) gives each generation its own random intercept.
+# (0 + age | generation_three_sections) gives each generation its own slope for age, but does not estimate a correlation parameter between intercept and slope (i.e., it’s fixed at zero).
+
+#In many cases, either of these adjustments can improve convergence by making the random-effects structure simpler or more identifiable.
+
+#################
+
+summary(model_original) # note this failed to converge
+summary(model_no_slope) 
+summary(model_uncorr_slope) # error: boundary (singular) fit: see help('isSingular')
+
+################
+
+# Comparing Model Fits
+# You can then compare these models via AIC, BIC, or a likelihood ratio test to see which structure is most parsimonious and theoretically sound:
+
+anova(model_original, model_no_slope, model_uncorr_slope)
+
+# Look for significant differences in log-likelihood, AIC, or BIC.
+# Often, if the random slope is effectively zero, the simpler (1 | group) model will fit just as well (or better) and converge more reliably.
+
+```
+
+
+5. Final Recommendation
+
+Use model_no_slope: Since random slope variance is effectively zero, adding a slope term does not improve fit and only introduces convergence problems.
+
+The simpler model converges cleanly, is easy to interpret, and shows that:
+- Age has a stable negative association with SRH overall.
+- Period and generation each explain some baseline shifts, but generation differences are typically more noticeable.
+
+This outcome aligns with typical Age-Period-Cohort insights: cohort effects often appear in baseline health levels, whereas age exerts a fairly uniform negative slope for SRH across cohorts.
+
+
+Preliminary interpretation:
+
+Ignoring inability to converge
+
+Generations differ in baseline SRH, but not in how SRH changes with age
+
+Period effects might exist?
+
+Next steps:
+Check model fits
+Simplify models
+Bayesian approaches
+
+
+
+Final Take-Home Points
+
+The consistent convergence issues and near-zero slope variances indicate that generations differ in SRH baseline, but not in how SRH changes with age—at least not to a degree your data can detect.
+
+Age consistently matters, but it does so the same way across all cohorts, supporting the simpler, more stable model structure.
+
+Period explains some additional variance, but you see bigger baseline differences among cohorts (especially in smaller birth-year cuts) or generational bins (where differences become more pronounced).
+
+This underscores a robust cohort effect in SRH and a smaller period effect—confirming your preliminary findings of generational disparities and modest time-based shifts.
+
+Thus, from an Age-Period-Cohort perspective, cohort differences in baseline SRH emerge as the primary takeaway, whereas the age slope is relatively uniform and the period effect is secondary but not negligible.
+
+
+This outcome aligns with typical Age-Period-Cohort insights: cohort effects often appear in baseline health levels, whereas age exerts a fairly uniform negative slope for SRH across cohorts.
+
+6. Summary Interpretation
+Your Preliminary Finding: “SRH differences by age have converged over time” likely means older people in more recent surveys look healthier than older people in past surveys—this is typically a period effect or an age–period interaction rather than a pure age–cohort phenomenon.
+
+APC Model: A random slope for age by cohort specifically tests whether generations (i.e., birth cohorts) have distinct aging trajectories. Your results show that once you fully account for period and baseline cohort differences, cohorts do not significantly differ in slope.
+
+Why the Discrepancy?
+
+Your preliminary analyses might have been capturing an age–period dynamic (older individuals improving over calendar time), which is distinct from “cohort-based slope differences.”
+In hierarchical APC models, controlling for cohort and period in certain ways can make that slope flattening “disappear,” not because it’s not real, but because it’s now understood as a period-based phenomenon (or is overshadowed by partial pooling).
+
+Final Take-Home
+No Random Slope by Cohort doesn’t contradict the notion that SRH is converging across age over time. It just means that birth cohorts don’t show big differences in aging trajectories once you parse out period and intercept differences.
+Look for an Age x Period effect or a non-linear Age trend that changes across survey years if you think the main story is that older respondents in later years are healthier, thus causing convergence of SRH across age in more modern times. That’s a “time” (period) phenomenon, not necessarily a “cohort” phenomenon.
+Review Preliminary vs. Final Models: The disappearance of slope differences in the multilevel framework often indicates that simpler analyses were confounding age with period effects. The hierarchical approach is more rigorous but can obscure or relocate those differences unless you explicitly model the relevant interactions.
+
+
+
+
+
+```{r}
+
+library(tidyverse)
+library(lme4)
+library(lmerTest)
+
+# Example: Age x Period (12 blocks), random intercept for Generation
+model_age_period_int <- lmer(
+  srh_num ~ age * period_cut_12 +       # Fixed effects: main + interaction
+    (1 | generation_three_sections),    # Random intercept for generation
+  data = data_gss
+)
+
+
+
+summary(model_age_period_int)
+
+
+# .....
+library(splines)  # for bs() splines
+
+model_spline_age_period <- lmer(
+  srh_num ~ bs(age, df=4) * period_cut_12 +  # Spline for age, times period
+    (1 | generation_three_sections),
+  data = data_gss
+)
+
+summary(model_spline_age_period)
+
+# Visualize
+
+# install.packages("ggeffects")  # if not installed
+library(ggeffects)
+library(ggplot2)
+
+# Get predicted SRH for each combination of Age and Period
+# "terms" tells ggpredict which variables we want to vary
+pred_age_period <- ggpredict(
+  model_age_period_int, 
+  terms = c("age[20:80 by=5]", "period_cut_12")  # e.g., age 20..80 in steps of 5
+)
+
+# ggpredict returns a data frame with predicted SRH by age & period
+head(pred_age_period)
+
+# Plot the interaction
+ggplot(pred_age_period, aes(x = x, y = predicted, color = group)) +
+  geom_line(size = 1) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group),
+              alpha = 0.15, color = NA, show.legend = FALSE) +
+  labs(
+    x = "Age",
+    y = "Predicted SRH",
+    color = "Period",
+    title = "Age x Period Interaction in Predicting SRH"
+  ) +
+  theme_minimal()
+
+
+
+
+### spline
+
+
+# Get predicted SRH for each combination of Age and Period
+# "terms" tells ggpredict which variables we want to vary
+pred_age_period_spline <- ggpredict(
+  model_spline_age_period, 
+  terms = c("age[20:80 by=5]", "period_cut_12")  # e.g., age 20..80 in steps of 5
+)
+
+# ggpredict returns a data frame with predicted SRH by age & period
+head(pred_age_period_spline)
+
+# Plot the interaction
+ggplot(pred_age_period_spline, aes(x = x, y = predicted, color = group)) +
+  geom_line(size = 1) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group),
+              alpha = 0.15, color = NA, show.legend = FALSE) +
+  labs(
+    x = "Age",
+    y = "Predicted SRH",
+    color = "Period",
+    title = "Age x Period Interaction in Predicting SRH"
+  ) +
+  theme_minimal()
+
+
+```
+
+```{r}
+
+
+a <- lmer(
+  srh_num ~ age +
+    (1 | generation_three_sections) +
+    (1 + age | period_cut_12),
+  data = data_gss
+)
+
+summary(a)
+
+
+
+a <- lm(
+  srh_num ~ age +
+    generation_two_sections +
+    period_cut_12 +
+    period_cut_12*age,
+  data = data_gss
+)
+
+summary(a)
+
+b <- lm(
+  srh_num ~ age +
+    generation_two_sections +
+    period_cut_12 +
+    period_cut_12*generation_two_sections,
+  data = data_gss
+)
+
+summary(b)
+
+```
+

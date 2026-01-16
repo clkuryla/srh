@@ -1,0 +1,37 @@
+---
+title: "Visualizations"
+author: "Christine Lucille Kuryla"
+date: "2024-12-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+# 1. Aggregate data to find mean srh_num per period & generation
+df_avg <- data_gss %>%
+  group_by(period_10total, generation_10total) %>%
+  summarize(mean_srh_num = mean(srh_num, na.rm = TRUE)) %>%
+  ungroup()
+
+# 2. Create the heatmap
+ggplot(df_avg, aes(x = factor(period_10total),
+                   y = factor(generation_10total),
+                   fill = mean_srh_num)) +
+  geom_tile(color = "white") +
+  labs(
+    title = "Heatmap of Average SRH by Period & Generation",
+    x = "Period (10-year total)",
+    y = "Generation (10-year total)",
+    fill = "Avg SRH"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.grid = element_blank()
+  )
+
+```
+

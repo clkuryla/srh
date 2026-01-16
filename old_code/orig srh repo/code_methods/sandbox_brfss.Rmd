@@ -1,0 +1,447 @@
+---
+title: "sandbox brfss"
+author: "Christine Lucille Kuryla"
+date: "2025-09-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+
+sample_per_year <- function(df, year_col = year, n_per_year = 2000, seed = 20250913,
+                            cols = NULL) {
+  set.seed(seed)
+  y <- df[[deparse(substitute(year_col))]]
+  yrs <- sort(unique(y))
+
+  # pick indices per year without grouping the whole data
+  idx_list <- lapply(yrs, function(yy) {
+    i <- which(y == yy)                 # row indices for that year
+    if (length(i) == 0L) return(integer())
+    sample(i, size = min(n_per_year, length(i)), replace = FALSE)
+  })
+  idx <- unlist(idx_list, use.names = FALSE)
+
+  out <- dplyr::slice(df, idx)
+  if (!is.null(cols)) out <- dplyr::select(out, {{ year_col }}, dplyr::all_of(cols))
+  out
+}
+
+# ---- Use it ----
+# All columns:
+sandbox_brfss <- sample_per_year(data_brfss, year, n_per_year = 2000)
+
+# Or lighter subset:
+# sandbox_brfss <- sample_per_year(
+#   data_brfss, year, n_per_year = 2000,
+#   cols = c("srh","PHYSHLTH","MENTHLTH","INCOME","SEX","age_5yr_num")
+# )
+
+# Verify:
+dplyr::count(sandbox_brfss, year, name = "n_sampled")
+
+
+```
+
+# Recode
+
+```{r}
+
+glimpse(sandbox_brfss)
+
+library(dplyr)
+library(rlang)
+library(stringr)
+
+# ---------- Small helpers ----------
+
+# Unify across candidate columns, keep NAs, record source name; never drops rows.
+unify_one <- function(df, new_name, candidates, keep_source = TRUE, drop_sources = FALSE) {
+  present <- intersect(names(df), candidates)
+  if (length(present) == 0L) {
+    df[[new_name]] <- NA
+    if (keep_source) df[[paste0(new_name, "_source")]] <- NA_character_
+    warning(sprintf("No candidates present for '%s': %s",
+                    new_name, paste(candidates, collapse = ", ")))
+    return(df)
+  }
+  vals <- df[present]
+  df[[new_name]] <- dplyr::coalesce(!!!vals)
+
+  if (keep_source) {
+    nonmiss <- !is.na(as.matrix(vals))
+    nn <- rowSums(nonmiss)
+    idx <- max.col(nonmiss, ties.method = "first")
+    src <- rep(NA_character_, nrow(df))
+    if (length(present) == 1L) {
+      src[nn > 0] <- present
+    } else {
+      src[nn > 0] <- present[idx[nn > 0]]
+    }
+    df[[paste0(new_name, "_source")]] <- src
+    if (any(nn > 1L)) {
+      warning(sprintf(
+        "%s: %s rows have >1 non-missing among candidates (%s). Check merges.",
+        new_name, sum(nn > 1L), paste(present, collapse = ", ")
+      ))
+    }
+  }
+  if (drop_sources) df[present] <- NULL
+  df
+}
+
+to_int <- function(x) suppressWarnings(as.integer(as.character(x)))
+to_chr <- function(x) as.character(x)
+
+# A generic "1=yes, 2=no, 7/9=NA" recoder for convenience
+yn_1yes_2no <- function(x) case_when(
+  to_int(x) == 1L ~ 1L,
+  to_int(x) == 2L ~ 0L,
+  TRUE            ~ NA_integer_
+)
+
+# ---------- Now, variable-by-variable ----------
+
+df <- sandbox_brfss
+
+# 1) SEX (SEX, SEX1, BIRTHSEX) -> sex (1=Male, 2=Female)
+df <- unify_one(df, "sex_raw", c("SEX","SEX1","BIRTHSEX", "_SEX"))
+df <- df %>% mutate(
+  sex = case_when(
+    to_int(sex_raw) == 1 ~ "Male",
+    to_int(sex_raw) == 2 ~ "Female",
+    TRUE ~ NA
+  )
+)
+
+# table(df$sex_raw, useNA = "always")
+# table(df$sex, useNA = "always")
+with(df, table(sex, year, useNA = "always"))
+with(df, table(BIRTHSEX, year, useNA = "always"))
+
+# 2) Depressive disorder ever (ADDEPEV, ADDEPEV2, ADDEPEV3) -> dep_dx (1/0)
+df <- unify_one(df, "dep_raw", c("ADDEPEV","ADDEPEV2","ADDEPEV3"))
+df <- df %>% mutate(dep_dx = yn_1yes_2no(dep_raw))
+
+# 3) Asthma ever (ASTHMA, ASTHMA2, ASTHMA3) and current (ASTHNOW)
+df <- unify_one(df, "asthma_ever_raw", c("ASTHMA","ASTHMA2","ASTHMA3"))
+df <- df %>% mutate(asthma_ever = yn_1yes_2no(asthma_ever_raw))
+
+df <- unify_one(df, "asthma_now_raw", c("ASTHNOW"))
+df <- df %>% mutate(asthma_current = yn_1yes_2no(asthma_now_raw))
+
+# 4) Diabetes (DIABETES, DIABETE2/3/4) -> diabetes_dx (1/0),
+#    plus flags for pregnancy-only and prediabetes/borderline.
+df <- unify_one(df, "diab_raw", c("DIABETES","DIABETE2","DIABETE3","DIABETE4"), keep_source = TRUE)
+df <- df %>% mutate(
+  diabetes_dx = case_when(
+    diab_raw_source %in% c("DIABETES") & to_int(diab_raw) == 1L ~ 1L, # yes
+    diab_raw_source %in% c("DIABETES") & year %in% c(1988:1993, 2004:2024) & to_int(diab_raw) == 2 ~ 0L,
+    diab_raw_source %in% c("DIABETES") & year %in% c(1994:2003) & to_int(diab_raw) == 3 ~ 0L,
+
+    diab_raw_source %in% c("DIABETE2","DIABETE3","DIABETE4") & to_int(diab_raw) == 1L ~ 1L,
+    diab_raw_source %in% c("DIABETE2","DIABETE3","DIABETE4") & to_int(diab_raw) == 3 ~ 0L,
+
+    # pregnancy-only and prediabetes categories are handled as separate flags
+    diab_raw_source %in% c("DIABETE2","DIABETE3","DIABETE4") & to_int(diab_raw) %in% c(2L,4L) ~ 0L,
+    TRUE ~ NA_integer_
+  ),
+  diabetes_pregnancy_only = case_when(
+    diab_raw_source %in% c("DIABETE2","DIABETE3","DIABETE4") & to_int(diab_raw) == 2L ~ 1L,
+    TRUE ~ 0L
+  ),
+  prediabetes_from_diabvar = case_when(
+    diab_raw_source %in% c("DIABETE2","DIABETE3","DIABETE4") & to_int(diab_raw) == 4L ~ 1L,
+    TRUE ~ 0L
+  )
+)
+
+# table((df %>% filter(year == 1999))$DIABETES)
+# with(df, table(diabetes_dx, year))
+
+# 5) High blood pressure (BPHIGH variants)
+# Create:
+#   htn_dx: 1 yes, 0 no
+#   htn_pregnancy_only: 1 if yes-only-during-pregnancy
+#   htn_borderline: 1 if told borderline/pre-hypertensive
+df <- unify_one(df, "bp_raw", c("BPHIGH","BPHIGH2","BPHIGH3","BPHIGH4","BPHIGH6"), keep_source = TRUE)
+df <- df %>% mutate(
+  htn_dx = case_when(
+    bp_raw_source %in% c("BPHIGH2") & to_int(bp_raw) == 1L ~ 1L, # 1=yes
+    bp_raw_source %in% c("BPHIGH2") & to_int(bp_raw) == 2L ~ 0L, # 2=no
+
+    bp_raw_source %in% c("BPHIGH3","BPHIGH4","BPHIGH6") & to_int(bp_raw) == 1L ~ 1L, # 1=yes
+    bp_raw_source %in% c("BPHIGH3","BPHIGH4","BPHIGH6") & to_int(bp_raw) == 3L ~ 0L, # 3=no
+
+    bp_raw_source %in% c("BPHIGH") & year %in% c(1993:2000) & to_int(bp_raw) == 1L ~ 1L, # yes 
+    bp_raw_source %in% c("BPHIGH") & year %in% c(1993:2000) & to_int(bp_raw) == 2L ~ 0L, # no
+    bp_raw_source %in% c("BPHIGH") & year %in% c(1984:1992) & to_int(bp_raw) %in% c(2L,3L,4L) ~ 1L, # yes by pro
+    bp_raw_source %in% c("BPHIGH") & year %in% c(1984:1992) & to_int(bp_raw) == 1L ~ 0L, # no
+    TRUE ~ NA_integer_
+  ),
+  htn_pregnancy_only = case_when(
+    bp_raw_source %in% c("BPHIGH3","BPHIGH4","BPHIGH6") & to_int(bp_raw) == 2L ~ 1L,
+    TRUE ~ 0L
+  ),
+  htn_borderline = case_when(
+    bp_raw_source %in% c("BPHIGH3","BPHIGH4","BPHIGH6") & to_int(bp_raw) == 4L ~ 1L,
+    TRUE ~ 0L
+  )
+)
+
+# It seems like they only do HTN on odd numbered years
+
+# > with(df, table(htn_dx, year))
+#       year
+# htn_dx 1993 1994 1995 1996 1997 1998 1999 2000 2001 2002 2003 2004 2005 2006 2007 2008 2009 2010 2011 2012 2013 2014 2015 2016
+#      0 1521  196 1489  368 1471  327 1456  146 1451  236 1406  199 1303    3 1221    4 1140    1 1124    6 1102   21 1152   29
+#      1  471   48  469  116  492  125  511   42  522  100  568   97  641    2  717    1  794    2  807   10  840    8  775   13
+#       year
+# htn_dx 2017 2018 2019 2020 2021 2022 2023 2024
+#      0 1111   31 1077   48 1117   66 1078 1174
+#      1  782   30  794   36  778   36  753  784
+
+
+# 6) COPD (CHCCOPD*), CKD (CHCKDNY* / CHCKIDNY), Cancers (CHCOCNC1/CHCOCNCR, CHCSCNC1/CHCSCNCR)
+df <- unify_one(df, "copd_raw", c("CHCCOPD","CHCCOPD1","CHCCOPD2","CHCCOPD3"))
+df <- df %>% mutate(copd_dx = yn_1yes_2no(copd_raw))
+
+df <- unify_one(df, "ckd_raw", c("CHCKDNY1","CHCKDNY2","CHCKIDNY"))
+df <- df %>% mutate(ckd_dx = yn_1yes_2no(ckd_raw))
+
+df <- unify_one(df, "cancer_other_raw", c("CHCOCNC1","CHCOCNCR"))
+df <- unify_one(df, "cancer_skin_raw",  c("CHCSCNC1","CHCSCNCR"))
+df <- df %>% mutate(
+  cancer_other_dx = yn_1yes_2no(cancer_other_raw),
+  cancer_skin_dx  = yn_1yes_2no(cancer_skin_raw),
+  cancer_any_dx   = case_when(
+    cancer_other_dx == 1L | cancer_skin_dx == 1L ~ 1L,
+    cancer_other_dx == 0L & cancer_skin_dx == 0L ~ 0L,
+    TRUE ~ NA_integer_
+  )
+)
+
+# 7) Routine checkup recode (CHECKUP, CHECKUP1)
+# Keep an ordered category consistent with BRFSS wording; keep "never" separate.
+df <- unify_one(df, "checkup_raw", c("CHECKUP","CHECKUP1"))
+df <- df %>% mutate(
+  checkup_cat = case_when(
+    to_int(checkup_raw) %in% c(1L) ~ 1L,  # within past year
+    to_int(checkup_raw) %in% c(2L) ~ 2L,  # within past 2 years
+    to_int(checkup_raw) %in% c(3L) ~ 3L,  # within past 5 years
+    to_int(checkup_raw) %in% c(4L) ~ 4L,  # 5+ years
+    to_int(checkup_raw) %in% c(8L) ~ 8L,  # NEVER (separate code)
+    TRUE ~ NA_integer_
+  ),
+  checkup_never = as.integer(checkup_cat == 8L)
+)
+
+# 8) CHD / Angina (CVDCORHD, CVDCRHD2/3/4) -> chd_dx
+df <- unify_one(df, "chd_raw", c("CVDCORHD","CVDCRHD2","CVDCRHD3","CVDCRHD4"))
+df <- df %>% mutate(chd_dx = yn_1yes_2no(chd_raw))
+
+# 9) MI (CVDINFAR, CVDINFR2/3/4, CVDINFRS) -> mi_dx
+df <- unify_one(df, "mi_raw", c("CVDINFAR","CVDINFR2","CVDINFR3","CVDINFR4","CVDINFRS"))
+df <- df %>% mutate(mi_dx = yn_1yes_2no(mi_raw))
+
+# 10) Stroke (CVDSTRK2/3, CVDSTROK) -> stroke_dx
+df <- unify_one(df, "stroke_raw", c("CVDSTRK2","CVDSTRK3","CVDSTROK"))
+df <- df %>% mutate(stroke_dx = yn_1yes_2no(stroke_raw))
+
+# 11) Life satisfaction (LSATISFY) -> life_satisfaction (1 very satisfied ... 4 very dissatisfied)
+# NOTE: codebook says "4=Very satisfied" which duplicates '1'. In BRFSS it's usually:
+#  1=Very satisfied 2=Satisfied 3=Dissatisfied 4=Very dissatisfied (77/99 missing).
+# We assume that here and then reverse code
+df <- df %>% mutate(
+  life_satisfaction = case_when(
+    to_int(LSATISFY) %in% 1:4 ~ to_int(LSATISFY),
+    TRUE ~ NA_integer_
+          ) 
+  ) %>% 
+  mutate(life_satisfaction = 5 - life_satisfaction)
+
+# 12) Arthritis (HAVARTH*) -> arthritis_dx
+df <- unify_one(df, "arth_raw", c("HAVARTH","HAVARTH2","HAVARTH3","HAVARTH4","HAVARTH5"))
+df <- df %>% mutate(arthritis_dx = yn_1yes_2no(arth_raw))
+
+# 13) Prediabetes (PREDIAB, PREDIAB1/2) -> prediab_dx
+#  - PREDIAB = 1 yes, 2 no
+#  - PREDIAB1/2 = 1 yes, 2 yes during pregnancy, 3 no
+df <- unify_one(df, "predi_raw", c("PREDIAB","PREDIAB1","PREDIAB2"), keep_source = TRUE)
+df <- df %>% mutate(
+  prediab_dx = case_when(
+    predi_raw_source == "PREDIAB"  & to_int(predi_raw) == 1L ~ 1L,
+    predi_raw_source == "PREDIAB"  & to_int(predi_raw) == 2L ~ 0L,
+    predi_raw_source %in% c("PREDIAB1","PREDIAB2") & to_int(predi_raw) == 1L ~ 1L,
+    predi_raw_source %in% c("PREDIAB1","PREDIAB2") & to_int(predi_raw) == 3L ~ 0L,
+    TRUE ~ NA_integer_
+  ),
+  prediab_pregnancy_only = case_when(
+    predi_raw_source %in% c("PREDIAB1","PREDIAB2") & to_int(predi_raw) == 2L ~ 1L,
+    TRUE ~ 0L
+  ),
+  # merge with DIABETE* info if desired:
+  prediab_any = as.integer(coalesce(prediab_dx, prediabetes_from_diabvar, 0L) == 1L)
+)
+
+# # 14) Special equipment (USEEQUIP) -> useequip (1/0)
+# df <- unify_one(df, "useequip_raw", c("USEEQUIP"))
+# df <- df %>% mutate(useequip = yn_1yes_2no(useequip_raw))
+# 
+# # 15) EDUCATION (EDUCA) -> educa6 (1..6 BRFSS 1993+ scale)
+# # Codes:
+# #   1993+  : 1 Never/Kindergarten, 2 Grades 1–8, 3 Grades 9–11,
+# #            4 Grade 12/GED, 5 Some college/tech, 6 College 4+ years
+# #   1984-92: 1 ≤8th, 2 Some HS, 3 HS/GED, 4 Some tech, 5 Tech grad,
+# #            6 Some college, 7 College grad, 8 Postgrad, 9 Refused
+# # Map 1984–92 into the 1..6 scale (lossy but standard):
+# #   1 -> 2; 2 -> 3; 3 -> 4; 4/5/6 -> 5; 7/8 -> 6; 9 -> NA
+# df <- unify_one(df, "educa_raw", c("EDUCA"), keep_source = TRUE)
+# df <- df %>% mutate(
+#   educa6 = case_when(
+#     # 1993+ already on target scale
+#     to_int(educa_raw) %in% 1:6 ~ to_int(educa_raw),
+#     # 1984–92 mapping (applied when those codes appear in unified column)
+#     to_int(educa_raw) == 1L ~ 2L,
+#     to_int(educa_raw) == 2L ~ 3L,
+#     to_int(educa_raw) == 3L ~ 4L,
+#     to_int(educa_raw) %in% c(4L,5L,6L) ~ 5L,
+#     to_int(educa_raw) %in% c(7L,8L) ~ 6L,
+#     to_int(educa_raw) %in% c(9L) ~ NA_integer_,
+#     TRUE ~ NA_integer_
+#   )
+# )
+# # (Optional) labelled factor
+# # df <- df %>% mutate(
+# #   educa6_f = factor(educa6, levels = c(1,2,3,4,5,6),
+# #          labels = c("Never/Kindergarten","Grades 1–8","Grades 9–11",
+# #                     "HS/GED","Some college/tech","College 4+ years"), ordered = TRUE)
+# # )
+# 
+# # 16) Hispanic origin (HISPANIC, HISPANC2, HISPANC3) -> hispanic (1 yes, 0 no)
+# # HISPANIC/HISPANC2: 1 Yes, 2 No (7/9 NA)
+# # HISPANC3: detailed origin (1..4 = specific Hispanic origins; 5=No)
+# df <- unify_one(df, "hisp_raw", c("HISPANIC","HISPANC2","HISPANC3"), keep_source = TRUE)
+# df <- df %>% mutate(
+#   hispanic = case_when(
+#     hisp_raw_source %in% c("HISPANIC","HISPANC2") & to_int(hisp_raw) == 1L ~ 1L,
+#     hisp_raw_source %in% c("HISPANIC","HISPANC2") & to_int(hisp_raw) == 2L ~ 0L,
+#     hisp_raw_source == "HISPANC3" & to_int(hisp_raw) %in% 1:4 ~ 1L,
+#     hisp_raw_source == "HISPANC3" & to_int(hisp_raw) == 5L ~ 0L,
+#     TRUE ~ NA_integer_
+#   )
+# )
+# 
+# # 17) Income (INCOME, INCOME2, INCOME3, INCOME95)
+# # Goal: an ordinal "income_rank" increasing with income.
+# # INCOME: 1..7 (ascending)
+# # INCOME3: 1..11 (ascending)
+# # INCOME2 / INCOME95 use two-digit codes; mapping differs by year. Without the full codebook here,
+# # we set a cautious placeholder (NA) and recommend plugging the exact map.
+# df <- unify_one(df, "inc_raw", c("INCOME","INCOME2","INCOME3","INCOME95"), keep_source = TRUE)
+# df <- df %>% mutate(
+#   income_rank = case_when(
+#     inc_raw_source == "INCOME"  & to_int(inc_raw) %in% 1:7   ~ to_int(inc_raw),                # 1..7
+#     inc_raw_source == "INCOME3" & to_int(inc_raw) %in% 1:11  ~ to_int(inc_raw),                 # 1..11
+#     # TODO: replace these with your official crosswalk:
+#     inc_raw_source %in% c("INCOME2","INCOME95") ~ NA_integer_,
+#     TRUE ~ NA_integer_
+#   )
+# )
+# # If you can share the INCOME2/95 codebook table, I’ll drop in the exact mapping.
+# 
+# # 18) Race (MRACE*, ORACE*)
+# # Output: race5 (1 White, 2 Black, 3 AI/AN, 4 Asian, 5 NH/PI), 6 Other, 7 Multiple
+# # MRACE (old): 1 White, 2 Black, 3 Asian, 4 NH/PI, 5 AI/AN, 6 Other
+# df <- unify_one(df, "mrace_raw", c("MRACE","MRACE1","MRACE2"), keep_source = TRUE)
+# df <- df %>% mutate(
+#   race5 = case_when(
+#     mrace_raw_source == "MRACE" & to_int(mrace_raw) %in% c(1,2,5,3,4,6) ~
+#       recode(to_int(mrace_raw), `1`=1L, `2`=2L, `5`=3L, `3`=4L, `4`=5L, `6`=6L),
+#     mrace_raw_source %in% c("MRACE1","MRACE2") ~ {
+#       code <- to_int(mrace_raw)
+#       case_when(
+#         code %in% c(10L) ~ 1L,                      # White
+#         code %in% c(20L) ~ 2L,                      # Black
+#         code %in% c(30L) ~ 3L,                      # AI/AN
+#         code %in% c(40L,41L,42L,43L,44L,45L,46L,47L) ~ 4L,  # Asian
+#         code %in% c(50L,51L,52L,53L,54L) ~ 5L,      # NH/PI
+#         # Multiple-response mega-codes (e.g., '1020...' or 1020, 6054..., 88, etc.)
+#         code %in% c(88L) ~ 6L,                      # "No additional choices" / Other-ish
+#         TRUE ~ 7L                                   # Treat non-atomic/multi as Multiple
+#       )
+#     },
+#     TRUE ~ NA_integer_
+#   )
+# )
+# 
+# # ORACE variants (older single-race question). Use if MRACE* absent.
+# df <- unify_one(df, "orace_raw", c("ORACE","ORACE2","ORACE3","ORACE4"), keep_source = TRUE)
+# df <- df %>% mutate(
+#   race5 = case_when(
+#     !is.na(race5) ~ race5, # keep MRACE-based if present
+#     orace_raw_source %in% c("ORACE","ORACE2") & to_int(orace_raw) %in% 1:6 ~
+#       recode(to_int(orace_raw),
+#              `1`=1L, `2`=2L, `5`=3L, `3`=5L, `4`=3L, .default = 6L),
+#     orace_raw_source %in% c("ORACE3","ORACE4") ~ {
+#       code <- to_int(orace_raw)
+#       case_when(
+#         code == 10L ~ 1L,  # White
+#         code == 20L ~ 2L,  # Black
+#         code == 30L ~ 3L,  # AI/AN
+#         code %in% c(40L,41L,42L,43L,44L,45L,46L,47L) ~ 4L, # Asian
+#         code %in% c(50L,51L,52L,53L,54L) ~ 5L, # NH/PI
+#         code %in% c(60L) ~ 6L,  # Other
+#         TRUE ~ 7L               # Multiple / non-atomic
+#       )
+#     },
+#     TRUE ~ NA_integer_
+#   )
+# )
+# 
+# # 19) Pain days (PAINACTV, PAINACT2): 88 -> 0 days; 77/99 -> NA
+# df <- unify_one(df, "pain_raw", c("PAINACTV","PAINACT2"))
+# df <- df %>% mutate(
+#   pain_days_30 = case_when(
+#     to_int(pain_raw) %in% 0:30 ~ to_int(pain_raw),
+#     to_int(pain_raw) == 88L   ~ 0L,
+#     TRUE ~ NA_integer_
+#   )
+# )
+# 
+# # 20) County code (CTYCODE*, ANSI/FIPS) -> county_code (3-char, zero-padded); NA for 777/888/999
+# df <- unify_one(df, "cty_raw", c("CTYCODE","CTYCODE1","CTYCODE2"))
+# df <- df %>% mutate(
+#   county_code = case_when(
+#     str_detect(to_chr(cty_raw), "^[0-9]+$") ~ str_pad(as.character(to_int(cty_raw)), width = 3, side = "left", pad = "0"),
+#     TRUE ~ NA_character_
+#   ),
+#   county_code = case_when(
+#     county_code %in% c("777","888","999") ~ NA_character_,  # unknown/out-of-state/refused
+#     TRUE ~ county_code
+#   )
+# )
+# 
+# # 21) Zip code (ZIPCODE, ZIPCODE1) -> zip5 (5-char), NA for 77777/99999
+# df <- unify_one(df, "zip_raw", c("ZIPCODE","ZIPCODE1"))
+# df <- df %>% mutate(
+#   zip5 = case_when(
+#     str_detect(to_chr(zip_raw), "^[0-9]+$") ~ str_pad(as.character(to_int(zip_raw)), width = 5, side = "left", pad = "0"),
+#     TRUE ~ NA_character_
+#   ),
+#   zip5 = case_when(
+#     zip5 %in% c("77777","99999") ~ NA_character_,
+#     TRUE ~ zip5
+#   )
+# )
+
+# ---------- Optional: drop original source columns once validated ----------
+# df <- df %>% select(-SEX, -SEX1, -BIRTHSEX, -ADDEPEV, -ADDEPEV2, -ADDEPEV3, ... etc.)
+
+
+```
+

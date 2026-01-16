@@ -1,0 +1,1197 @@
+---
+title: "NHIS Mortality"
+author: "Christine Lucille Kuryla"
+date: "2025-02-17"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(survival)
+library(broom)
+library(here)
+library(survey)
+
+```
+
+
+Questions:
+
+Rolling window and censoring
+Censoring in general
+
+# Summary
+
+This R Markdown file performs a survival analysis examining the relationship between self-rated health (SRH) and mortality using NHIS (National Health Interview Survey) data. The analysis has two main components:
+
+*Overall Cox PH:*
+Uses weighted Cox proportional hazards models
+Examines the relationship between SRH and mortality across different time periods
+Finds that the coefficient/hazard ratio becomes less extreme over time (moves closer to zero), suggesting the association between self-rated health and mortality has weakened over time
+
+*Age-Stratified Cox PH:*
+Breaks down the analysis by age groups: 18-29, 30-39, 40-49, 50-59, 60-69, and 70+
+Uses rolling time windows (e.g., 1986-2001, 1991-2006, etc.)
+
+*KM Curves*
+Kaplan-Meier curves were created with SRH dichotomized as "Good-VG-Excellent" and "Fair-Poor" both for all of the ages, and then subsetted by ages and years. 
+
+Results show:
+
+Strongest association (most negative coefficients) in older age groups, particularly 70+
+Weakest association in younger age groups (18-29)
+All age groups show a trend toward less extreme coefficients over time (lines moving upward toward zero)
+Clear age gradient in the strength of the association between SRH and mortality
+
+## Load data
+
+```{r}
+data_nhis_raw <- read_csv(here("big_data/NHIS/nhis_00002.csv")) 
+
+data_nhis_mort_filter <- data_nhis_raw %>% 
+  mutate(srh = 6 - HEALTH) %>% 
+  filter(srh %in% 1:5) %>% 
+  filter(AGE %in% 18:99) %>% 
+#  filter(MORTELIG == 1) %>% 
+#  filter(MORTDODY > YEAR) %>% 
+ # filter(MORTDODY != 9999) %>% 
+  filter(YEAR >= 1981) %>% 
+  filter(MORTSTAT %in% 1:2) %>% 
+  mutate(mortstat_recoded = case_when(MORTSTAT == 1 ~ 1, #deceased
+                                      MORTSTAT == 2 ~ 0, #alive
+                                      .default = NA
+                                      )) %>% 
+  mutate(srh_binary = case_when(srh %in% 3:5 ~ "Good-VG-Excellent",
+                                srh %in% 1:2 ~ "Fair-Poor"
+                                )) %>% 
+  mutate(age_at_death = case_when(MORTSTAT == 1 ~ MORTDODY - YEAR + AGE, #deceased
+                                  MORTSTAT == 2 ~ NA, #alive
+                                  .default = NA
+                                      )) %>% 
+  mutate(age = AGE) %>% 
+  mutate(year = YEAR) %>% 
+  mutate(age_in_2018_or_death  = case_when(MORTSTAT == 1 ~ age_at_death, # died before 2018
+                                          MORTSTAT == 2 ~ 2018 - (year - age), # age in 2018
+                                          .default = NA
+                                )) %>% 
+  filter(age_in_2018_or_death > age)
+ # mutate(survtime = MORTDODY - YEAR)
+```
+
+# Weighted Cox Survival Analysis
+
+## All combined
+
+```{r}
+
+  # Create survey design object
+svy_nhis <- svydesign(
+    ids = ~1,
+    weights = ~MORTWT,
+    data = data_nhis_mort_filter %>% filter(!(is.na(MORTWT)))
+  )
+
+svycoxph(Surv(time = age,
+              time2 = age_in_2018_or_death,
+              event = mortstat_recoded) ~ srh,
+              design = svy_nhis)
+
+
+#####################
+svy_nhis <- svydesign(
+  ids = ~1,
+  weights = ~MORTWT,
+  data = data_nhis_mort_filter
+)
+  
+svycoxph(
+      Surv(time = YEAR, time2 = MORTDODY, event = mortstat_recoded) ~ srh,
+      design = svy_nhis
+    )
+
+```
+
+
+## Rolling Window
+
+```{r}
+
+library(tidyverse)
+library(survival)
+library(survey)
+library(broom)
+
+# Define time periods
+time_periods <- list(
+  period1 = 1986:2000,
+  period2 = 1993:2007,
+  period3 = 2000:2014,
+  period4 = 2007:2018#,
+ # period5 = 2009:2018  # Updated to match actual data availability
+)
+
+time_periods <- list(
+ # period1 = 1981:1991,
+  period2 = 1986:1996,
+  period3 = 1991:2001,
+  period4 = 1996:2006,
+  period5 = 2001:2011,  # Updated to match actual data availability
+  period6 = 2006:2018
+)
+
+time_periods <- list(
+ # period1 = 1981:1996,
+  period2 = 1986:2001,
+  period3 = 1991:2006,
+  period4 = 1996:2011,
+  period5 = 2001:2016,  # Updated to match actual data availability
+  period6 = 2006:2018
+)
+
+time_periods <- list(
+ # period1 = 1981:1996,
+  period2 = 2001:2009,
+  period3 = 2005:2013,
+  period4 = 2009:2017
+)
+
+time_periods <- list(
+ # period1 = 1981:1996,
+  period2 = 1986:2018,
+  period3 = 1991:2018,
+  period4 = 1996:2018,
+  period5 = 2001:2018,  # Updated to match actual data availability
+  period6 = 2006:2018
+)
+
+# Function to run weighted Cox model for a specific time period
+run_weighted_cox_model <- function(data, years) {
+  # Print diagnostic information
+  cat(sprintf("\nProcessing years %d-%d\n", min(years), max(years)))
+  
+  # Subset data for the specific period
+  model_data <- data %>%
+    filter(YEAR %in% years) #%>% 
+  #  filter(MORTDODY - YEAR <= 15) ################################
+  
+  # Create survey design object
+  svy_nhis <- svydesign(
+    ids = ~1,
+    # strata = ~STRATA,
+    weights = ~MORTWT,
+    data = model_data %>% filter(!(is.na(MORTWT)))#,
+    # nest = TRUE
+  )
+  
+  # Fit the weighted Cox model
+  model <- svycoxph(
+    Surv(time = YEAR, time2 = MORTDODY, event = MORTSTAT) ~ srh,
+    design = svy_nhis
+  )
+  
+  # Extract coefficients and statistics
+  results <- tidy(model) %>%
+    mutate(
+      period_start = min(years),
+      period_end = max(years),
+      exp_coef = exp(estimate),
+      exp_coef_se = exp(estimate) * std.error
+    )
+  
+  return(results)
+}
+
+# Run models for all time periods
+results_df <- map_df(names(time_periods), function(period_name) {
+  years <- time_periods[[period_name]]
+  run_weighted_cox_model(data_nhis_mort_filter, years)
+}) %>%
+  mutate(period = paste(period_start, "-", period_end))
+
+# Create coefficient plot
+coef_plot <- ggplot(results_df, aes(x = period, y = estimate)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = estimate - std.error, 
+                    ymax = estimate + std.error),
+                width = 0.2) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Weighted Cox PH Coefficients Across Time Periods",
+       x = "Time Period",
+       y = "Coefficient (with SE)")
+
+# Create hazard ratio plot
+exp_coef_plot <- ggplot(results_df, aes(x = period, y = exp_coef)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = exp_coef - exp_coef_se, 
+                    ymax = exp_coef + exp_coef_se),
+                width = 0.2) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Weighted Hazard Ratios Across Time Periods",
+       x = "Time Period",
+       y = "Hazard Ratio (with SE)")
+
+# Create summary table
+results_table <- results_df %>%
+  select(period,
+         coefficient = estimate, 
+         se_coef = std.error,
+         hazard_ratio = exp_coef,
+         hr_se = exp_coef_se) %>%
+  arrange(period)
+
+# Display results
+print("Numerical Results:")
+print(results_table)
+
+# Display plots
+print(coef_plot)
+print(exp_coef_plot)
+
+# Save results if needed
+# write_csv(results_table, "weighted_cox_results.csv")
+# ggsave("weighted_cox_coefficients.png", coef_plot)
+# ggsave("weighted_cox_hazard_ratios.png", exp_coef_plot)
+
+```
+
+
+## Rolling window subsetted by age
+
+```{r}
+
+library(tidyverse)
+library(survival)
+library(survey)
+library(broom)
+
+
+age_groups <- list(
+  "18-29" = c(18, 29),
+  "30-39" = c(30, 39),
+  "40-49" = c(40, 49),
+  "50-59" = c(50, 59),
+  "60-69" = c(60, 69),
+  "70+" = c(70, Inf)
+)
+
+# Modified function with better error handling
+run_weighted_cox_model_age_grouped <- function(data, years, age_range, age_group_name) {
+  # Subset data
+  model_data <- data %>%
+    filter(YEAR %in% years,
+           AGE >= age_range[1],
+           AGE <= age_range[2]) %>% 
+    filter(MORTDODY - YEAR <= 15) ################################
+  
+  # Only proceed if we have sufficient data
+  if(nrow(model_data) < 10 || sum(model_data$MORTSTAT) < 5) {
+    warning(sprintf("Insufficient data for age group %s in years %d-%d", 
+                    age_group_name, min(years), max(years)))
+    return(tibble(
+      term = "srh",
+      estimate = NA_real_,
+      std.error = NA_real_,
+      statistic = NA_real_,
+      p.value = NA_real_,
+      period_start = min(years),
+      period_end = max(years),
+      exp_coef = NA_real_,
+      exp_coef_se = NA_real_,
+      age_group = age_group_name
+    ))
+  }
+  
+  # Create survey design object
+  svy_nhis <- svydesign(
+    ids = ~1,
+   # strata = ~STRATA,
+    weights = ~MORTWT,
+    data = model_data %>% filter(!(is.na(MORTWT)))#,
+   # nest = TRUE
+  )
+  
+  # Fit the weighted Cox model
+  tryCatch({
+    model <- svycoxph(
+      Surv(time = YEAR, time2 = MORTDODY, event = MORTSTAT) ~ srh,
+      design = svy_nhis
+    )
+    
+    # Extract results
+    results <- tidy(model) %>%
+      mutate(
+        period_start = min(years),
+        period_end = max(years),
+        exp_coef = exp(estimate),
+        exp_coef_se = exp(estimate) * std.error,
+        age_group = age_group_name
+      )
+    
+    return(results)
+  }, error = function(e) {
+    warning(sprintf("Error in model for age group %s in years %d-%d: %s", 
+                    age_group_name, min(years), max(years), e$message))
+    return(tibble(
+      term = "srh",
+      estimate = NA_real_,
+      std.error = NA_real_,
+      statistic = NA_real_,
+      p.value = NA_real_,
+      period_start = min(years),
+      period_end = max(years),
+      exp_coef = NA_real_,
+      exp_coef_se = NA_real_,
+      age_group = age_group_name
+    ))
+  })
+}
+
+# Run models for all time periods and age groups
+results_df <- map_df(names(time_periods), function(period_name) {
+  years <- time_periods[[period_name]]
+  map_df(names(age_groups), function(age_group) {
+    run_weighted_cox_model_age_grouped(data_nhis_mort_filter, years, age_groups[[age_group]], age_group)
+  })
+}) %>%
+  mutate(period = paste(period_start, "-", period_end))
+
+# Create plots with different colors for age groups
+#coef_plot <- ggplot(results_df %>% filter(!is.na(estimate)), 
+
+surv_plot_age_group <- function(results_df){  
+coef_plot <-  ggplot(results_df %>% filter(!is.na(estimate)), 
+                    aes(x = period, y = estimate, color = age_group, group = age_group)) +
+  geom_point(size = 3, position = position_dodge(width = 0.3)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = estimate - std.error, 
+                    ymax = estimate + std.error),
+                width = 0.2,
+                position = position_dodge(width = 0.3)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+    #    legend.title = element_text(face = "bold"),
+        legend.position = "right") +
+#  scale_color_brewer(palette = "Set2") +
+  labs(title = "Weighted Cox PH Coefficients",
+       subtitle = "Across Time Periods by Age Group",
+    #   subtitle = "Missing values indicate insufficient data or model convergence issues",
+       x = "Time Period",
+       y = "Coefficient (with SE)",
+       color = "Age Group")
+
+# Create plot for hazard ratios
+exp_coef_plot <- ggplot(results_df %>% filter(!is.na(exp_coef)), 
+                        aes(x = period, y = exp_coef, color = age_group, group = age_group)) +
+  geom_point(size = 3, position = position_dodge(width = 0.3)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = exp_coef - exp_coef_se, 
+                    ymax = exp_coef + exp_coef_se),
+                width = 0.2,
+                position = position_dodge(width = 0.3)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+       # legend.title = element_text(face = "bold"),
+        legend.position = "right") +
+#  scale_color_brewer(palette = "Set2") +
+  labs(title = "Weighted Hazard Ratios",
+       subtitle = "Across Time Periods by Age Group",
+    #   subtitle = "Missing values indicate insufficient data or model convergence issues",
+       x = "Time Period",
+       y = "Hazard Ratio (with SE)",
+       color = "Age Group")
+
+# Create summary table
+results_table <- results_df %>%
+  select(period,
+         age_group,
+         coefficient = estimate, 
+         se_coef = std.error,
+         hazard_ratio = exp_coef,
+         hr_se = exp_coef_se) %>%
+  arrange(period, age_group)
+
+# Display results
+print("Numerical Results:")
+print(results_table)
+
+# Display plots
+print(coef_plot)
+print(exp_coef_plot)
+}
+
+
+######## Apply function
+
+time_periods <- list(
+ # period1 = 1981:1991,
+  period2 = 1986:1996,
+  period3 = 1991:2001,
+  period4 = 1996:2006,
+  period5 = 2001:2011,  # Updated to match actual data availability
+  period6 = 2006:2018
+)
+
+results_df <- map_df(names(time_periods), function(period_name) {
+  years <- time_periods[[period_name]]
+  map_df(names(age_groups), function(age_group) {
+    run_weighted_cox_model_age_grouped(data_nhis_mort_filter, years, age_groups[[age_group]], age_group)
+  })
+}) %>%
+  mutate(period = paste(period_start, "-", period_end))
+
+surv_plot_age_group(results_df)
+
+time_periods <- list(
+ # period1 = 1981:1996,
+  period2 = 1986:2001,
+  period3 = 1991:2006,
+  period4 = 1996:2011,
+  period5 = 2001:2016,  # Updated to match actual data availability
+  period6 = 2006:2018
+)
+
+results_df <- map_df(names(time_periods), function(period_name) {
+  years <- time_periods[[period_name]]
+  map_df(names(age_groups), function(age_group) {
+    run_weighted_cox_model_age_grouped(data_nhis_mort_filter, years, age_groups[[age_group]], age_group)
+  })
+}) %>%
+  mutate(period = paste(period_start, "-", period_end))
+
+surv_plot_age_group(results_df)
+
+```
+
+# Kaplan-Meier
+
+## KM all ages
+```{r}
+
+#################################
+# Load Libraries
+#################################
+
+library(survey)     # For svydesign, svykm, etc.
+library(dplyr)      # Core Tidyverse data manipulation
+library(purrr)      # For functional programming (map_* functions)
+library(tidyr)      # For data tidying
+library(ggplot2)    # For plotting
+
+#################################
+# Calculate Weighted Kaplan-Meier
+#################################
+
+# svykm(...) returns a list of survival curve objects
+# each element corresponds to a level of srh_binary.
+km_fit <- svykm(
+  formula = Surv(survtime, mortstat_recoded) ~ srh_binary,
+  design  = svy_nhis,
+  se      = FALSE  # If you want standard errors & confidence intervals
+)
+
+#################################
+# Convert km_fit to a Tidy Data Frame
+#################################
+
+# `km_fit` is a list where each component corresponds to a level of srh_binary.
+# The name of each list element is the level (e.g., "Fair-Poor" or "Good-Excellent").
+
+km_df <- map2_df(
+  .x = km_fit,
+  .y = names(km_fit),
+  ~ {
+    tibble(
+      time         = .x$time,
+      surv         = .x$surv,
+      # If se=TRUE, svykm also provides approximate 95% confidence intervals:
+      surv_lower   = .x$lower,
+      surv_upper   = .x$upper,
+      srh_binary   = .y  # The group label
+    )
+  }
+)
+
+# Peek at the resulting data frame
+glimpse(km_df)
+
+#################################
+# Plot the Survey-Weighted KM Curves with ggplot2
+#################################
+
+km_plot <- ggplot(km_df, aes(x = time, y = surv, color = srh_binary)) +
+  geom_step(size = 1) +  # The main KM curve
+  geom_line(
+  #  aes(#ymin = surv_lower, ymax = surv_upper, 
+      #  fill = srh_binary),
+  #  alpha = 0.2,
+    color = NA    # No outline for the ribbon
+ # 
+    ) +
+  labs(
+    x = "Time (years)",
+    y = "Survival Probability",
+    color = "Self-Rated Health",
+    fill  = "Self-Rated Health",
+    title = "Survey-Weighted Kaplan-Meier Curves by SRH"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom"
+  )
+
+# Render the plot
+print(km_plot)
+
+
+```
+
+## KM age subsets
+```{r}
+
+library(survey)      # For complex survey design & survival analysis
+library(survival)    # For Surv objects
+library(dplyr)       # For data manipulation
+library(ggplot2)     # For plotting
+library(purrr)       # For functional programming (map2_df)
+library(tibble)      # For tibbles
+
+# Example age groups:
+age_groups <- list(
+  "18-29" = c(18, 29),
+  "30-39" = c(30, 39),
+  "40-49" = c(40, 49),
+  "50-59" = c(50, 59),
+  "60-69" = c(60, 69),
+  "70+"   = c(70, Inf)
+)
+
+############################################################################
+# Define a function that subsets data by a chosen age group and 
+# produces survey-weighted Kaplan-Meier estimates and a ggplot2 survival curve.
+############################################################################
+
+weighted_km_analysis <- function(
+    svy_nhis,            # A 'survey' package design object
+    age_groups_list,          # A named list of age ranges (like the one above)
+    selected_age_group,       # A string key to pick an age range (e.g., "18-29")
+    time_col         = "survtime",         # The column name for time-to-event
+    event_col        = "mortstat_recoded", # The column name for event indicator
+    group_col        = "srh_binary",       # The column used to group curves
+    se               = FALSE               # Whether to compute standard errors
+) {
+  
+  # ----------------------------------------------------------------------
+  # 1. Subset the design by the selected age group
+  # ----------------------------------------------------------------------
+  # Extract the numeric range (e.g., c(18, 29)) from the named list
+  age_range <- age_groups_list[[selected_age_group]]
+  
+  # Subset the design object for individuals within the chosen age range
+  # Assumes your underlying data has an 'age' variable in the design
+  subset_design <- subset(
+    svy_nhis, 
+    AGE >= age_range[1] & AGE <= age_range[2]
+  )
+  
+  # ----------------------------------------------------------------------
+  # 2. Fit the survey-weighted Kaplan-Meier model
+  # ----------------------------------------------------------------------
+  # The Surv() function takes time and event indicator (1=event, 0=censored)
+  # 'group_col' is the grouping variable (e.g., "srh_binary")
+  # 'svykm()' applies a Kaplan-Meier estimator that respects survey weights
+  
+  # Dynamically build the formula: Surv(time_col, event_col) ~ group_col
+  km_formula <- as.formula(
+    paste0("Surv(", time_col, ", ", event_col, ") ~ ", group_col)
+  )
+  
+  km_fit <- svykm(
+    formula = km_formula,
+    design  = subset_design,
+    se      = se
+  )
+  
+  # ----------------------------------------------------------------------
+  # 3. Convert the svykm result into a tidy data frame
+  # ----------------------------------------------------------------------
+  # km_fit is a list of survival curve objects, each named by level of 'group_col'
+  km_df <- map2_df(
+    .x = km_fit,
+    .y = names(km_fit),
+    ~ {
+      tibble(
+        time         = .x$time,
+        surv         = .x$surv,
+        surv_lower   = .x$lower,  # Available if se=TRUE, else NA
+        surv_upper   = .x$upper,  # Available if se=TRUE, else NA
+        group_value  = .y         # The group label, e.g. "Fair-Poor"
+      )
+    }
+  )
+  
+  # ----------------------------------------------------------------------
+  # 4. Plot the survival curves using ggplot2
+  # ----------------------------------------------------------------------
+  # We plot a step function for the survival probability,
+  # optionally adding confidence bands if se=TRUE.
+  
+  km_plot <- ggplot(km_df, aes(x = time, y = surv, color = group_value)) +
+    geom_step(size = 1) +
+    # If confidence intervals are present, you could add geom_ribbon or
+    # geom_line(...) to depict the lower and upper bounds:
+    # geom_ribbon(aes(ymin = surv_lower, ymax = surv_upper, fill = group_value),
+    #             alpha = 0.2, color = NA) +
+    labs(
+      x     = "Time (years)",
+      y     = "Survival Probability",
+      color = group_col,
+    #  title = paste0("Survey-Weighted KM Curves by ", group_col, 
+                   #  " (Age Group: ", selected_age_group, ")")
+      title = "KM Curves by SRH",
+      subtitle = paste0("Age Group: ", selected_age_group)
+    ) +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+  
+  # ----------------------------------------------------------------------
+  # 5. Return the tidy data frame and the plot
+  # ----------------------------------------------------------------------
+  return(list(km_data = km_df, km_plot = km_plot))
+}
+
+############################################################################
+# Example Usage
+############################################################################
+
+# Suppose your existing survey design object is called 'svy_nhis' 
+# and it contains variables:
+# - 'age'                  = respondent's age
+# - 'survtime'             = time variable
+# - 'mortstat_recoded'     = event indicator (1=death, 0=alive)
+# - 'srh_binary'           = "Good-Excellent" vs "Fair-Poor"
+
+# Let's run the function for the 30-39 age group:
+results_30_39 <- weighted_km_analysis(
+  svy_nhis       = svy_nhis,
+  age_groups_list     = age_groups,
+  selected_age_group  = "30-39",
+  time_col            = "survtime",
+  event_col           = "mortstat_recoded",
+  group_col           = "srh_binary",
+  se                  = FALSE
+)
+
+# Extract the resulting data frame:
+km_df_30_39   <- results_30_39$km_data
+# Plot object:
+km_plot_30_39 <- results_30_39$km_plot
+# Display the plot:
+print(km_plot_30_39)
+
+results_18_29 <- weighted_km_analysis(
+  svy_nhis       = svy_nhis,
+  age_groups_list     = age_groups,
+  selected_age_group  = "18-29"#,
+ # time_col            = "survtime",
+ # event_col           = "mortstat_recoded",
+ # group_col           = "srh_binary",
+ # se                  = FALSE
+)
+results_18_29$km_plot
+
+results_40_49 <- weighted_km_analysis(
+  svy_nhis       = svy_nhis,
+  age_groups_list     = age_groups,
+  selected_age_group  = "40-49"#,
+  # time_col            = "survtime",
+  # event_col           = "mortstat_recoded",
+  # group_col           = "srh_binary",
+  # se                  = FALSE
+)
+results_40_49$km_plot
+
+results_50_59 <- weighted_km_analysis(
+  svy_nhis       = svy_nhis,
+  age_groups_list     = age_groups,
+  selected_age_group  = "50-59"#,
+  # time_col            = "survtime",
+  # event_col           = "mortstat_recoded",
+  # group_col           = "srh_binary",
+  # se                  = FALSE
+)
+results_50_59$km_plot
+
+results_60_69 <- weighted_km_analysis(
+  svy_nhis       = svy_nhis,
+  age_groups_list     = age_groups,
+  selected_age_group  = "60-69"#,
+  # time_col            = "survtime",
+  # event_col           = "mortstat_recoded",
+  # group_col           = "srh_binary",
+  # se                  = FALSE
+)
+results_60_69$km_plot
+
+results_70 <- weighted_km_analysis(
+  svy_nhis       = svy_nhis,
+  age_groups_list     = age_groups,
+  selected_age_group  = "70+"#,
+  # time_col            = "survtime",
+  # event_col           = "mortstat_recoded",
+  # group_col           = "srh_binary",
+  # se                  = FALSE
+)
+results_70$km_plot
+
+```
+
+## Faceted KM
+```{r}
+
+library(survey)      # For complex survey design & survival analysis
+library(survival)    # For Surv objects
+library(dplyr)       # For data manipulation
+library(ggplot2)     # For plotting
+library(purrr)       # For functional programming (map2_df, etc.)
+library(tibble)      # For tibbles
+
+############################################################################
+# 1. Example lists of age groups and time periods
+############################################################################
+
+age_groups <- list(
+  "18-29" = c(18, 29),
+  "30-39" = c(30, 39),
+  "40-49" = c(40, 49),
+  "50-59" = c(50, 59),
+  "60-69" = c(60, 69),
+  "70+"   = c(70, Inf)
+)
+
+time_periods <- list(
+  period2 = 1986:2001,
+  period3 = 1991:2006,
+  period4 = 1996:2011,
+  period5 = 2001:2016,
+  period6 = 2006:2018
+)
+
+############################################################################
+# 2. Example Weighted KM Function (Same as Before)
+#    This function subsets by age group and time period, then computes
+#    survey-weighted Kaplan-Meier estimates. 
+############################################################################
+
+weighted_km_analysis <- function(
+    svy_nhis,             # A 'survey' package design object
+    age_groups_list,           # A named list of age ranges
+    selected_age_group,        # A string (e.g., "18-29")
+    time_period_list,          # A named list of year sequences
+    selected_time_period,      # e.g., "period2"
+    year_col          = "year",
+    time_col          = "survtime",
+    event_col         = "mortstat_recoded",
+    group_col         = "srh_binary",
+    se                = FALSE
+) {
+  
+  # ---- Subset by age ----
+  age_range <- age_groups_list[[selected_age_group]]
+  subset_expr_age <- quote(AGE >= age_range[1] & AGE <= age_range[2])
+  
+  # ---- Subset by time period ----
+  time_range <- time_period_list[[selected_time_period]]
+  # We'll use min and max of the vector
+  subset_expr_time <- bquote(.(as.name(year_col)) >= .(min(time_range)) &
+                               .(as.name(year_col)) <= .(max(time_range)))
+  
+  # Combine the subset expressions
+  subset_design <- subset(
+    svy_nhis,
+    eval(subset_expr_age) & eval(subset_expr_time)
+  )
+  
+  # ---- Fit the survey-weighted Kaplan-Meier model ----
+  km_formula <- as.formula(
+    paste0("Surv(", time_col, ", ", event_col, ") ~ ", group_col)
+  )
+  
+  km_fit <- svykm(
+    formula = km_formula,
+    design  = subset_design,
+    se      = se
+  )
+  
+  # ---- Convert svykm result into a tidy data frame ----
+  km_df <- map2_df(
+    .x = km_fit,
+    .y = names(km_fit),
+    ~ {
+      tibble(
+        time         = .x$time,
+        surv         = .x$surv,
+        surv_lower   = .x$lower,  # If se=TRUE, else NA
+        surv_upper   = .x$upper,  # If se=TRUE, else NA
+        group_value  = .y         # The group label, e.g. "Fair-Poor"
+      )
+    }
+  )
+  
+  return(km_df)
+}
+
+############################################################################
+# 3. Generate a data frame of all (age_group, time_period) combinations
+############################################################################
+
+# We'll create a data frame that has columns: age_group, time_period
+# that represent every combination. 
+all_combinations <- expand.grid(
+  age_group     = names(age_groups),
+  time_period   = names(time_periods),
+  stringsAsFactors = FALSE
+)
+
+############################################################################
+# 4. Loop (map) through each combination, compute the KM, store the results
+############################################################################
+
+# We'll use map2_df to iterate over the rows in 'all_combinations', 
+# calling weighted_km_analysis for each pair. We combine the outputs into
+# a single tibble. 
+km_all_df <- purrr::pmap_dfr(
+  .l = list(all_combinations$age_group, all_combinations$time_period),
+  .f = function(a, p) {
+    # Compute weighted KM data for (age_group = a, time_period = p)
+    km_df <- weighted_km_analysis(
+      svy_nhis        = svy_nhis,
+      age_groups_list      = age_groups,
+      selected_age_group   = a,
+      time_period_list     = time_periods,
+      selected_time_period = p,
+      year_col             = "YEAR",
+      time_col             = "survtime",
+      event_col            = "mortstat_recoded",
+      group_col            = "srh_binary",
+      se                   = FALSE
+    )
+    
+    # Tag these results with the age_group and time_period
+    km_df <- km_df %>%
+      mutate(
+        age_group     = a,
+        time_period   = p
+      )
+    return(km_df)
+  }
+)
+
+# Let's peek at the structure:
+# head(km_all_df)
+# This should have columns: time, surv, surv_lower, surv_upper, group_value,
+# plus age_group, time_period
+
+############################################################################
+# 5. Create a single ggplot with facet_grid(rows=age_group, cols=time_period)
+############################################################################
+
+km_all_plot <- ggplot(km_all_df, aes(x = time, y = surv, color = group_value)) +
+  geom_step(size = 1) +
+  # If you'd like confidence intervals, you could do something like:
+  # geom_ribbon(
+  #   aes(ymin = surv_lower, ymax = surv_upper, fill = group_value),
+  #   alpha = 0.2,
+  #   color = NA
+  # ) +
+  facet_grid(rows = vars(age_group), cols = vars(time_period)) +
+  labs(
+    x     = "Time (years)",
+    y     = "Survival Probability",
+    color = "SRH Group",
+    title = "Survey-Weighted KM by Age Group (Rows) and Time Period (Columns)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+# Print or save the final multi-facet figure
+print(km_all_plot)
+
+
+```
+
+
+# Unweighted
+```{r, eval = FALSE, include = FALSE}
+coxph_all_unweighted <- coxph(Surv(time = YEAR, #start
+                                   time2 = MORTDODY, # stop 
+                                   event = MORTSTAT) ~ srh,
+                                   data=data_nhis_mort_filter)
+
+coxph_all_unweighted
+coxph_all_unweighted$coefficients[1]
+
+```
+
+
+```{r, eval = FALSE, include = FALSE}
+
+coxph_all_unweighted <- coxph(Surv(time = YEAR, #start
+                                   time2 = MORTDODY, # stop 
+                                   event=MORTSTAT) ~ srh,
+                                   data=data_nhis_mort_filter %>% 
+                                filter(year %in% 1981:2002))
+
+```
+
+
+```{r, eval = FALSE, include = FALSE}
+
+coxph(Surv(time = YEAR, time2 = MORTDODY, event=MORTSTAT) ~ srh,
+            data=data_nhis_mort_filter %>% 
+                 filter(YEAR %in% 1981:2001))$coefficient
+
+coxph(Surv(time = YEAR, time2 = MORTDODY, event=MORTSTAT) ~ srh,
+            data=data_nhis_mort_filter %>% 
+                 filter(YEAR %in% 1991:2011))$coefficient
+
+coxph(Surv(time = YEAR, time2 = MORTDODY, event=MORTSTAT) ~ srh,
+            data=data_nhis_mort_filter %>% 
+                 filter(YEAR %in% 2001:2021))$coefficient
+
+
+
+coxph(Surv(time = YEAR, time2 = MORTDODY, event=MORTSTAT) ~ srh,
+            data=data_nhis_mort_filter %>% 
+                 filter(YEAR %in% 1981:1995))$coefficient
+
+coxph(Surv(time = YEAR, time2 = MORTDODY, event=MORTSTAT) ~ srh,
+            data=data_nhis_mort_filter %>% 
+                 filter(YEAR %in% 1988:2002))$coefficient
+
+coxph(Surv(time = YEAR, time2 = MORTDODY, event=MORTSTAT) ~ srh,
+            data=data_nhis_mort_filter %>% 
+                 filter(YEAR %in% 1995:2009))$coefficient
+
+coxph(Surv(time = YEAR, time2 = MORTDODY, event=MORTSTAT) ~ srh,
+            data=data_nhis_mort_filter %>% 
+                 filter(YEAR %in% 2002:2016))$coefficient
+
+coxph(Surv(time = YEAR, time2 = MORTDODY, event=MORTSTAT) ~ srh,
+            data=data_nhis_mort_filter %>% 
+                 filter(YEAR %in% 2009:2023))$coefficient
+
+
+
+```
+
+## Cox PH for Rolling Window
+
+```{r, eval = FALSE, include = FALSE}
+
+# Load required libraries
+library(tidyverse)
+library(survival)
+library(broom)
+
+# Define time periods for analysis
+time_periods <- list(
+  period1 = 1981:1995,
+  period2 = 1988:2002,
+  period3 = 1995:2009,
+  period4 = 2002:2016,
+  period5 = 2009:2023
+)
+
+# Function to run Cox PH model for a specific time period
+run_cox_model <- function(data, years) {
+  model_data <- data %>%
+    filter(YEAR %in% years)
+  
+  model <- coxph(Surv(time = YEAR, time2 = MORTDODY, event = MORTSTAT) ~ srh,
+                 data = model_data)
+  
+  # Extract coefficients and statistics
+  results <- tidy(model) %>%
+    mutate(
+      period_start = min(years),
+      period_end = max(years),
+      exp_coef = exp(estimate),
+      # Calculate SE for hazard ratio using the delta method
+      exp_coef_se = exp(estimate) * std.error
+    )
+  
+  return(results)
+}
+
+# Run models for all time periods and combine results
+results_df <- map_df(time_periods, ~run_cox_model(data_nhis_mort_filter, .x)) %>%
+  mutate(period = paste(period_start, "-", period_end))
+
+# Create plots for coefficient and SE
+coef_plot <- ggplot(results_df, aes(x = period, y = estimate)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = estimate - std.error, 
+                    ymax = estimate + std.error),
+                width = 0.2) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Cox PH Coefficients Across Time Periods",
+       x = "Time Period",
+       y = "Coefficient (with SE)")
+
+# Create plot for exp(coefficient) and SE
+exp_coef_plot <- ggplot(results_df, aes(x = period, y = exp_coef)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = exp_coef - exp_coef_se, 
+                    ymax = exp_coef + exp_coef_se),
+                width = 0.2) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Hazard Ratios Across Time Periods",
+       x = "Time Period",
+       y = "Hazard Ratio (with SE)")
+
+# Print numerical results
+results_table <- results_df %>%
+  select(period, 
+         coefficient = estimate, 
+         se_coef = std.error,
+         hazard_ratio = exp_coef,
+         hr_se = exp_coef_se) %>%
+  arrange(period)
+
+# Display results
+print("Numerical Results:")
+print(results_table)
+
+# Display plots
+print(coef_plot)
+print(exp_coef_plot)
+
+# Save results if needed
+# write_csv(results_table, "cox_results.csv")
+# ggsave("cox_coefficients.png", coef_plot)
+# ggsave("cox_hazard_ratios.png", exp_coef_plot)
+
+```
+
+```{r eval = FALSE, include = FALSE}
+
+library(tidyverse)
+library(survival)
+library(broom)
+
+# Define time periods and age groups
+time_periods <- list(
+  period1 = 1981:1995,
+  period2 = 1988:2002,
+  period3 = 1995:2009,
+  period4 = 2002:2016,
+  period5 = 2009:2023
+)
+
+age_groups <- list(
+  "18-29" = c(18, 29),
+  "30-39" = c(30, 39),
+  "40-49" = c(40, 49),
+  "50-59" = c(50, 59),
+  "60-69" = c(60, 69),
+  "70+" = c(70, Inf)
+)
+
+# Function to run Cox PH model for a specific time period and age group
+run_cox_model <- function(data, years, age_range, age_group_name) {
+  model_data <- data %>%
+    filter(YEAR %in% years,
+           AGE >= age_range[1],
+           AGE <= age_range[2])
+  
+  model <- coxph(Surv(time = YEAR, time2 = MORTDODY, event = MORTSTAT) ~ srh,
+                 data = model_data)
+  
+  # Extract coefficients and statistics
+  results <- tidy(model) %>%
+    mutate(
+      period_start = min(years),
+      period_end = max(years),
+      exp_coef = exp(estimate),
+      exp_coef_se = exp(estimate) * std.error,
+      age_group = age_group_name
+    )
+  
+  return(results)
+}
+
+# Run models for all time periods and age groups
+results_df <- map_df(time_periods, function(years) {
+  map_df(names(age_groups), function(age_group) {
+    run_cox_model(data_nhis_mort_filter, years, age_groups[[age_group]], age_group)
+  })
+}) %>%
+  mutate(period = paste(period_start, "-", period_end))
+
+# Create plots with different colors for age groups
+coef_plot <- ggplot(results_df, aes(x = period, y = estimate, color = age_group, group = age_group)) +
+  geom_point(size = 3, position = position_dodge(width = 0.3)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = estimate - std.error, 
+                    ymax = estimate + std.error),
+                width = 0.2,
+                position = position_dodge(width = 0.3)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.title = element_text(face = "bold"),
+        legend.position = "right") +
+  scale_color_brewer(palette = "Set2") +
+  labs(title = "Cox PH Coefficients Across Time Periods by Age Group",
+       x = "Time Period",
+       y = "Coefficient (with SE)",
+       color = "Age Group")
+
+# Create plot for hazard ratios
+exp_coef_plot <- ggplot(results_df, aes(x = period, y = exp_coef, color = age_group, group = age_group)) +
+  geom_point(size = 3, position = position_dodge(width = 0.3)) +
+  geom_errorbar(aes(ymin = exp_coef - exp_coef_se, 
+                    ymax = exp_coef + exp_coef_se),
+                width = 0.2,
+                position = position_dodge(width = 0.3)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.title = element_text(face = "bold"),
+        legend.position = "right") +
+  scale_color_brewer(palette = "Set2") +
+  labs(title = "Hazard Ratios Across Time Periods by Age Group",
+       x = "Time Period",
+       y = "Hazard Ratio (with SE)",
+       color = "Age Group")
+
+# Create summary table
+results_table <- results_df %>%
+  select(period,
+         age_group,
+         coefficient = estimate, 
+         se_coef = std.error,
+         hazard_ratio = exp_coef,
+         hr_se = exp_coef_se) %>%
+  arrange(period, age_group)
+
+# Display results
+print("Numerical Results:")
+print(results_table)
+
+# Display plots
+print(coef_plot)
+print(exp_coef_plot)
+
+# Save results if needed
+# write_csv(results_table, "cox_results_by_age.csv")
+# ggsave("cox_coefficients_by_age.png", coef_plot)
+# ggsave("cox_hazard_ratios_by_age.png", exp_coef_plot)
+
+```
+
+

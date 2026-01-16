@@ -7,14 +7,14 @@ This repo contains scientific analysis code for SRH using NHIS, MEPS, BRFSS, GSS
 - If a requested change could alter estimands, SRH coding direction, Fair/Poor threshold, survey weighting/design, sample restrictions, or APC definitions, DO NOT GUESS. Ask clarifying questions in your response.
 
 ## SRH coding rules (non-negotiable)
-- `srh_num` is numeric with higher = better.
+- `srh` is numeric with higher = better.
 - NHIS/MEPS/BRFSS/CPS/NHANES: 1=Poor … 5=Excellent
 - GSS: 1=Poor … 4=Excellent (no “Very good”)
-- Default outcome for main analyses: continuous `srh_num` within dataset.
-- Sensitivity: `srh_fairpoor = (srh_num <= 2)`; do not change threshold.
+- Default outcome for main analyses: continuous `srh` within dataset.
+- Sensitivity: `srh_fairpoor = (srh_num <= 2)`; do not change threshold unless explicitly asked. Do not run sensitivity analyses until explicitly asked.
 
 ## Cross-dataset comparability
-- Do not compare raw mean `srh_num` across datasets with different scales unless explicitly instructed.
+- Do not compare raw mean `srh` across datasets with different scales unless explicitly instructed.
 - Prefer `srh_01` (0–1 rescale) or `srh_fairpoor` for cross-dataset summaries, or an ordinal model that accounts for scale differences.
 
 ## Survey design
@@ -30,7 +30,7 @@ This repo contains scientific analysis code for SRH using NHIS, MEPS, BRFSS, GSS
 
 
 
-# Scientific R project instructions for Copilot
+# Scientific R project instructions
 
 - Prefer tidyverse (dplyr/tidyr/purrr/readr/ggplot2) unless base R is clearer.
 - If uncertain, ask in the response instead of guessing.
@@ -43,17 +43,17 @@ This repo contains scientific analysis code for SRH using NHIS, MEPS, BRFSS, GSS
 - Be explicit about NA handling (na.rm=, drop_na vs replace_na, etc).
 - When refactoring, preserve outputs: same columns, same units, same grouping.
   If you must change them, explain the change and why.
-- Add minimal checks (stopifnot/assertthat) around assumptions that could silently break.
+- When do analyses (not final paper Figure generation) Add minimal checks (stopifnot/assertthat) around assumptions that could silently break.
 - Encourage small functions, explicit inputs/outputs, informative errors, and reproducible scripts.
 
 - This is a scientific R project.
-- Copilot must not change statistical intent or estimators.
+- Must not change statistical intent or estimators unless explicitly asked. If there is something better, suggest it.
 - Prefer minimal diffs.
 - Preserve column names, units, grouping, and NA handling.
 - If a change could alter results, ask instead of guessing.
 - Refactors must preserve outputs unless explicitly told otherwise.
 
-# Copilot instructions — Scientific R workflow
+# Instructions — Scientific R workflow
 
 - This is a scientific analysis repo.
 - Never change statistical intent, estimators, contrasts, or inclusion/exclusion rules unless explicitly requested.
@@ -62,4 +62,4 @@ This repo contains scientific analysis code for SRH using NHIS, MEPS, BRFSS, GSS
 - Prefer minimal diffs over rewrites.
 - Prefer tidyverse (dplyr/tidyr/purrr/readr/ggplot2) unless base R is clearer.
 - If uncertain, ask questions in the response instead of guessing.
-- Add small checks (rlang::abort/stopifnot) around fragile assumptions.
+- During exploratory and sensitivity analyses, add small checks (rlang::abort/stopifnot) around fragile assumptions.

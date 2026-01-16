@@ -1,0 +1,31 @@
+---
+title: "Coding of SRH (Categorical or Continuous)"
+author: "Christine Lucille Kuryla"
+date: "2025-01-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+SRH is a ordinal variable. Should we treat it as categorical or continuous? (Note, it can be treated as ordinal with specific methods, and this will be done.)
+
+*Pros for continuous:* 
+- One coefficient, easily interpretable. 
+- Computationally simpler. 
+- More efficient in random slope models. 
+
+*Cons for continuous:*
+- Assumes linearity (assumes that moving from 1→2 (Poor to Fair) has the same effect size as moving from 2→3 (Fair to Good), and so on. This may or may not be realistic.)
+- Loss of Category-Specific Detail (won’t see precisely which category differences drive the outcome the most)
+
+*Pros for factor (categorical):*
+- No asumption of equal spacing between categories
+- Fine-Grained Interpretation: For example, “Fair vs. Poor” might have a different magnitude of effect than “Excellent vs. Very Good.”
+
+*Cons for factor (categorical):*
+- Complexity in Random Effects (Random slopes for a multi-level factor in a mixed-effects model leads to multiple dummy-coded slopes (one for each category except reference).)
+- Interpretation (multiple coefficients to interpret, e.g., “Fair vs. Poor,” “Good vs. Poor,” etc.)
+- Computational Burden: More parameters to estimate, particularly in large cross-classified or hierarchical models.
+

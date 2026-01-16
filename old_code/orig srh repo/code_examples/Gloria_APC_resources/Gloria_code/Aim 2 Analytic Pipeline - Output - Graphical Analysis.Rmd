@@ -1,0 +1,394 @@
+---
+title: "Aim 2 Analytic Pipeline - Skeleton - Graphical Analysis"
+author: "Gloria Huei-Jong Graf"
+date: "2/23/2023"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache = TRUE)
+library(tidyverse)
+library(foreign)
+library(survey)
+library(srvyr)
+library(patchwork)
+library(kableExtra)
+```
+
+```{r loading-data, echo = FALSE, warnings = FALSE}
+original_df = read.csv("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Core_Dataset_Aim2.csv") %>%
+  mutate(race = factor(race, levels = c("White", "Black", "Other")),
+         gender = factor(gender, levels = c(1, 2), labels = c("Men", "Women")),
+         phenoageadv_delta_levinenocrp_scale = scale(phenoageadv_delta_levinenocrp_nosexstrat),
+         phenoageadv_delta_elasticnet_scale = scale(phenoageadv_delta_elasticnet_nosexstrat),
+         kdmadv_delta_levinenocrp_scale = scale(kdmadv_delta_levinenocrp_nosexstrat),
+         kdmadv_delta_elasticnet_scale = scale(kdmadv_delta_elasticnet_nosexstrat),
+         hdlog_levinenocrp_scale = scale(hdlog_levinenocrp_nosexstrat),
+         hdlog_elasticnet_scale = scale(hdlog_elasticnet_nosexstrat))
+
+# Creating dataset for description of cell-sizes (non-survey object, restricting to NHANES4, Black or White race, age <=80, complete information, n=28991)
+descriptive_df =
+  original_df %>%
+  mutate(age_4yr = as.character(age_4yr),
+         cohort_4yr = as.character(cohort_4yr),
+         period_4yr = as.character(period_4yr),
+         lnWTMEC4YR = ifelse(WTMEC4YR == 0, 0, log(WTMEC4YR))) %>%
+  filter(year != 1991 & race %in% c("Black", "White") & age_4yr <= 80 &
+          !is.na(phenoageadv_delta_elasticnet_nosexstrat) & !is.na(age) & !is.na(age_squared) & !is.na(race) & !is.na(gender) & !is.na(period_4yr) & !is.na(cohort_4yr)) %>%
+  droplevels()
+
+# Creating dataset for weighting models (survey object, n=55081, restricting to NHANES4)
+surveymatrix_df =
+  original_df %>%
+  mutate(lnWTMEC4YR = ifelse(WTMEC4YR == 0, 0, log(WTMEC4YR))) %>%
+  filter(year != 1991) %>%
+  droplevels()
+
+svydesign_all = 
+  surveymatrix_df %>% 
+  as_survey_design(ids=SDMVPSU, strata=SDMVSTRA, weights=WTMEC4YR, nest = TRUE)
+
+svydesign_1d =
+  subset(svydesign_all, race %in% c("Black", "White") & age_4yr <= 80 &
+          !is.na(phenoageadv_delta_elasticnet_nosexstrat) & !is.na(age) & !is.na(age_squared) & !is.na(race) & !is.na(gender) & !is.na(period_4yr) & !is.na(cohort_4yr))
+
+svydesign_2d =
+  subset(svydesign_all, race %in% c("Black", "White") & age_4yr <= 80 &
+          !is.na(phenoageadv_delta_elasticnet_nosexstrat) & !is.na(age) & !is.na(age_squared) & !is.na(race) & !is.na(gender) & !is.na(period_4yr) & !is.na(cohort_4yr))
+
+svydesign_2d<-update(svydesign_2d, 
+                     cohort_4yr = factor(cohort_4yr),
+                     period_4yr = factor(period_4yr),
+                     age_4yr = factor(age_4yr))
+```
+
+This document contains skeleton code needed to conduct initial graphical analysis of APC effects for Aim 2 of Graf's dissertation. APC analyses follow the general approach followed by Yang and Land (specified below). This document covers steps 1 and 2. 
+
+1) Construction of synthetic birth cohorts
+
+2) Graphical assessment of age, period, and cohort effects
+
+3) Comparison of one-, two-, and three-factor models
+
+4) Identification of APC effects using different statistical approaches: the Constrained Coefficients GLIM estimator (CGLIM), Hierarchical APC Estimation with Cross-Classified Random Effects (HAPC-CCREM), and The Median Polish Estimator.
+
+## Participant counts and data setup
+
+```{r echo = FALSE}
+table(descriptive_df$period_4yr, descriptive_df$race, descriptive_df$gender) %>%
+  knitr::kable(caption = "Number of participants by wave", col.names = c("Wave", "Race", "Sex", "n")) %>%
+  kableExtra::kable_classic(html_font = "Times New Roman") %>%
+  row_spec(0, bold=TRUE)
+
+table(descriptive_df$cohort_4yr, descriptive_df$race, descriptive_df$gender) %>%
+  knitr::kable(caption = "Number of participants by 4-year birth cohorts", col.names = c("Cohort", "Race", "Sex", "n")) %>%
+  kableExtra::kable_classic(html_font = "Times New Roman") %>%
+  row_spec(0, bold=TRUE)
+```
+
+```{r functions-1d, echo = FALSE, warning = FALSE, message = FALSE}
+plot1D_all_f = function(var1, bioage_var, ymin, ymax){
+    
+  var1 = enquo(var1)
+  bioage_var = enquo(bioage_var)
+  
+  df =
+    svydesign_1d %>%
+    group_by(!!var1) %>%
+    summarise(bioage_var = survey_mean(!!bioage_var, na.rm = T)) %>%
+    mutate(bioage_var = ifelse(bioage_var == 0, NA, bioage_var))
+  
+  ggplot(df, aes(x = !!var1, y = bioage_var, group = 1)) +
+    geom_line(linewidth = 0.5) +
+    geom_point() +
+    theme_minimal() + 
+    ylab(as_label(bioage_var)) +
+    ylim(ymin, ymax)
+
+}
+
+plot1D_strat_f = function(var1, bioage_var, ymin, ymax){
+  
+  var1 = enquo(var1)
+  bioage_var = enquo(bioage_var)
+  
+  df =
+    svydesign_1d %>%
+    group_by(!!var1, gender, race) %>%
+    summarise(bioage_var = survey_mean(!!bioage_var, na.rm = T)) %>%
+    mutate(bioage_var = ifelse(bioage_var == 0, NA, bioage_var))
+  
+  ggplot(df, aes(x = !!var1, y = bioage_var, group = 1)) +
+    geom_line(linewidth = 0.5) +
+    geom_point() +
+    facet_wrap(c("gender", "race")) +
+    theme_minimal() + 
+    ylab(as_label(bioage_var)) +
+    ylim(ymin, ymax)
+  
+}
+```
+
+## Graphical assessment of one-dimensional age, period, and cohort effects
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+a_phenoageadv_delta_elasticnet_scale_all = plot1D_all_f(age_4yr, phenoageadv_delta_elasticnet_scale, -1, 1)
+a_kdmadv_delta_elasticnet_scale_all = plot1D_all_f(age_4yr, kdmadv_delta_elasticnet_scale, -2, 2)
+a_hdlog_elasticnet_scale_all = plot1D_all_f(age_4yr, hdlog_elasticnet_scale, -2, 2)
+```
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+p_phenoageadv_delta_elasticnet_scale_all = plot1D_all_f(period_4yr, phenoageadv_delta_elasticnet_scale, -1, 1)
+p_kdmadv_delta_elasticnet_scale_all = plot1D_all_f(period_4yr, kdmadv_delta_elasticnet_scale, -2, 2)
+p_hdlog_elasticnet_scale_all = plot1D_all_f(period_4yr, hdlog_elasticnet_scale, -2, 2)
+```
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+c_phenoageadv_delta_elasticnet_scale_all = plot1D_all_f(cohort_4yr, phenoageadv_delta_elasticnet_scale, -1, 1)
+c_kdmadv_delta_elasticnet_scale_all = plot1D_all_f(cohort_4yr, kdmadv_delta_elasticnet_scale, -2, 2)
+c_hdlog_elasticnet_scale_all = plot1D_all_f(cohort_4yr, hdlog_elasticnet_scale, -2, 2)
+```
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+(a_phenoageadv_delta_elasticnet_scale_all + p_phenoageadv_delta_elasticnet_scale_all + c_phenoageadv_delta_elasticnet_scale_all) / (a_hdlog_elasticnet_scale_all + p_hdlog_elasticnet_scale_all + c_hdlog_elasticnet_scale_all) + plot_layout(guides = "collect")
+
+rm(a_phenoageadv_delta_elasticnet_scale_all, a_kdmadv_delta_elasticnet_scale_all, a_hdlog_elasticnet_scale_all)
+rm(p_phenoageadv_delta_elasticnet_scale_all, p_kdmadv_delta_elasticnet_scale_all, p_hdlog_elasticnet_scale_all)
+rm(c_phenoageadv_delta_elasticnet_scale_all, c_kdmadv_delta_elasticnet_scale_all, c_hdlog_elasticnet_scale_all)
+```
+
+### Age effects - stratified
+http://127.0.0.1:22021/graphics/plot_zoom_png?width=948&height=565
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+a_phenoageadv_delta_elasticnet_scale_strat = plot1D_strat_f(age_4yr, phenoageadv_delta_elasticnet_scale, -2, 2)
+a_kdmageadv_delta_elasticnet_scale_strat = plot1D_strat_f(age_4yr, kdmadv_delta_elasticnet_scale, -2, 2)
+a_hdlog_elasticnet_scale_strat = plot1D_strat_f(age_4yr, hdlog_elasticnet_scale, -2, 2)
+```
+
+### Period effects - stratified
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+p_phenoageadv_delta_elasticnet_scale_strat = plot1D_strat_f(period_4yr, phenoageadv_delta_elasticnet_scale, -2, 2)
+p_kdmadv_delta_elasticnet_scale_strat = plot1D_strat_f(period_4yr, kdmadv_delta_elasticnet_scale, -2, 2)
+p_hdlog_elasticnet_scale_strat = plot1D_strat_f(period_4yr, hdlog_elasticnet_scale, -2, 2)
+```
+
+### Cohort effects - stratified
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+c_phenoageadv_delta_elasticnet_scale_strat = plot1D_strat_f(cohort_4yr, phenoageadv_delta_elasticnet_scale, -2, 2)
+c_kdmageadv_delta_elasticnet_scale_strat = plot1D_strat_f(cohort_4yr, kdmadv_delta_elasticnet_scale, -2, 2)
+c_hdlog_elasticnet_scale_strat = plot1D_strat_f(cohort_4yr, hdlog_elasticnet_scale, -2, 2)
+```
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+a_phenoageadv_delta_elasticnet_scale_strat + p_phenoageadv_delta_elasticnet_scale_strat + c_phenoageadv_delta_elasticnet_scale_strat
+  
+a_hdlog_elasticnet_scale_strat + p_hdlog_elasticnet_scale_strat + c_hdlog_elasticnet_scale_strat
+
+rm(a_phenoageadv_delta_elasticnet_scale_strat, a_kdmageadv_delta_elasticnet_scale_strat, a_hdlog_elasticnet_scale_strat, p_phenoageadv_delta_elasticnet_scale_strat, p_kdmadv_delta_elasticnet_scale_strat, p_hdlog_elasticnet_scale_strat, c_phenoageadv_delta_elasticnet_scale_strat, c_kdmageadv_delta_elasticnet_scale_strat, c_hdlog_elasticnet_scale_strat)
+```
+
+
+## Graphical assessment of two-dimensional age effects
+
+```{r functions-2d, echo = FALSE, warning = FALSE, message = FALSE}
+plot2D_all_f = function(var1, var2, bioage_var, ymin, ymax){
+
+  var1 = enquo(var1)
+  var2 = enquo(var2)
+  bioage_var = enquo(bioage_var)
+  
+  df =
+    svydesign_2d %>%
+    group_by(!!var1, !!var2) %>%
+    summarise(bioage_var = survey_mean(!!bioage_var, na.rm = T)) %>%
+    ungroup() %>%
+    mutate(bioage_var = ifelse(bioage_var == 0, NA, bioage_var))
+  
+  colors <- colorRampPalette(c("blue", "red"))(length(levels(pull(df, !!var2))))
+  
+  ggplot(df, aes(x = !!var1, y = bioage_var)) +
+    geom_line(aes(color = !!var2, group = !!var2), linewidth = 0.5) +
+    geom_point(aes(color = !!var2)) +
+    theme_minimal() + 
+    ylab(as_label(bioage_var)) +
+    ylim(ymin, ymax) +
+    scale_x_discrete(breaks=c(20, 40, 60, 80)) +
+    scale_color_manual(values=colors)
+
+}
+
+plot2D_strat_f = function(var1, var2, bioage_var, ymin, ymax){
+    
+  var1 = enquo(var1)
+  var2 = enquo(var2)
+  bioage_var = enquo(bioage_var)
+  
+  df =
+    svydesign_2d %>%
+    group_by(!!var1, !!var2, gender, race) %>%
+    summarise(bioage_var = survey_mean(!!bioage_var, na.rm = T)) %>%
+    mutate(bioage_var = ifelse(bioage_var == 0, NA, bioage_var))
+  
+  colors <- colorRampPalette(c("blue", "red"))(length(levels(pull(df, !!var2))))
+
+  ggplot(df, aes(x = !!var1, y = bioage_var)) +
+    geom_line(aes(color = !!var2, group = !!var2), linewidth = 0.5) +
+    geom_point(aes(color = !!var2)) +
+    theme_minimal() + 
+    ylab(as_label(bioage_var)) +
+    facet_wrap(c("gender", "race")) +
+    ylim(ymin, ymax) +
+    scale_x_discrete(breaks=c(20, 40, 60, 80)) +
+    scale_color_manual(values=colors)
+  
+}
+```
+
+### Age effects by period - overall
+
+```{r echo = FALSE, warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+ap_phenoageadv_delta_elasticnet_scale_all = plot2D_all_f(age_4yr, period_4yr, phenoageadv_delta_elasticnet_scale, -1.5, 1.5)
+ap_kdmadv_delta_elasticnet_scale_all = plot2D_all_f(age_4yr, period_4yr, kdmadv_delta_elasticnet_scale, -1.5, 1.5)
+ap_hdlog_elasticnet_scale_all = plot2D_all_f(age_4yr, period_4yr, hdlog_elasticnet_scale, -1.5, 1.5)
+```
+
+### Age effects by period - stratified
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+ap_phenoageadv_delta_elasticnet_scale_strat = plot2D_strat_f(age_4yr, period_4yr, phenoageadv_delta_elasticnet_scale, -1.5, 1.5)
+ap_kdmadv_delta_elasticnet_scale_strat = plot2D_strat_f(age_4yr, period_4yr, kdmadv_delta_elasticnet_scale, -1.5, 1.5)
+ap_hdlog_elasticnet_scale_strat = plot2D_strat_f(age_4yr, period_4yr, hdlog_elasticnet_scale, -1.5, 1.5)
+```
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+(ap_phenoageadv_delta_elasticnet_scale_all + ap_phenoageadv_delta_elasticnet_scale_strat) /
+(ap_hdlog_elasticnet_scale_all + ap_hdlog_elasticnet_scale_strat) + plot_layout(guides = "collect")
+
+rm(ap_phenoageadv_delta_elasticnet_scale_all, ap_kdmadv_delta_elasticnet_scale_all, ap_hdlog_elasticnet_scale_all, ap_phenoageadv_delta_elasticnet_scale_strat, ap_kdmadv_delta_elasticnet_scale_strat, ap_hdlog_elasticnet_scale_strat)
+```
+
+
+### Age effects by cohort - overall
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+ac_phenoageadv_delta_elasticnet_scale_all = plot2D_all_f(age_4yr, cohort_4yr, phenoageadv_delta_elasticnet_scale, -1.5, 1.5)
+ac_kdmadv_delta_elasticnet_scale_all = plot2D_all_f(age_4yr, cohort_4yr, kdmadv_delta_elasticnet_scale, -1.5, 1.5)
+ac_hdlog_elasticnet_scale_all = plot2D_all_f(age_4yr, cohort_4yr, hdlog_elasticnet_scale, -1.5, 1.5)
+```
+
+### Age effects by cohort - stratified
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+ac_phenoageadv_delta_elasticnet_scale_strat = plot2D_strat_f(age_4yr, cohort_4yr, phenoageadv_delta_elasticnet_scale, -1.5, 1.5)
+ac_kdmadv_delta_elasticnet_scale_strat = plot2D_strat_f(age_4yr, cohort_4yr, kdmadv_delta_elasticnet_scale, -1.5, 1.5)
+ac_hdlog_elasticnet_scale_strat = plot2D_strat_f(age_4yr, cohort_4yr, hdlog_elasticnet_scale, -1.5, 1.5)
+```
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+(ac_phenoageadv_delta_elasticnet_scale_all + ac_phenoageadv_delta_elasticnet_scale_strat) / (ac_hdlog_elasticnet_scale_all + ac_hdlog_elasticnet_scale_strat) +  plot_layout(guides = "collect")
+
+rm(ac_phenoageadv_delta_elasticnet_scale_all, ac_kdmadv_delta_elasticnet_scale_all, ac_hdlog_elasticnet_scale_all, ac_phenoageadv_delta_elasticnet_scale_strat, ac_kdmadv_delta_elasticnet_scale_strat, ac_hdlog_elasticnet_scale_strat)
+```
+
+
+## Graphical assessment of two-dimensional period effects
+
+### Period effects by age - overall
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+pa_phenoageadv_delta_elasticnet_scale_all = plot2D_all_f(period_4yr, age_4yr, phenoageadv_delta_elasticnet_scale, -2, 2)
+pa_kdmadv_delta_elasticnet_scale_all = plot2D_all_f(period_4yr, age_4yr, kdmadv_delta_elasticnet_scale, -2, 2)
+pa_hdlog_elasticnet_scale_all = plot2D_all_f(period_4yr, age_4yr, hdlog_elasticnet_scale, -2, 2)
+
+pa_phenoageadv_delta_elasticnet_scale_all + pa_kdmadv_delta_elasticnet_scale_all + pa_hdlog_elasticnet_scale_all + plot_layout(guides = "collect")
+
+rm(pa_phenoageadv_delta_elasticnet_scale_all, pa_kdmadv_delta_elasticnet_scale_all, pa_hdlog_elasticnet_scale_all)
+```
+
+### Period effects by age - stratified
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+pa_phenoageadv_delta_elasticnet_scale_strat = plot2D_strat_f(period_4yr, age_4yr, phenoageadv_delta_elasticnet_scale, -2, 2)
+pa_kdmadv_delta_elasticnet_scale_strat = plot2D_strat_f(period_4yr, age_4yr, kdmadv_delta_elasticnet_scale, -2, 2)
+pa_hdlog_elasticnet_scale_strat = plot2D_strat_f(period_4yr, age_4yr, hdlog_elasticnet_scale, -2, 2)
+
+pa_phenoageadv_delta_elasticnet_scale_strat + pa_kdmadv_delta_elasticnet_scale_strat + pa_hdlog_elasticnet_scale_strat + plot_layout(guides = "collect")
+
+rm(pa_phenoageadv_delta_elasticnet_scale_strat, pa_kdmadv_delta_elasticnet_scale_strat, pa_hdlog_elasticnet_scale_strat)
+```
+
+### Period effects by cohort - overall
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+pc_phenoageadv_delta_elasticnet_scale_all = plot2D_all_f(period_4yr, cohort_4yr, phenoageadv_delta_elasticnet_scale, -2, 2)
+pc_kdmadv_delta_elasticnet_scale_all = plot2D_all_f(period_4yr, cohort_4yr, kdmadv_delta_elasticnet_scale, -2, 2)
+pc_hdlog_elasticnet_scale_all = plot2D_all_f(period_4yr, cohort_4yr, hdlog_elasticnet_scale, -2, 2)
+
+pc_phenoageadv_delta_elasticnet_scale_all + pc_kdmadv_delta_elasticnet_scale_all + pc_hdlog_elasticnet_scale_all + plot_layout(guides = "collect")
+
+rm(pc_phenoageadv_delta_elasticnet_scale_all, pc_kdmadv_delta_elasticnet_scale_all, pc_hdlog_elasticnet_scale_all)
+```
+
+### Period effects by cohort - stratified
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+pc_phenoageadv_delta_elasticnet_scale_strat = plot2D_strat_f(period_4yr, cohort_4yr, phenoageadv_delta_elasticnet_scale, -2, 2)
+pc_kdmadv_delta_elasticnet_scale_strat = plot2D_strat_f(period_4yr, cohort_4yr, kdmadv_delta_elasticnet_scale, -2, 2)
+pc_hdlog_elasticnet_scale_strat = plot2D_strat_f(period_4yr, cohort_4yr, hdlog_elasticnet_scale, -2, 2)
+
+pc_phenoageadv_delta_elasticnet_scale_strat + pc_kdmadv_delta_elasticnet_scale_strat + pc_hdlog_elasticnet_scale_strat + plot_layout(guides = "collect")
+
+rm(pc_phenoageadv_delta_elasticnet_scale_strat, pc_kdmadv_delta_elasticnet_scale_strat, pc_hdlog_elasticnet_scale_strat)
+```
+
+## Graphical assessment of two-dimensional cohort effects
+
+### Cohort effects by age - overall
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+ca_phenoageadv_delta_elasticnet_scale_all = plot2D_all_f(cohort_4yr, age_4yr, phenoageadv_delta_elasticnet_scale, -2, 2)
+ca_kdmadv_delta_elasticnet_scale_all = plot2D_all_f(cohort_4yr, age_4yr, kdmadv_delta_elasticnet_scale, -2, 2)
+ca_hdlog_elasticnet_scale_all = plot2D_all_f(cohort_4yr, age_4yr, hdlog_elasticnet_scale, -2, 2)
+
+ca_phenoageadv_delta_elasticnet_scale_all + ca_kdmadv_delta_elasticnet_scale_all + ca_hdlog_elasticnet_scale_all + plot_layout(guides = "collect")
+
+rm(ca_phenoageadv_delta_elasticnet_scale_all, ca_kdmadv_delta_elasticnet_scale_all, ca_hdlog_elasticnet_scale_all)
+```
+
+### Cohort effects by age - stratified
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+ca_phenoageadv_delta_elasticnet_scale_strat = plot2D_strat_f(cohort_4yr, age_4yr, phenoageadv_delta_elasticnet_scale, -2, 2)
+ca_kdmadv_delta_elasticnet_scale_strat = plot2D_strat_f(cohort_4yr, age_4yr, kdmadv_delta_elasticnet_scale, -2, 2)
+ca_hdlog_elasticnet_scale_strat = plot2D_strat_f(cohort_4yr, age_4yr, hdlog_elasticnet_scale, -2, 2)
+
+ca_phenoageadv_delta_elasticnet_scale_strat + ca_kdmadv_delta_elasticnet_scale_strat + ca_hdlog_elasticnet_scale_strat + plot_layout(guides = "collect")
+
+rm(ca_phenoageadv_delta_elasticnet_scale_strat, ca_kdmadv_delta_elasticnet_scale_strat, ca_hdlog_elasticnet_scale_strat)
+```
+
+### Cohort effects by period - overall
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+cp_phenoageadv_delta_elasticnet_scale_all = plot2D_all_f(cohort_4yr, period_4yr, phenoageadv_delta_elasticnet_scale, -2, 2)
+cp_kdmadv_delta_elasticnet_scale_all = plot2D_all_f(cohort_4yr, period_4yr, kdmadv_delta_elasticnet_scale, -2, 2)
+cp_hdlog_elasticnet_scale_all = plot2D_all_f(cohort_4yr, period_4yr, hdlog_elasticnet_scale, -2, 2)
+
+cp_phenoageadv_delta_elasticnet_scale_all + cp_kdmadv_delta_elasticnet_scale_all + cp_hdlog_elasticnet_scale_all + plot_layout(guides = "collect")
+
+rm(cp_phenoageadv_delta_elasticnet_scale_all, cp_kdmadv_delta_elasticnet_scale_all, cp_hdlog_elasticnet_scale_all)
+```
+
+### Cohort effects by period - stratified
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+cp_phenoageadv_delta_elasticnet_scale_strat = plot2D_strat_f(cohort_4yr, period_4yr, phenoageadv_delta_elasticnet_scale, -2, 2)
+cp_kdmadv_delta_elasticnet_scale_strat = plot2D_strat_f(cohort_4yr, period_4yr, kdmadv_delta_elasticnet_scale, -2, 2)
+cp_hdlog_elasticnet_scale_strat = plot2D_strat_f(cohort_4yr, period_4yr, hdlog_elasticnet_scale, -2, 2)
+
+cp_phenoageadv_delta_elasticnet_scale_strat + cp_kdmadv_delta_elasticnet_scale_strat + cp_hdlog_elasticnet_scale_strat + plot_layout(guides = "collect")
+
+rm(cp_phenoageadv_delta_elasticnet_scale_strat, cp_kdmadv_delta_elasticnet_scale_strat, cp_hdlog_elasticnet_scale_strat)
+```

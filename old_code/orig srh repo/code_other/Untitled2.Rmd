@@ -1,0 +1,373 @@
+---
+title: "srh"
+author: "Christine Lucille Kuryla"
+date: "2025-05-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+# R code for keyword trend analysis
+
+# Install required packages
+# install.packages(c("bibliometrix", "ggplot2", "dplyr"))
+
+library(bibliometrix)
+library(ggplot2)
+library(dplyr)
+
+# Method 1: Using bibliometrix for Web of Science/Scopus data
+analyze_keyword_trend <- function(file_path, keyword) {
+  # Read bibliographic data (supports .bib, .txt from WoS/Scopus)
+  M <- convert2df(file = file_path, dbsource = "wos", format = "plaintext")
+  
+  # Extract year and search for keyword
+  M$YEAR <- as.numeric(M$PY)
+  
+  # Filter articles containing keyword in title or abstract
+  keyword_pattern <- paste0("(?i)", keyword)  # case-insensitive
+  M_filtered <- M[grepl(keyword_pattern, M$TI) | grepl(keyword_pattern, M$AB), ]
+  
+  # Count by year
+  yearly_counts <- M_filtered %>%
+    group_by(YEAR) %>%
+    summarise(count = n()) %>%
+    arrange(YEAR)
+  
+  # Create publication trend plot
+  p <- ggplot(yearly_counts, aes(x = YEAR, y = count)) +
+    geom_line(size = 1.5, color = "#2E86AB") +
+    geom_point(size = 4, color = "#2E86AB") +
+    geom_area(alpha = 0.3, fill = "#2E86AB") +
+    labs(title = paste("Articles Containing '", keyword, "' Over Time", sep = ""),
+         x = "Year",
+         y = "Number of Articles") +
+    theme_minimal() +
+    theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+          axis.title = element_text(size = 12, face = "bold"))
+  
+  print(p)
+  
+  return(yearly_counts)
+}
+
+# Method 2: Manual data visualization with enhanced styling
+create_trend_plot <- function(years, counts, keyword) {
+  data <- data.frame(year = years, count = counts)
+  
+  # Calculate trend statistics
+  total_articles <- sum(counts)
+  avg_per_year <- mean(counts)
+  growth_rate <- (counts[length(counts)] / counts[1] - 1) * 100
+  
+  # Create the plot
+  p <- ggplot(data, aes(x = year, y = count)) +
+    # Add trend line
+    geom_smooth(method = "loess", se = TRUE, color = "red", alpha = 0.2) +
+    # Add main line and points
+    geom_line(size = 1.5, color = "#2E86AB") +
+    geom_point(size = 4, color = "#2E86AB") +
+    # Add value labels
+    geom_text(aes(label = count), vjust = -1, size = 3) +
+    # Styling
+    labs(title = paste("Trend Analysis: '", keyword, "'", sep = ""),
+         subtitle = paste("Total articles:", total_articles, 
+                         "| Avg/year:", round(avg_per_year, 1),
+                         "| Growth:", round(growth_rate, 1), "%"),
+         x = "Year",
+         y = "Number of Articles") +
+    theme_minimal() +
+    theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+          plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray40"),
+          axis.title = element_text(size = 12, face = "bold")) +
+    scale_x_continuous(breaks = years) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.1)))
+  
+  print(p)
+}
+
+# Method 3: Create combined trend plot for multiple keywords
+compare_keywords <- function(keywords_list, years_range) {
+  # Example data structure - replace with your actual data
+  data <- data.frame()
+  
+  # Simulated data for demonstration
+  set.seed(123)
+  for (keyword in keywords_list) {
+    yearly_data <- data.frame(
+      year = years_range,
+      count = round(runif(length(years_range), 10, 100) * 
+                   seq(1, 2, length.out = length(years_range))),
+      keyword = keyword
+    )
+    data <- rbind(data, yearly_data)
+  }
+  
+  # Create comparison plot
+  p <- ggplot(data, aes(x = year, y = count, color = keyword)) +
+    geom_line(size = 1.5) +
+    geom_point(size = 3) +
+    labs(title = "Keyword Trends Comparison",
+         x = "Year",
+         y = "Number of Articles",
+         color = "Keyword") +
+    theme_minimal() +
+    theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+          axis.title = element_text(size = 12, face = "bold"),
+          legend.position = "bottom") +
+    scale_color_brewer(palette = "Set1")
+  
+  print(p)
+}
+
+# Example usage:
+# Single keyword trend
+years <- 2015:2024
+counts <- c(45, 52, 68, 89, 125, 156, 189, 234, 267, 198)
+create_trend_plot(years, counts, "self-rated health")
+
+# Compare multiple keywords
+# compare_keywords(c("AI", "machine learning", "deep learning"), 2015:2024)
+
+```
+
+```{r}
+
+# Self-Rated Health Article Trend Analysis
+# Install required packages if needed:
+# install.packages(c("ggplot2", "dplyr", "scales", "ggthemes", "bibliometrix"))
+
+library(ggplot2)
+library(dplyr)
+library(scales)
+library(ggthemes)
+
+# Method 1: Using actual PubMed data via rentrez
+# install.packages("rentrez")
+library(rentrez)
+
+fetch_pubmed_trend <- function(start_year = 1970, end_year = 2024) {
+  years <- start_year:end_year
+  counts <- numeric(length(years))
+  
+  # Search PubMed for each year
+  for (i in seq_along(years)) {
+    year <- years[i]
+    
+    # PubMed search query for "self-rated health" in title/abstract
+    query <- sprintf('"self-rated health"[Title/Abstract] AND %d[DP]', year)
+    
+    # Get count of results
+    search_result <- entrez_search(db = "pubmed", term = query, retmax = 0)
+    counts[i] <- search_result$count
+    
+    # Print progress
+    cat(sprintf("Year %d: %d articles\n", year, counts[i]))
+    
+    # Be nice to NCBI servers
+    Sys.sleep(0.3)
+  }
+  
+  return(data.frame(year = years, count = counts))
+}
+
+# Method 2: Create visualization with simulated data
+# (Use this to test visualization while collecting real data)
+create_sample_data <- function() {
+  # Simulating realistic growth pattern for "self-rated health" articles
+  set.seed(42)
+  years <- 2000:2024
+  
+  # Base trend with exponential growth
+  base_trend <- 50 * exp((years - 2000) * 0.08)
+  
+  # Add some noise
+  noise <- rnorm(length(years), mean = 0, sd = base_trend * 0.1)
+  counts <- round(base_trend + noise)
+  
+  # Add a boost around 2020 (COVID-19 effect)
+  covid_boost <- ifelse(years >= 2020, counts * 0.3, 0)
+  counts <- round(counts + covid_boost)
+  
+  return(data.frame(year = years, count = counts))
+}
+
+# Create the trend plot
+plot_article_trend <- function(data, keyword = "Self-Rated Health") {
+  # Calculate statistics
+  total_articles <- sum(data$count)
+  avg_per_year <- mean(data$count)
+  
+  # Calculate year-over-year growth
+  data$growth_rate <- c(NA, diff(data$count) / data$count[-length(data$count)] * 100)
+  avg_growth <- mean(data$growth_rate, na.rm = TRUE)
+  
+  # Create the main plot
+  p <- ggplot(data, aes(x = year, y = count)) +
+    # Add smoothed trend line
+ #   geom_smooth(method = "loess", span = 0.3, se = TRUE, 
+ #               color = "#E74C3C", fill = "#E74C3C", alpha = 0.2) +
+    
+    # Add the actual data line
+    geom_line(size = 1.2, color = "grey") +
+    
+    # Add points
+    geom_point(color = "cornflowerblue", fill = "cornflowerblue", shape = 21, stroke = 1.5) +
+    
+    # Add title and labels
+    labs(
+      title = sprintf('Articles Containing "%s" in PubMed', keyword),
+      subtitle = sprintf("Total: %s articles",total_articles),
+   #   subtitle = sprintf("Total: %s articles | Average: %.0f/year | Avg. growth: %.1f%%/year",
+             #           format(total_articles, big.mark = ","), avg_per_year, avg_growth),
+      x = "Year",
+      y = "Number of Articles",
+      caption = "Data source: PubMed database"
+    ) +
+    
+    # Use a clean theme
+    theme_minimal() +
+    
+    # Customize theme
+    theme(
+   #   plot.title = element_text(size = 18, #face = "bold",
+   #                             hjust = 0.5),
+    #  plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray40"),
+    #  axis.title = element_text(size = 14),#, face = "bold"),
+    #  axis.text = element_text(size = 11),
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      panel.grid.minor = element_blank(),
+      panel.grid.major = element_line(color = "gray90") #,
+    #  plot.caption = element_text(size = 10, color = "gray60", hjust = 1)
+    ) +
+    
+    # Format y-axis with comma separator
+    scale_y_continuous(labels = comma, expand = expansion(mult = c(0.02, 0.1))) +
+    
+    # Ensure all years are shown on x-axis
+    scale_x_continuous(breaks = seq(min(data$year), max(data$year), by = 2)) 
+  
+  return(p)
+}
+
+plot_article_trend(sample_data)
+
+# Method 3: Create an enhanced visualization with annotations
+create_annotated_plot <- function(data, keyword = "self-rated health") {
+  # Identify key points
+  max_point <- data[which.max(data$count), ]
+  min_point <- data[which.min(data$count), ]
+  recent_point <- data[nrow(data), ]
+  
+  p <- plot_article_trend(data, keyword) +
+    
+    # Add annotations for key events
+    annotate("text", x = 2008, y = max(data$count) * 0.3, 
+             label = "2008 Financial Crisis\n(Health disparities research)", 
+             size = 3, color = "gray40", hjust = 0) +
+    
+    annotate("text", x = 2020, y = max(data$count) * 0.8, 
+             label = "COVID-19 Pandemic\n(Surge in health research)", 
+             size = 3, color = "gray40", hjust = 0) +
+    
+    # Add value labels for selected years
+    geom_text(data = data[data$year %% 5 == 0, ], 
+              aes(label = count), 
+              vjust = -1.5, size = 3, color = "gray30")
+  
+  return(p)
+}
+
+# Method 4: Create a decomposed view (trend + seasonal + random)
+analyze_time_series <- function(data) {
+  # Convert to time series
+  ts_data <- ts(data$count, start = min(data$year), frequency = 1)
+  
+  # Create a 2-panel plot
+  par(mfrow = c(2, 1), mar = c(4, 4, 3, 2))
+  
+  # Panel 1: Original time series
+  plot(ts_data, main = "Self-Rated Health Articles: Time Series", 
+       ylab = "Number of Articles", xlab = "Year", lwd = 2, col = "#2C3E50")
+  grid()
+  
+  # Panel 2: Year-over-year growth rate
+  growth_rate <- diff(data$count) / data$count[-length(data$count)] * 100
+  plot(data$year[-1], growth_rate, type = "b", 
+       main = "Year-over-Year Growth Rate (%)", 
+       ylab = "Growth Rate (%)", xlab = "Year", 
+       lwd = 2, col = "#E74C3C", pch = 19)
+  abline(h = 0, lty = 2, col = "gray")
+  abline(h = mean(growth_rate), lty = 2, col = "blue")
+  grid()
+  
+  par(mfrow = c(1, 1))
+}
+
+# Method 5: Using bibliometrix for Web of Science/Scopus data
+analyze_bibliometric_data <- function(file_path) {
+  library(bibliometrix)
+  
+  # Read bibliographic data
+  M <- convert2df(file = file_path, dbsource = "wos", format = "plaintext")
+  
+  # Filter for "self-rated health"
+  srh_filter <- grepl("self-rated health|self rated health", M$AB, ignore.case = TRUE) |
+                grepl("self-rated health|self rated health", M$TI, ignore.case = TRUE)
+  
+  M_srh <- M[srh_filter, ]
+  
+  # Create yearly production
+  prod <- data.frame(year = as.numeric(M_srh$PY))
+  yearly_prod <- prod %>%
+    group_by(year) %>%
+    summarise(count = n()) %>%
+    arrange(year)
+  
+  return(yearly_prod)
+}
+
+# MAIN EXECUTION
+# Option 1: Use real PubMed data (uncomment to use)
+cat("Fetching data from PubMed...\n")
+pubmed_data <- fetch_pubmed_trend(2000, 2024)
+plot1 <- plot_article_trend(pubmed_data)
+print(plot1)
+
+# Option 2: Use simulated data for demonstration
+cat("Creating visualization with simulated data...\n")
+sample_data <- create_sample_data()
+
+sample_data <- year_data
+
+# Create basic plot
+plot1 <- plot_article_trend(sample_data)
+print(plot1)
+
+# Create annotated plot
+plot2 <- create_annotated_plot(sample_data)
+print(plot2)
+
+# Analyze time series
+analyze_time_series(sample_data)
+
+# Save the plot
+#ggsave("self_rated_health_trend.png", plot = plot2, width = 12, height = 8, dpi = 300)
+cat("\nPlot saved as 'self_rated_health_trend.png'\n")
+
+# Print summary statistics
+cat("\nSummary Statistics:\n")
+cat("==================\n")
+print(summary(sample_data$count))
+cat(sprintf("\nTotal articles (2000-2024): %d\n", sum(sample_data$count)))
+cat(sprintf("Average annual growth rate: %.1f%%\n", 
+            mean(diff(sample_data$count)/sample_data$count[-length(sample_data$count)] * 100)))
+cat(sprintf("Articles in 2024 vs 2000: %.1fx increase\n", 
+            sample_data$count[nrow(sample_data)] / sample_data$count[1]))
+
+```
+

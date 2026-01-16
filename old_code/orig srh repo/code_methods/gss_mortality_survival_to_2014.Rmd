@@ -1,0 +1,1482 @@
+---
+title: 'Mortality and SRH: GSS 2014'
+author: "Christine Lucille Kuryla"
+date: "2025-01-03"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(Hmisc)
+library(here)
+library(tidyverse)
+
+```
+
+# Context
+
+Self-rated health (SRH) is often used because of its well-documented association with mortality, even beyond comorbidities and other covariates. Here, we explore whether the predictive power of SRH on mortality has changed over the years in the GSS dataset. 
+
+We will use the General Social Survey (GSS). For the years 1980 - 2010, there is a variable `death` which is the possible vital status as of 2014 (SRH is not availabe for 1978). https://gssdataexplorer.norc.org/variables/7426/vshow 
+
+GSS is done approximately biannually, so we have 19 waves of data.
+
+https://chatgpt.com/share/6777c9b5-551c-8002-9603-e2d1856253e7
+https://claude.ai/chat/6c281c0b-d282-43af-a648-044529888668 
+
+# Limitations
+
+The optimal analysis here would be survival analysis, however, we do know know the year of death for each person, only whether they were alive or deceased in 2014. 
+
+We must recognize the limitation of a single binary outcome (“Alive/Dead by 2014”). The simplest binary logistic approach (alive vs. dead by 2014) effectively treats someone interviewed in 1978 and followed for 36 years the same as someone interviewed in 2010 and followed for only 4 years. If the older wave has higher mortality simply because they’ve had more time to die, that might artificially inflate differences across survey years. Consequence: Period effect might get conflated with time at risk. We may see stronger SRH–mortality associations in older data simply because more events (deaths) could have occurred.
+
+
+# Load data
+
+```{r, include = TRUE}
+
+#data_gss <- read_csv(here("data/cleaned/gss_groups.csv")) %>% 
+
+data_gss <- read_csv(here("data/extracted_gss_variables.csv")) %>% 
+  filter(cohort != 9999) %>% 
+  filter(!(is.na(death))) %>% 
+  filter(!(is.na(health))) %>% 
+#  na.omit() %>% 
+  mutate(health = 5 - health)  %>%  # reverse the coding so it's more intuitive (higher number for excellent, lower number for poor)
+  mutate(happy = 4 - happy) %>% # same
+  mutate(life = 4 - life) %>% # reverse again, these variables tend to be unintuitively ordered!!!
+  mutate(satfin = 4 - satfin) %>% # same again!
+    mutate(
+    health_cat = factor(health, 
+                        levels = 1:4,
+                        labels = c("Poor", "Fair", "Good", "Excellent")),
+    # period_cut_6 = as.factor(cut(data_gss$year, 6)),
+    # period_cut_10 = as.factor(cut(data_gss$year, 10)),
+    # period_cut_12 = as.factor(cut(data_gss$year, 12)),
+    # period_groups = as.factor(cut(data_gss$year, 12)),
+    # period_7yr = as.factor(
+    #                         cut(
+    #                         year,
+    #                         breaks = c(1973, 1982, 1990, 1998, 2006, 2014, Inf),
+    #                         labels = c("1974-1982", "1983-1990", "1991-1998", 
+    #                                    "1999-2006", "2007-2014", "2015-2022"),
+    #                         right = TRUE
+    #                         )
+    #                       ),
+    # period_5yr = as.factor(
+    #                         cut(
+    #                         year,
+    #                         breaks = c(1973, 1978, 1984, 1989, 1994, 1999, 2004, 2009 ,2014, Inf),
+    #                         labels = c("1974-1979", "1982-1990", "1990-1998", 
+    #                                    "1998-2006", "2006-2014", "2014-2022"),
+    #                         right = TRUE
+    #                         )
+    #                       ),
+    period_decade = as.factor(
+                            cut(
+                            year,
+                            breaks = c(1973, 1979, 1989, 1999, 2009, 2019, Inf),
+                            labels = c("1974-1979", "1980-1989", "1990-1999",
+                                       "2000-2009", "2010-2019", "2020-2024"),
+                            right = TRUE
+                            )
+                          ),
+    age_group = as.factor( 
+                            cut(
+                            age,
+                            breaks = c(17, 29, 39, 49, 59, 69, Inf),
+                            labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            right = TRUE
+                          )),
+    age_groups = as.factor( 
+                            cut(
+                            age,
+                            breaks = c(17, 29, 39, 49, 59, 69, Inf),
+                            labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            right = TRUE
+                          )),
+    age_group_small = as.factor( 
+                            cut(
+                              age,
+                              breaks = c(seq(15, 75, by = 5), Inf),  # Define breaks up to 75 and include Inf for the last group
+                              labels = c("16-20", "21-25", "26-30", "31-35", "36-40", "41-45", "46-50", "51-55", "56-60", "61-65", "66-70", "71-75", "76+"),
+                              right = FALSE  # Makes intervals left-closed, i.e., [x, y)
+                            )
+                          )
+                          ,
+    generation_5total = factor(
+      case_when(
+        cohort >= 1901 & cohort <= 1927 ~ "Greatest (1901-1927)",
+        cohort >= 1928 & cohort <= 1945 ~ "Silent (1928-1945)",
+        cohort >= 1946 & cohort <= 1964 ~ "Boomers (1946-1964)",
+        cohort >= 1965 & cohort <= 1980 ~ "Gen X (1965-1980)",
+        # cohort >= 1981 & cohort <= 1996 ~ "Millennials (1981-1996)",
+        # cohort >= 1997 & cohort <= 2012 ~ "Gen Z (1997-2012)",
+        cohort >= 1981  ~ "Millennials / Gen Z (1981-2004)",
+        TRUE ~ "Other"
+      ),
+      levels = c(
+        "Greatest (1901-1927)",
+        "Silent (1928-1945)",
+        "Boomers (1946-1964)",
+        "Gen X (1965-1980)",
+        "Millennials / Gen Z (1981-2004)"
+       # "Millennials (1981-1996)",
+      #  "Gen Z (1997-2012)"#,
+     #   "Other"
+      )
+    ),
+    generation_10total = factor(
+      case_when(
+        generation_5total == "Greatest (1901-1927)" & cohort <= 1914 ~ "Greatest Early (1901-1914)",
+        generation_5total == "Greatest (1901-1927)" & cohort > 1914 ~ "Greatest Late (1915-1927)",
+        generation_5total == "Silent (1928-1945)" & cohort <= 1936 ~ "Silent Early (1928-1936)",
+        generation_5total == "Silent (1928-1945)" & cohort > 1936 ~ "Silent Late (1937-1945)",
+        generation_5total == "Boomers (1946-1964)" & cohort <= 1955 ~ "Boomers Early (1946-1955)",
+        generation_5total == "Boomers (1946-1964)" & cohort > 1955 ~ "Boomers Late (1956-1964)",
+        generation_5total == "Gen X (1965-1980)" & cohort <= 1972 ~ "Gen X Early (1965-1972)",
+        generation_5total == "Gen X (1965-1980)" & cohort > 1972 ~ "Gen X Late (1973-1980)",
+        cohort >= 1981 & cohort <= 1988 ~ "Millennials Early (1981-1988)",
+        cohort > 1988 ~ "Millennials Late / Gen Z Early (1989-2004)",
+        # generation == "Millennials (1981-1996)" & cohort > 1988 ~ "Millennials Late (1989-1996)",
+        # generation == "Gen Z (1997-2012)" & cohort <= 2004 ~ "Gen Z Early (1997-2004)",
+        # generation == "Gen Z (1997-2012)" & cohort > 2004 ~ "Gen Z Late (2005-2012)",
+        TRUE ~ "Other"
+      ),
+      levels = c(
+        "Greatest Early (1901-1914)", "Greatest Late (1915-1927)",
+        "Silent Early (1928-1936)", "Silent Late (1937-1945)",
+        "Boomers Early (1946-1955)", "Boomers Late (1956-1964)",
+        "Gen X Early (1965-1972)", "Gen X Late (1973-1980)",
+        "Millennials Early (1981-1988)", "Millennials Late / Gen Z Early (1989-2004)"
+      #  "Millennials Early (1981-1988)", "Millennials Late (1989-1996)",
+      #  "Gen Z Early (1997-2004)", "Gen Z Late (2005-2012)"#,
+     #   "Other"
+      )
+    ),
+    generation_15total = factor(
+      case_when(
+        cohort >= 1900 & cohort <= 1910 ~ "Greatest Early (1901-1910)",
+        cohort >= 1911 & cohort <= 1918 ~ "Greatest Mid (1911-1918)",
+        cohort >= 1919 & cohort <= 1927 ~ "Greatest Late (1919-1927)",
+        cohort >= 1928 & cohort <= 1934 ~ "Silent Early (1928-1934)",
+        cohort >= 1935 & cohort <= 1940 ~ "Silent Mid (1935-1940)",
+        cohort >= 1941 & cohort <= 1945 ~ "Silent Late (1941-1945)",
+        cohort >= 1945 & cohort <= 1951 ~ "Boomers Early (1946-1951)",
+        cohort >= 1952 & cohort <= 1958 ~ "Boomers Mid (1952-1958)",
+        cohort >= 1959 & cohort <= 1964 ~ "Boomers Late (1959-1964)",
+        cohort >= 1965 & cohort <= 1970 ~ "Gen X Early (1965-1970)",
+        cohort >= 1971 & cohort <= 1976 ~ "Gen X Mid (1971-1976)",
+        cohort >= 1977 & cohort <= 1980 ~ "Gen X Late (1977-1980)",
+        cohort >= 1981 & cohort <= 1986 ~ "Millennials Early (1981-1986)",
+        cohort >= 1987 & cohort <= 1992 ~ "Millennials Mid (1987-1992)",
+        cohort >= 1993 ~ "Millennials Late / Gen Z (1993-2004)",
+    #    generation == "Gen Z (1997-2012)" & cohort <= 2002 ~ "Gen Z Early (1997-2002)",
+    #    generation == "Gen Z (1997-2012)" & cohort > 2002 & cohort <= 2008 ~ "Gen Z Mid (2003-2008)",
+    #    generation == "Gen Z (1997-2012)" & cohort > 2008 ~ "Gen Z Late (2009-2012)",
+        TRUE ~ "Other"
+      ),
+      levels = c(
+        "Greatest Early (1901-1910)", "Greatest Mid (1911-1918)", "Greatest Late (1919-1927)",
+        "Silent Early (1928-1934)", "Silent Mid (1935-1940)", "Silent Late (1941-1945)",
+        "Boomers Early (1946-1951)", "Boomers Mid (1952-1958)", "Boomers Late (1959-1964)",
+        "Gen X Early (1965-1970)", "Gen X Mid (1971-1976)", "Gen X Late (1977-1980)",
+        "Millennials Early (1981-1986)", "Millennials Mid (1987-1992)", 
+        "Millennials Late / Gen Z (1993-2004)"
+        #"Millennials Late (1993-1996)",
+      #  "Gen Z Early (1997-2002)", "Gen Z Mid (2003-2008)", "Gen Z Late (2009-2012)" #,
+      #  "Other"
+      )
+    )
+  ) %>% 
+  mutate(
+    # 2-year periods
+    period_2yr = as.factor(
+      cut(
+        year,
+        breaks = c(
+          1973, 1975, 1977, 1979, 1981, 1983, 1985, 1987, 1989, 1991,
+          1993, 1995, 1997, 1999, 2001, 2003, 2005, 2007, 2009, 2011,
+          2013, 2015, 2017, 2019, 2021, Inf
+        ),
+        labels = c(
+          "1974-1975", "1976-1977", "1978-1979", "1980-1981", "1982-1983",
+          "1984-1985", "1986-1987", "1988-1989", "1990-1991", "1992-1993",
+          "1994-1995", "1996-1997", "1998-1999", "2000-2001", "2002-2003",
+          "2004-2005", "2006-2007", "2008-2009", "2010-2011", "2012-2013",
+          "2014-2015", "2016-2017", "2018-2019", "2020-2021", "2022-2022"
+        ),
+        right = TRUE
+      )
+    ),
+    
+    # 3-year periods
+    period_3yr = as.factor(
+      cut(
+        year,
+        breaks = c(
+          1973, 1976, 1979, 1982, 1985, 1988, 1991, 1994, 1997, 2000,
+          2003, 2006, 2009, 2012, 2015, 2018, 2021, Inf
+        ),
+        labels = c(
+          "1974-1976", "1977-1979", "1980-1982", "1983-1985",
+          "1986-1988", "1989-1991", "1992-1994", "1995-1997",
+          "1998-2000", "2001-2003", "2004-2006", "2007-2009",
+          "2010-2012", "2013-2015", "2016-2018", "2019-2021", "2022-2022"
+        ),
+        right = TRUE
+      )
+    ),
+    
+    # 5-year periods
+    period_5yr = as.factor(
+      cut(
+        year,
+        breaks = c(
+          1973, 1978, 1983, 1988, 1993, 1998, 2003, 2008, 2013, 2018, Inf
+        ),
+        labels = c(
+          "1974-1978", "1979-1983", "1984-1988", "1989-1993",
+          "1994-1998", "1999-2003", "2004-2008", "2009-2013",
+          "2014-2018", "2019-2022"
+        ),
+        right = TRUE
+      )
+    ),
+    
+    # 7-year periods
+    period_7yr = as.factor(
+      cut(
+        year,
+        breaks = c(
+          1973, 1980, 1987, 1994, 2001, 2008, 2015, Inf
+        ),
+        labels = c(
+          "1974-1980", "1981-1987", "1988-1994",
+          "1995-2001", "2002-2008", "2009-2015", "2016-2022"
+        ),
+        right = TRUE
+      )
+    ),
+    
+    # 8-year periods
+    period_8yr = as.factor(
+      cut(
+        year,
+        breaks = c(
+          1973, 1981, 1989, 1997, 2005, 2013, 2021, Inf
+        ),
+        labels = c(
+          "1974-1981", "1982-1989", "1990-1997",
+          "1998-2005", "2006-2013", "2014-2021", "2022-2022"
+        ),
+        right = TRUE
+      )
+    ),
+    
+    # 10-year periods
+    period_10yr = as.factor(
+      cut(
+        year,
+        breaks = c(
+          1973, 1983, 1993, 2003, 2013, Inf
+        ),
+        labels = c(
+          "1974-1983", "1984-1993", "1994-2003",
+          "2004-2013", "2014-2022"
+        ),
+        right = TRUE
+      )
+    )
+  ) %>% 
+  mutate(period_7total = period_7yr,
+         period_10total = period_5yr,
+         period_17total = period_3yr) %>% 
+  mutate(
+    # -----------------------
+    # 6 AGE CATEGORIES
+    # -----------------------
+    age_6cat = as.factor(
+      cut(
+        age,
+        # 7 breakpoints --> 6 intervals
+        breaks = c(17, 30, 40, 50, 60, 70, 89),
+        labels = c(
+          "18-29",  # (17, 30]
+          "30-39",  # (30, 40]
+          "40-49",  # (40, 50]
+          "50-59",  # (50, 60]
+          "60-69",  # (60, 70]
+          "70-89"   # (70, 89]
+        ),
+        right = TRUE
+      )
+    ),
+    
+    # -----------------------
+    # 10 AGE CATEGORIES
+    # -----------------------
+    age_10cat = as.factor(
+      cut(
+        age,
+        # 11 breakpoints --> 10 intervals
+        breaks = c(17, 24, 31, 38, 45, 52, 59, 66, 73, 80, 89),
+        labels = c(
+          "18-24",  # (17, 24]
+          "25-31",  # (24, 31]
+          "32-38",  # (31, 38]
+          "39-45",  # (38, 45]
+          "46-52",  # (45, 52]
+          "53-59",  # (52, 59]
+          "60-66",  # (59, 66]
+          "67-73",  # (66, 73]
+          "74-80",  # (73, 80]
+          "81-89"   # (80, 89]
+        ),
+        right = TRUE
+      )
+    ),
+    
+    # -----------------------
+    # 16 AGE CATEGORIES
+    # -----------------------
+    age_16cat = as.factor(
+      cut(
+        age,
+        # 17 breakpoints --> 16 intervals
+        breaks = c(17, 22, 27, 32, 37, 42, 47, 52, 57, 62, 67, 72, 77, 82, 85, 87, 89),
+        labels = c(
+          "18-22",  # (17, 22]
+          "23-27",  # (22, 27]
+          "28-32",  # (27, 32]
+          "33-37",  # (32, 37]
+          "38-42",  # (37, 42]
+          "43-47",  # (42, 47]
+          "48-52",  # (47, 52]
+          "53-57",  # (52, 57]
+          "58-62",  # (57, 62]
+          "63-67",  # (62, 67]
+          "68-72",  # (67, 72]
+          "73-77",  # (72, 77]
+          "78-82",  # (77, 82]
+          "83-85",  # (82, 85]
+          "86-87",  # (85, 87]
+          "88-89"   # (87, 89]
+        ),
+        right = TRUE
+      )
+    )
+    
+  ) %>% 
+    mutate(srh_num = health,
+         srh_cat = health_cat) 
+
+glimpse(data_gss)
+summary(data_gss)
+
+table(data_gss$generation_5total)
+table(data_gss$generation_10total)
+table(data_gss$generation_15total)
+
+table(data_gss$period_7total)
+table(data_gss$period_10total)
+table(data_gss$period_17total)
+
+table(data_gss$srh_num)
+
+summary(data_gss$age)
+
+```
+
+### Add more variables and inspect data
+
+```{r}
+
+data_gss <- data_gss %>% 
+  mutate(id = row_number()) %>% 
+  mutate(SRH = health) %>% 
+  mutate(birth_year = cohort) %>% 
+  mutate(died_by_2014 = death - 1) %>% 
+  mutate(time_at_risk = 2014 - year)
+
+# glimpse(data_gss)
+# summary(data_gss)
+
+table(data_gss$generation_5total)
+table(data_gss$generation_10total)
+table(data_gss$generation_15total)
+
+table(data_gss$period_7total)
+table(data_gss$period_10total)
+table(data_gss$period_17total)
+
+table(data_gss$SRH)
+table(data_gss$died_by_2014)
+
+summary(data_gss$age)
+
+df <- data_gss
+
+```
+
+
+# Method 1: Control for "years of exposure" or "time at risk"
+
+Basic Logistic Regression with SRH × Period and time_at_risk, Using Survey Weights
+
+Goal: Test whether SRH’s predictive effect on mortality differs by period (or interview year), while controlling for how long each respondent was “at risk” before 2014, and properly accounting for survey weights.
+
+Why SRH × Period? You want to see if SRH’s predictive power differs in earlier vs. later survey years.
+Why time_at_risk? People interviewed earlier (e.g., 1978) have more years to die before 2014 than those interviewed later (e.g., 2010).
+
+Controlling for time_at_risk ensures that differences in mortality across periods aren’t merely because of differing follow-up lengths.
+
+Interpretation:
+time_at_risk adjusts for the fact that earlier surveys have longer follow-up.
+The interaction (SRH * factor(year)) tests whether SRH’s effect differs systematically by year.
+interpret the result as an odds ratio.
+
+```{r}
+library(survey)
+
+# Simple survey design with only weights
+des <- svydesign(
+  id = ~1,          # no clustering variable here, if none available
+  weights = ~wtsscomp,     # your survey weight variable name
+  data = df
+)
+
+# Fit a logistic regression (svyglm) with SRH × factor(year) + time_at_risk
+model_svy_logit_period <- svyglm(
+  formula = died_by_2014 ~ SRH * factor(period_10total) + time_at_risk + age,
+  design  = des,
+  family  = quasibinomial(link = "logit")
+)
+# Note: quasibinomial is often used to get robust SEs with survey data;
+# you can also try family=binomial if you prefer.
+
+summary(model_svy_logit_period)
+
+# Fit a logistic regression (svyglm) with SRH × factor(year) + time_at_risk
+model_svy_logit_period <- svyglm(
+  formula = died_by_2014 ~ SRH * factor(period_7total) + time_at_risk + age,
+  design  = des,
+  family  = quasibinomial(link = "logit")
+)
+# Note: quasibinomial is often used to get robust SEs with survey data;
+# you can also try family=binomial if you prefer.
+
+summary(model_svy_logit_period)
+
+```
+
+### Interpretation of results
+
+This model examines SRH × Period interactions while controlling for time_at_risk. The results show:
+
+SRH becomes increasingly predictive of mortality in later periods
+The baseline SRH coefficient starts at -0.096 (p=0.089)
+The interaction terms become larger and more significant over time:
+
+1994-1998: -0.299 (p<0.001)
+2004-2008: -0.367 (p<0.001)
+
+Age and time_at_risk remain highly significant predictors
+
+This suggests the predictive power of SRH has strengthened over time, even after accounting for differential follow-up periods.
+
+```{r}
+#
+
+# Fit a logistic regression (svyglm) with SRH × factor(cohort) + time_at_risk
+model_svy_logit_cohort <- svyglm(
+  formula = died_by_2014 ~ SRH * factor(generation_10total) + time_at_risk + age,
+  design  = des,
+  family  = quasibinomial(link = "logit")
+)
+# Note: quasibinomial is often used to get robust SEs with survey data;
+# you can also try family=binomial if you prefer.
+
+summary(model_svy_logit_cohort)
+
+# Fit a logistic regression (svyglm) with SRH × factor(cohort) + time_at_risk
+model_svy_logit_cohort <- svyglm(
+  formula = died_by_2014 ~ SRH * factor(generation_5total) + time_at_risk + age,
+  design  = des,
+  family  = quasibinomial(link = "logit")
+)
+# Note: quasibinomial is often used to get robust SEs with survey data;
+# you can also try family=binomial if you prefer.
+
+summary(model_svy_logit_cohort)
+
+```
+
+
+### Interpretation of results
+
+Statistical significance of SRH depends on how many bins generation is put into. I think there may be sample size issues. However, SRH seems in interact with earlier born cohorts. 
+
+```{r}
+
+model_svy_logit_period_cohort <- svyglm(
+  formula = died_by_2014 ~ SRH * factor(period_10total) + generation_5total + time_at_risk + age,
+  design  = des,
+  family  = quasibinomial(link = "logit")
+)
+# Note: quasibinomial is often used to get robust SEs with survey data;
+# you can also try family=binomial if you prefer.
+
+summary(model_svy_logit_period_cohort)
+
+model_svy_logit_period_cohort <- svyglm(
+  formula = died_by_2014 ~ SRH * factor(period_10total) + generation_10total + time_at_risk + age,
+  design  = des,
+  family  = quasibinomial(link = "logit")
+)
+# Note: quasibinomial is often used to get robust SEs with survey data;
+# you can also try family=binomial if you prefer.
+
+summary(model_svy_logit_period_cohort)
+
+```
+
+
+### Interpretation of results
+
+Interpretation: To Do
+
+# Method 2: Stratified (or Restricted) Approach 
+
+## Stratify by Time Period
+
+Fit separate models within each time stratum (e.g., 1978–1989, 1990–1999, 2000–2010):
+
+```{r}
+
+
+df <- df %>%
+  mutate(period_stratum = case_when(
+    year >= 1978 & year <= 1989 ~ "1980-1989",
+    year >= 1990 & year <= 1999 ~ "1990-1999",
+    year >= 2000 & year <= 2010 ~ "2000-2010"
+  ))
+
+# We'll do a little function to fit a survey-weighted logistic in each stratum
+fit_stratum_model <- function(subdf) {
+  # Create a survey design for the subset
+  des_sub <- svydesign(id = ~1, weights = ~wtsscomp, data = subdf)
+  
+  # Fit a logistic model controlling for time_at_risk, age, SRH
+  svyglm(died_by_2014 ~ SRH + age + time_at_risk,
+         design = des_sub, 
+         family = quasibinomial(link = "logit"))
+}
+
+# Split data by stratum and apply the function
+models_list <- df %>%
+  group_by(period_stratum) %>%
+  group_map(~ fit_stratum_model(.x))
+
+# Inspect results
+models_list_summaries <- lapply(models_list, summary)
+models_list_summaries
+
+
+#####
+
+model_80_89 <- fit_stratum_model(df %>% filter(period_stratum == "1980-1989"))
+model_80_89
+summary(model_80_89)
+
+model_90_99 <- fit_stratum_model(df %>% filter(period_stratum == "1990-1999"))
+model_90_99
+summary(model_90_99)
+
+model_00_10 <- fit_stratum_model(df %>% filter(period_stratum == "2000-2010"))
+model_00_10
+summary(model_00_10)
+
+###
+
+# Split data by stratum and apply the function
+models_list <- df %>%
+  group_by(period_7total) %>%
+  group_map(~ fit_stratum_model(.x))
+models_list
+
+# Inspect results
+models_list_summaries <- lapply(models_list, summary)
+models_list_summaries
+
+```
+
+### Interpretation
+Coefficient on SRH actually increases in magnitude in later years.
+
+SRH's association with mortality strengthened markedly over time:
+
+1979-1983: -0.139 (13% mortality reduction per unit of SRH)
+1994-1998: -0.418 (34% reduction)
+2004-2008: -0.468 (37% reduction)
+
+Key Patterns:
+Major increase in effect between 1989-1993 and 1994-1998
+Stable strong effect from 1994 onwards (-0.37 to -0.47)
+Wider confidence intervals in recent periods due to shorter follow-up
+
+Implications:
+
+SRH has become a more reliable mortality predictor over time
+The relationship stabilized in mid-1990s
+Effects persist after controlling for age, time at risk, and survey weights
+
+This temporal pattern suggests SRH's growing validity as a health indicator, possibly reflecting improved health literacy and healthcare access over time.
+
+
+### Function
+
+```{r}
+# ---------------------------------------------------------
+# Load needed packages
+# ---------------------------------------------------------
+library(dplyr)
+library(purrr)
+library(broom)
+
+# ---------------------------------------------------------
+# Example function
+# ---------------------------------------------------------
+analyze_by_group <- function(data, group_var) {
+  # data: a data frame containing all of your variables
+  # group_var: (unquoted) grouping variable (e.g., sex, race, etc.)
+  #
+  # For example, if your grouping variable is "sex" in the dataset, 
+  # you would call: analyze_by_group(mydata, sex)
+
+  # 1) Group the data by the grouping variable.
+  # 2) Nest the data so that we have a list of data frames, one per group.
+  # 3) For each nested data frame, fit a model (example: linear model).
+  # 4) Tidy the model object and pull out only terms of interest.
+  # 5) Return a final data frame with group name, coefficient, std error, and p-value.
+  
+  results_df <- data %>%
+    group_by({{ group_var }}) %>%
+    nest() %>%
+    mutate(
+      fit = map(data, ~ glm(died_by_2014 ~ SRH + age + time_at_risk, data = .x, family = "binomial")),  # <--- Replace with your desired model
+      tidied = map(fit, broom::tidy)
+    ) %>%
+    select({{ group_var }}, tidied) %>%
+    unnest(cols = c(tidied)) %>%
+    # Keep only rows for SRH, age, and time_at_risk
+    filter(term %in% c("SRH", "age", "time_at_risk")) %>% # comment this out if you want to keep everything
+    # Rename columns for clarity
+    rename(
+      grouping_variable = {{ group_var }},
+      coefficient       = estimate,
+      std_error         = std.error,
+      p_value           = p.value
+    ) %>%
+    # Select and reorder columns as desired
+    select(
+      grouping_variable,
+      term,
+      coefficient,
+      std_error,
+      p_value
+    ) %>%
+    # Ungroup to return a regular data frame
+    ungroup()
+  
+  return(results_df)
+}
+
+a <- analyze_by_group(df, period_10total) %>% arrange(term)
+a
+
+```
+
+Age coefficient is much smaller than SRH, consistently. Magnitude of SRH coefficient increases in more recent periods. 
+
+## Stratify by Cohort
+
+```{r}
+
+
+# Split data by stratum and apply the function
+models_list_cohort_strat <- df %>%
+  group_by(generation_5total) %>%
+  group_map(~ fit_stratum_model(.x))
+
+models_list_cohort_strat
+
+# Inspect results
+models_list_summaries_cohort_strat <- lapply(models_list_cohort_strat, summary)
+models_list_summaries_cohort_strat
+
+```
+
+### Interpretation
+
+Older cohorts have SRH and age predicting, but younger don't. 
+
+This approach examines different cohorts separately:
+Greatest Generation (1901-1927):
+
+SRH coefficient: -0.206 (p<0.001)
+Strong age effect: 0.052 (p<0.001)
+
+Silent Generation (1928-1945):
+
+Stronger SRH effect: -0.361 (p<0.001)
+Age remains significant
+
+Later cohorts show weaker or non-significant SRH effects, particularly for Millennials/Gen Z. This could reflect either:
+
+Genuine cohort differences in how SRH predicts mortality
+Limited mortality events in younger cohorts
+Shorter follow-up time for recent cohorts
+
+# Method 3) Discrete-Time (Single-Interval) cloglog + Survey Weights
+Though you only have a single interval (from interview year to 2014) for each respondent, you can approximate a discrete-time hazard model by:
+
+Using a complementary log-log link (cloglog).
+Incorporating time_at_risk in the linear predictor—often as an offset (log(time_at_risk)).
+
+In a full discrete-time survival scenario, you’d typically have multiple intervals (one row per year of follow-up). But given you only know “dead by 2014”, each respondent just has 1 row. The cloglog link plus offset(log(time_at_risk)) at least attempts to mimic a hazard-based interpretation under survey weighting.
+
+```{r}
+
+# 1. Ensure we have time_at_risk
+df <- df %>%
+  mutate(
+    time_at_risk = 2014 - year,
+    offset_log_time = log(time_at_risk + 1) # +1 to avoid log(0) if needed
+  )
+
+# 2. Create a survey design
+des_cloglog <- svydesign(
+  id = ~1,
+  weights = ~wtsscomp,
+  data = df
+)
+
+# 3. Fit a cloglog model
+model_svy_cloglog <- svyglm(
+  formula = died_by_2014 ~ SRH + + age + factor(year) + offset(offset_log_time),
+  design  = des_cloglog,
+  family  = quasibinomial(link = "cloglog")  
+)
+# or family=binomial(link="cloglog") depending on preference
+summary(model_svy_cloglog)
+
+# If you want an interaction between SRH and year:
+model_svy_cloglog_int <- svyglm(
+  formula = died_by_2014 ~ SRH * factor(year) + age + offset(offset_log_time),
+  design  = des_cloglog,
+  family  = quasibinomial(link = "cloglog")
+)
+summary(model_svy_cloglog_int)
+
+
+```
+
+There is a negative coefficient on “year,” it might indicate that people interviewed in more recent years generally have a lower likelihood of mortality (perhaps because of better healthcare or living conditions).
+
+
+# Interpretation
+
+This is the most sophisticated model, treating mortality as a hazard process:
+
+Main SRH effect: -0.175 (p<0.001)
+Strong year effects showing declining mortality risk over time
+SRH × year interactions show increasing predictive power of SRH
+Age remains highly significant: 0.048 (p<0.001)
+
+Key Findings:
+
+SRH has become a stronger predictor of mortality over time
+This strengthening persists after controlling for age and exposure time
+The relationship varies by cohort, with stronger effects in older generations
+There's clear evidence of period effects (declining mortality risk over time)
+
+Model Appropriateness:
+
+The cloglog model is theoretically most appropriate as it properly handles the time-to-event nature
+All models appropriately use survey weights
+The stratified analyses help reveal heterogeneity but suffer from small sample sizes in some strata
+
+# Visualizations
+
+```{r}
+
+library(tidyverse)
+library(ggplot2)
+library(broom)
+
+# Period Effect Plot
+period_coefficients <- tibble(
+  period = c("1979-1983", "1984-1988", "1989-1993", "1994-1998", 
+             "1999-2003", "2004-2008", "2009-2013"),
+  coefficient = c(-0.139, -0.153, -0.275, -0.418, -0.373, -0.468, -0.436),
+  se = c(0.048, 0.038, 0.0485, 0.040, 0.0541, 0.0505, 0.137)
+) %>%
+  mutate(
+    lower_ci = coefficient - 1.96 * se,
+    upper_ci = coefficient + 1.96 * se,
+    period = factor(period, levels = period)
+  )
+
+ggplot(period_coefficients, aes(x = period, y = coefficient)) +
+  geom_pointrange(aes(ymin = lower_ci, ymax = upper_ci), 
+                 color = "steelblue", size = 1) +
+  geom_line(group = 1, color = "steelblue", alpha = 0.5) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank()
+  ) +
+  labs(
+    title = "SRH-Mortality Association Over Time",
+    x = "Survey Period",
+    y = "SRH Coefficient (Log Odds)",
+    caption = "Error bars represent 95% confidence intervals"
+  )
+
+# Cohort Effect Plot
+cohort_coefficients <- tibble(
+  cohort = c("Greatest", "Silent", "Boomers", "Gen X", "Millennials"),
+  coefficient = c(-0.206, -0.361, -0.241, -0.182, -0.196),
+  se = c(0.043, 0.036, 0.036, 0.088, 0.284)
+) %>%
+  mutate(
+    lower_ci = coefficient - 1.96 * se,
+    upper_ci = coefficient + 1.96 * se,
+    cohort = factor(cohort, levels = cohort)
+  )
+
+ggplot(cohort_coefficients, aes(x = cohort, y = coefficient)) +
+  geom_pointrange(aes(ymin = lower_ci, ymax = upper_ci),
+                 color = "steelblue", size = 1) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank()
+  ) +
+  labs(
+    title = "SRH-Mortality Association by Birth Cohort",
+    x = "Birth Cohort",
+    y = "SRH Coefficient (Log Odds)",
+    caption = "Error bars represent 95% confidence intervals"
+  )
+
+```
+
+```{r}
+
+library(tidyverse)
+library(broom)
+
+# Function to fit stratified models
+fit_stratified_model <- function(data, strata_var) {
+  data %>%
+    group_by(!!sym(strata_var)) %>%
+    group_modify(~ {
+      model <- glm(
+        died_by_2014 ~ SRH + age + time_at_risk, 
+        family = binomial(link = "logit"),
+        data = .x#,
+      #  weights = wtsscomp
+      )
+      tidy(model) %>%
+        filter(term == "SRH")
+    })
+}
+
+# Create age groups
+df <- df %>%
+  mutate(
+    age_group = case_when(
+      age < 40 ~ "18-39",
+      age < 60 ~ "40-59",
+      age < 80 ~ "60-79",
+      TRUE ~ "80+"
+    ),
+    age_group = factor(age_group, levels = c("18-39", "40-59", "60-79", "80+"))
+  )
+
+# Fit models by period
+period_results <- df %>%
+  mutate(period = cut(
+    year,
+    breaks = c(1978, 1983, 1988, 1993, 1998, 2003, 2008, 2013),
+    labels = c("1979-1983", "1984-1988", "1989-1993", "1994-1998", 
+               "1999-2003", "2004-2008", "2009-2013")
+  )) %>%
+  fit_stratified_model("period")
+
+# Fit models by generation
+generation_results <- fit_stratified_model(df, "generation_5total")
+
+# Fit models by period and age group
+period_age_results <- df %>%
+  mutate(period = cut(
+    year,
+    breaks = c(1978, 1983, 1988, 1993, 1998, 2003, 2008, 2013),
+    labels = c("1979-1983", "1984-1988", "1989-1993", "1994-1998", 
+               "1999-2003", "2004-2008", "2009-2013")
+  )) %>%
+  group_by(period, age_group) %>%
+  group_modify(~ {
+    model <- glm(
+      died_by_2014 ~ SRH + time_at_risk, 
+      family = binomial(link = "logit"),
+      data = .x,
+      weights = wtsscomp
+    )
+    tidy(model) %>%
+      filter(term == "SRH")
+  })
+
+# Create visualizations
+# 1. Period Effect
+ggplot(period_results, aes(x = period, y = estimate)) +
+  geom_pointrange(
+    aes(ymin = estimate - 1.96 * std.error,
+        ymax = estimate + 1.96 * std.error),
+    color = "steelblue"
+  ) +
+  geom_line(group = 1, color = "steelblue", alpha = 0.5) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank()
+  ) +
+  labs(
+    title = "SRH-Mortality Association Over Time",
+    x = "Survey Period",
+    y = "SRH Coefficient (Log Odds)",
+    caption = "Error bars represent 95% confidence intervals"
+  )
+
+# 2. Generation Effect
+
+ggplot(generation_results, aes(x = generation_5total, y = estimate)) +
+  geom_pointrange(
+    aes(ymin = estimate - 1.96 * std.error,
+        ymax = estimate + 1.96 * std.error),
+    color = "steelblue"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank()
+  ) +
+  labs(
+    title = "SRH-Mortality Association by Birth Cohort")
+
+
+# 
+
+```
+
+```{r}
+
+# Function to fit stratified models and extract SRH coefficients
+fit_age_period_models <- function(data) {
+  data %>%
+    # Create age groups
+    mutate(
+    #  age_group = age_6cat,
+      age_group = case_when(
+        age < 40 ~ "18-39",
+        age < 60 ~ "40-59",
+        age < 80 ~ "60-79",
+        TRUE ~ "80+"
+      ),
+      age_group = factor(age_group, levels = c("18-39", "40-59", "60-79", "80+")),
+      # Create period groups
+      period = cut(
+        year,
+        breaks = c(1978, 1983, 1988, 1993, 1998, 2003, 2008, 2013),
+        labels = c("1979-1983", "1984-1988", "1989-1993", "1994-1998", 
+                  "1999-2003", "2004-2008", "2009-2013")
+      )
+    ) %>%
+    # Group and fit models
+    group_by(period, age_group) %>%
+    group_modify(~ {
+      model <- glm(
+        died_by_2014 ~ SRH + time_at_risk, 
+        family = binomial(link = "logit"),
+        data = .x,
+        weights = wtsscomp
+      )
+      tidy(model) %>%
+        filter(term == "SRH")
+    }) %>%
+    # Calculate confidence intervals
+    mutate(
+      lower_ci = estimate - 1.96 * std.error,
+      upper_ci = estimate + 1.96 * std.error
+    )
+}
+
+# Fit models and prepare data
+period_age_results <- fit_age_period_models(df)
+
+# Create visualization
+ggplot(period_age_results %>% filter(period != "2009-2013"),
+       aes(x = period, y = estimate, color = age_group, group = age_group)) +
+  # Add confidence interval ribbons
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = age_group), 
+              alpha = 0.1, color = NA) +
+  # Add lines connecting estimates
+  geom_line(size = 1) +
+  # Add points for estimates
+  geom_point(size = 3) +
+  # Customize colors
+#  scale_color_viridis_d() +
+ # scale_fill_viridis_d() +
+  # Customize theme
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank(),
+    legend.title = element_text(face = "bold"),
+    axis.title = element_text(face = "bold")
+  ) +
+  # Labels
+  labs(
+    title = "SRH-Mortality Association Over Time by Age Group",
+    subtitle = "Negative values indicate stronger association with mortality",
+    x = "Survey Period",
+    y = "SRH Coefficient (Log Odds)",
+    color = "Age Group",
+    fill = "Age Group",
+    caption = "Shaded areas represent 95% confidence intervals"
+  )
+
+# 4. Period-specific mortality rates
+df %>%
+  group_by(period_7total, age_group) %>%
+  summarise(
+    mortality_rate = mean(died_by_2014),
+    .groups = 'drop'
+  ) %>%
+  ggplot(aes(x = period_7total, y = mortality_rate, fill = age_group)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+#  scale_fill_viridis_d() +
+  labs(
+    title = "Mortality Rates by Period and Age Group",
+    x = "Period",
+    y = "Mortality Rate"
+  )
+
+```
+
+
+
+```{r}
+
+library(tidyverse)
+library(patchwork)
+
+# Helper function to create confidence intervals
+add_ci <- function(model_results) {
+  model_results %>%
+    mutate(
+      lower_ci = estimate - 1.96 * std.error,
+      upper_ci = estimate + 1.96 * std.error
+    )
+}
+
+# 1. Main SRH effect over time
+p1 <- period_results %>%
+  add_ci() %>%
+  ggplot(aes(x = period, y = estimate)) +
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), alpha = 0.2) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(
+    title = "SRH-Mortality Association Over Time",
+    x = "Period",
+    y = "SRH Coefficient (Log Odds)"
+  )
+
+# 2. Age-stratified effects
+p2 <- period_age_results %>%
+  ggplot(aes(x = period, y = estimate, color = age_group)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  facet_wrap(~age_group) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_color_viridis_d() +
+  labs(
+    title = "Age-Stratified SRH Effects",
+    x = "Period",
+    y = "SRH Coefficient"
+  )
+
+# 3. Cohort effects with uncertainty
+p3 <- generation_results %>%
+  add_ci() %>%
+  ggplot(aes(x = reorder(generation_5total, estimate), y = estimate)) +
+  geom_pointrange(aes(ymin = lower_ci, ymax = upper_ci)) +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title = "SRH Effects by Birth Cohort",
+    x = "Generation",
+    y = "SRH Coefficient (Log Odds)"
+  )
+
+# 4. Period-specific mortality rates
+p4 <- df %>%
+  group_by(period_7total, age_group) %>%
+  summarise(
+    mortality_rate = mean(died_by_2014),
+    .groups = 'drop'
+  ) %>%
+  ggplot(aes(x = period_7total, y = mortality_rate, fill = age_group)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+#  scale_fill_viridis_d() +
+  labs(
+    title = "Mortality Rates by Period and Age Group",
+    x = "Period",
+    y = "Mortality Rate"
+  )
+
+p4
+
+# Combine plots
+(p1 + p2) / (p3 + p4) +
+  plot_layout(guides = 'collect') +
+  plot_annotation(
+    title = "GSS Mortality Analysis Dashboard",
+    theme = theme(plot.title = element_text(size = 16, face = "bold"))
+  )
+
+p1
+p2
+p3
+p4
+
+```
+
+
+```{r}
+
+library(tidyverse)
+#library(viridis)  # for colorblind-friendly palettes
+
+# Prepare the SRH distribution data
+srh_dist <- df %>%
+  # Create period groups (using cut like before)
+  mutate(
+    period = cut(
+      year,
+      breaks = c(1978, 1983, 1988, 1993, 1998, 2003, 2008, 2013),
+      labels = c("1979-1983", "1984-1988", "1989-1993", "1994-1998", 
+                "1999-2003", "2004-2008", "2009-2013")
+    ),
+    # Convert SRH to factor with meaningful labels
+    SRH = factor(SRH, 
+                levels = 1:4,
+                labels = c("Poor", "Fair", "Good", "Excellent"))
+  ) %>%
+  # Calculate weighted proportions by period
+  group_by(period, SRH) %>%
+  summarise(
+    n_weighted = sum(wtsscomp),
+    .groups = 'drop'
+  ) %>%
+  group_by(period) %>%
+  mutate(proportion = n_weighted / sum(n_weighted) * 100)
+
+# Create different visualizations of the distribution changes
+
+# 1. Stacked area plot
+p1 <- ggplot(srh_dist, aes(x = period, y = proportion, fill = SRH)) +
+  geom_area(position = "stack") +
+ # scale_fill_viridis_d(direction = -1) +  # reverse direction for intuitive color mapping
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  ) +
+  labs(
+    title = "Changes in SRH Distribution Over Time",
+    subtitle = "Stacked area plot showing relative proportions",
+    x = "Period",
+    y = "Percentage",
+    fill = "Self-Rated Health"
+  )
+
+# 2. Side-by-side bars
+p2 <- ggplot(srh_dist, aes(x = period, y = proportion, fill = SRH)) +
+  geom_col(position = "dodge", width = 0.8) +
+#  scale_fill_viridis_d(direction = -1) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  ) +
+  labs(
+    title = "SRH Distribution by Period",
+    subtitle = "Side-by-side comparison of categories",
+    x = "Period",
+    y = "Percentage",
+    fill = "Self-Rated Health"
+  )
+
+# 3. Faceted line plot for clearer trend visualization
+p3 <- ggplot(srh_dist, aes(x = period, y = proportion, color = SRH, group = SRH)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  facet_wrap(~SRH, scales = "free_y") +
+#  scale_color_viridis_d(direction = -1) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none",
+    panel.grid.minor = element_blank(),
+    strip.text = element_text(face = "bold")
+  ) +
+  labs(
+    title = "Trends in SRH Categories Over Time",
+    subtitle = "Individual trend lines for each category",
+    x = "Period",
+    y = "Percentage"
+  )
+
+# Combine plots using patchwork
+library(patchwork)
+
+combined_plot <- (p1 + p2) / p3 +
+  plot_annotation(
+    title = "Self-Rated Health Distribution Changes Over Time",
+    subtitle = "Multiple perspectives on temporal changes in SRH responses",
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold"),
+      plot.subtitle = element_text(size = 12, face = "italic")
+    )
+  )
+combined_plot
+
+p2
+p3
+p4
+
+# Save the combined plot
+#ggsave("srh_distribution_changes.png", combined_plot, 
+  #     width = 15, height = 12, dpi = 300)
+
+# Optional: Create a table of proportions
+srh_table <- srh_dist %>%
+  pivot_wider(
+    names_from = SRH,
+    values_from = proportion
+  ) %>%
+  arrange(period)
+
+# Print the table
+print(srh_table)
+
+```
+
+
+```{r}
+
+# First, let's create a function to calculate event counts and sample sizes
+calculate_metrics <- function(data) {
+  data %>%
+    group_by(period, age_group) %>%
+    summarise(
+      n = n(),
+      n_deaths = sum(died_by_2014),
+      death_rate = n_deaths/n,
+    #  death_rate = mean(died_by_2014),
+      .groups = 'drop'
+    )
+}
+
+metrics <- calculate_metrics(df %>% mutate(period = period_7total))
+
+# Create period and age groups
+df_analysis <- df %>%
+  mutate(
+    period = cut(
+      year,
+      breaks = c(1978, 1983, 1988, 1993, 1998, 2003, 2008),  # Excluding 2009-2013
+      labels = c("1979-1983", "1984-1988", "1989-1993", "1994-1998", 
+                "1999-2003", "2004-2008")
+    ),
+    age_group = case_when(
+      age < 50 ~ "18-49",  # Broader age groups for stability
+      age < 65 ~ "50-64",
+      age < 80 ~ "65-79",
+      TRUE ~ "80+"
+    ),
+    age_group = factor(age_group, levels = c("18-49", "50-64", "65-79", "80+"))
+  )
+
+# Fit stratified models
+fit_stratified_models <- function(data) {
+  data %>%
+    group_by(period, age_group) %>%
+    group_modify(~ {
+      model <- glm(
+        died_by_2014 ~ SRH + time_at_risk, 
+        family = binomial(link = "logit"),
+        data = .x,
+        weights = wtsscomp
+      )
+      
+      tidy(model) %>%
+        filter(term == "SRH") %>%
+        mutate(
+          n = nrow(.x),
+          n_deaths = sum(.x$died_by_2014)
+        )
+    }) %>%
+    ungroup()
+}
+
+# Get model results
+model_results <- df_analysis %>%
+  fit_stratified_models() %>%
+  mutate(
+    reliability = case_when(
+      n_deaths >= 100 ~ "High",
+      n_deaths >= 50 ~ "Medium",
+      TRUE ~ "Low"
+    ),
+    reliability = factor(reliability, levels = c("High", "Medium", "Low"))
+  )
+
+# Create main visualization
+p1 <- ggplot(model_results, 
+       aes(x = period, y = estimate, color = age_group, 
+           size = reliability, group = age_group)) +
+  geom_line(position = "dodge", size = 1) +
+  geom_point() +
+  geom_errorbar(aes(ymin = estimate - 1.96 * std.error,
+                    ymax = estimate + 1.96 * std.error),
+                width = 0.2) +
+#  scale_color_viridis_d() +
+  scale_size_manual(values = c(3, 2, 1)) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank(),
+    legend.position = "right"
+  ) +
+  labs(
+    title = "SRH-Mortality Association Over Time by Age Group",
+    subtitle = "Point size indicates estimate reliability based on death counts",
+    x = "Survey Period",
+    y = "SRH Coefficient (Log Odds)",
+    color = "Age Group",
+    size = "Estimate\nReliability"
+  )
+
+p1
+
+# Create supplementary visualization of event counts
+p2 <- metrics %>%
+  ggplot(aes(x = period, y = n_deaths, fill = age_group)) +
+  geom_col(position = "dodge") +
+#  scale_fill_viridis_d() +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank()
+  ) +
+  labs(
+    title = "Number of Deaths by Period and Age Group",
+    x = "Survey Period",
+    y = "Number of Deaths",
+    fill = "Age Group"
+  )
+
+# Combine plots
+library(patchwork)
+combined_plot <- p1 / p2 +
+  plot_layout(heights = c(2, 1))
+combined_plot
+
+p1
+p2
+
+# Save plot
+# ggsave("revised_srh_mortality_trends.png", combined_plot, 
+#        width = 12, height = 10, dpi = 300)
+
+```
+
+
+
+# Key Findings
+
+## Temporal Trend
+
+The SRH-mortality association strengthened substantially over time:
+
+1979-1983: -0.139 (p = 0.00382)
+1994-1998: -0.418 (p < 1.58e-25)
+2004-2008: -0.468 (p = 2.16e-20)
+
+Major strengthening occurred between 1989-1993 and 1994-1998
+Effect stabilized from mid-1990s onward
+
+## Cohort Effects
+
+Strongest association in Silent Generation (1928-1945): coefficient = -0.361
+Moderate effect in Greatest Generation (1901-1927): coefficient = -0.206
+Weaker effects in later cohorts, but with wider confidence intervals
+Boomer coefficient: -0.241
+Gen X coefficient: -0.182 (less precise)
+
+## Age-Period Interaction
+
+Stronger associations in older age groups
+All age groups show temporal strengthening
+Age gradient becomes more pronounced in recent periods
+Effect most stable in middle-age groups (40-59)
+
+## Methodological Controls
+
+Results robust to:
+Time at risk adjustment
+Survey weights
+Age controls
+Period-cohort modeling
+
+
+
+# Conclusion
+The predictive power of SRH for mortality has increased substantially since 1980, with the most dramatic strengthening occurring in the mid-1990s. 
+
+Limitations:
+
+Single endpoint (2014) creates varying follow-up times
+Cannot fully disentangle age, period, and cohort effects
+Smaller samples and fewer events in recent periods
+Limited mortality events in younger cohorts
+
+These findings suggest that SRH has become an increasingly valid predictor of mortality risk, though its predictive power varies by age and cohort. The strengthening relationship over time supports its growing value as a population health indicator.

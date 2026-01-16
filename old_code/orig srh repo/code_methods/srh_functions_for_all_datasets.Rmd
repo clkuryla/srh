@@ -1,0 +1,623 @@
+---
+title: "Functions for Cross-Data Analyses"
+author: "Christine Lucille Kuryla"
+date: "2025-02-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The SRH analysis is performed on six datasets (GSS, BRFSS, NHIS, NHANES, IVS, CPS), so there needs to be functions to produce consistent output for the relevant analyses that are run on each dataset. This document contains them. 
+
+The functions are: 
+
+* plot_avg_srh_by_age_group
+    Plot average SRH per age group over years (should see the convergence)
+    
+* lm_coef_age_by_year
+    Regresses age on SRH for each year and plots the coefficient of age vs year
+
+* analyze_trend_age_group_year_range_direct
+    Used to see what the trends are over time for each age group, for different year ranges. 
+
+
+# Average SRH per age group over time
+
+plot_avg_srh_by_age_group() aggregates self-rated health by age group and year (using weighted means if specified) and produces a line plot to visualize temporal trends across age groups.
+
+```{r fctn_plot_avg_srh_by_age_group}
+# Load required packages
+library(tidyverse)
+library(survey)
+
+plot_avg_srh_by_age_group <- function(data_object,
+                                      dataset_title,        # Title to include in the plot title
+                                      age_group_var = "age_group",  # Name of the age group variable
+                                      year_var = "year",            # Name of the year variable
+                                      srh_var = "srh",              # Name of the self-rated health variable
+                                      is_weighted = TRUE,          # TRUE if data_object is a survey design object with weights
+                                      subtitle = NULL             # Optional subtitle; if NULL, uses dataset_title
+) {
+  # ------------------------------------------------------------------
+  # Convert ordered factors to unordered to avoid default viridis palette
+  # ------------------------------------------------------------------
+  if (is_weighted) {
+    data_object$variables <- data_object$variables %>% 
+      mutate(across(where(is.ordered),
+                    ~ factor(as.character(.),
+                             levels = levels(.),
+                             ordered = FALSE)))
+  } else {
+    data_object <- data_object %>% 
+      mutate(across(where(is.ordered),
+                    ~ factor(as.character(.),
+                             levels = levels(.),
+                             ordered = FALSE)))
+  }
+  
+  # Use dataset_title as subtitle if no subtitle is provided
+  if (is.null(subtitle)) {
+    subtitle <- dataset_title
+  }
+  
+  # ------------------------------------------------------------------
+  # Aggregate data: weighted using svyby if weighted, else unweighted grouping
+  # ------------------------------------------------------------------
+  if (is_weighted) {
+    # Ensure data_object is a survey design object (with a 'variables' slot)
+    formula_mean <- as.formula(paste0("~", srh_var))
+    formula_group <- as.formula(paste0("~", age_group_var, " + ", year_var))
+    
+    summary_data <- svyby(formula_mean,
+                          formula_group,
+                          data_object,
+                          svymean,
+                          na.rm = TRUE)
+    summary_data <- as_tibble(summary_data) %>%
+      rename(mean_health = !!sym(srh_var))
+    
+  } else {
+    summary_data <- data_object %>%
+      group_by(across(all_of(c(age_group_var, year_var)))) %>%
+      summarize(mean_health = mean(.data[[srh_var]], na.rm = TRUE), 
+                .groups = "drop")
+  }
+  
+  # ------------------------------------------------------------------
+  # Create a line plot of average SRH over time for each age group
+  # ------------------------------------------------------------------
+  p <- ggplot(summary_data, aes_string(x = year_var, y = "mean_health", color = age_group_var)) +
+    geom_line() +
+    geom_point() +
+    labs(title = paste("Average SRH for Each Age Group"),
+         subtitle = dataset_title,
+         x = "Year",
+         y = "Average SRH",
+         color = "Age Group") +
+    theme_minimal()
+  
+  print(p)
+  return(p)
+}
+
+# Example usage:
+# For an unweighted data frame:
+# plot_avg_srh_by_age_group(data_object = data_brfss, 
+#                           dataset_title = "BRFSS 1993-2023 Dataset")
+#
+# For a weighted survey design object:
+# plot_avg_srh_by_age_group(data_object = svy_brfss, 
+#                           dataset_title = "BRFSS 1993-2023 Dataset",
+#                           is_weighted = TRUE)
+
+```
+
+Apply function 
+
+```{r apply_plot_avg_srh_by_age_group}
+
+# Unweighted
+avg_srh_age_year_brfss <- plot_avg_srh_by_age_group(data_object = data_brfss,
+                          dataset_title = "BRFSS 1993-2023 Dataset",
+                          age_group_var = "age_decade_cat",  
+                          year_var = "year",            
+                          srh_var = "srh",              
+                          is_weighted = FALSE,          # Set TRUE if data_object is a survey design object with weights
+                          subtitle = NULL             # Optional subtitle; if NULL, uses dataset_title
+)
+
+#For a weighted survey design object:
+avg_srh_age_year_cps <- plot_avg_srh_by_age_group(data_object = svy_cps,
+                          dataset_title = "CPS Dataset",
+                          is_weighted = TRUE)
+
+avg_srh_age_year_gss <- plot_avg_srh_by_age_group(data_object = svy_gss,
+                          dataset_title = "GSS Dataset",
+                          is_weighted = TRUE,
+                          srh_var = "health"
+                          )
+avg_srh_age_year_nhanes <- plot_avg_srh_by_age_group(data_object = svy_nhanes,
+                          dataset_title = "NHANES Dataset",
+                          is_weighted = TRUE,
+                          srh_var = "srh"
+                          )
+
+avg_srh_age_year_nhanes_k <- plot_avg_srh_by_age_group(data_object = svy_nhanes_k,
+                          dataset_title = "NHANES Dataset K",
+                          is_weighted = TRUE,
+                          srh_var = "srh"
+                          )
+
+avg_srh_age_year_nhis <- plot_avg_srh_by_age_group(data_object = svy_nhis,
+                          dataset_title = "NHIS",
+                          is_weighted = TRUE,
+                          srh_var = "srh"
+                          )
+
+avg_srh_age_year_meps <- plot_avg_srh_by_age_group(data_object = svy_meps,
+                                                   age_group_var = "age_group",
+                                                   dataset_title = "MEPS")
+
+avg_srh_age_year_cps #+ theme(legend.position = "none")
+avg_srh_age_year_brfss
+avg_srh_age_year_gss
+avg_srh_age_year_nhis
+avg_srh_age_year_meps
+avg_srh_age_year_nhanes
+avg_srh_age_year_nhanes_k
+
+```
+
+
+
+
+# Age Coefficient Over Time
+
+lm_coef_age_by_year() calculates, for each survey year, the regression coefficient of self‐rated health on age (using either weighted or unweighted regression), and returns both a summary table (with standard errors, confidence intervals, t‐statistics, and p‐values) and a plot of the age coefficient over time.
+
+```{r fctn_lm_coef_age_by_year}
+
+
+lm_coef_age_by_year <- function(data_object,
+                                dataset_title,         # e.g., "BRFSS 1993-2023 Dataset"
+                                is_weighted = FALSE,    # TRUE if data_object is a survey design object
+                                year_var = "year",      # Name of the year variable
+                                srh_var = "srh",        # Name of the self-rated health variable
+                                age_var = "age",        # Name of the continuous age variable
+                                weight_var = "ASECWT"   # Name of the weight variable (used only if is_weighted = TRUE)
+) {
+  # Check that the age variable is numeric
+  if (is_weighted) {
+    if (!is.numeric(data_object$variables[[age_var]])) {
+      stop("For regression analysis, the age variable must be numeric. Please supply a numeric variable (e.g., age).")
+    }
+  } else {
+    if (!is.numeric(data_object[[age_var]])) {
+      stop("For regression analysis, the age variable must be numeric. Please supply a numeric variable (e.g., age).")
+    }
+  }
+  
+  # Extract unique years
+  if (is_weighted) {
+    unique_years <- sort(unique(data_object$variables[[year_var]]))
+  } else {
+    unique_years <- sort(unique(data_object[[year_var]]))
+  }
+  
+  # Compute regression for each year and extract the coefficient for the age variable.
+  if (is_weighted) {
+    results <- map_dfr(unique_years, function(yr) {
+      # Subset the survey design object to observations from the current year,
+      # and filter out those with zero (or non-positive) weight.
+      design_year <- data_object[
+        data_object$variables[[year_var]] == yr &
+          data_object$variables[[weight_var]] > 0,
+      ]
+      # Skip if no observations remain
+      if(nrow(design_year$variables) == 0) return(NULL)
+      
+      # Run the weighted regression of srh on age
+      model <- svyglm(as.formula(paste(srh_var, "~", age_var)), design = design_year)
+      tidy_model <- broom::tidy(model, conf.int = TRUE)
+      # Retain only the row corresponding to the age variable
+      tidy_model <- tidy_model %>% filter(term == age_var)
+      tidy_model[[year_var]] <- yr
+      tidy_model
+    })
+  } else {
+    results <- data_object %>%
+      group_by(across(all_of(year_var))) %>%
+      group_modify(~ {
+        model <- lm(as.formula(paste(srh_var, "~", age_var)), data = .x)
+        tidy_model <- broom::tidy(model, conf.int = TRUE)
+        tidy_model %>% filter(term == age_var)
+      }) %>%
+      ungroup()
+  }
+  
+  # Rename and select columns for clarity.
+  results <- results %>%
+    rename(coef = estimate,
+           se = std.error,
+           t_statistic = statistic,
+           p_value = p.value) %>%
+    select(!!year_var, coef, conf.low, conf.high, se, t_statistic, p_value)
+  
+  # Create a plot of the age coefficient over time with error bars.
+  p <- ggplot(results, aes_string(x = year_var, y = "coef")) +
+    geom_point() +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.2,
+                  position = position_dodge(0.05)) +
+    labs(title = paste("Change in Age Coefficient Over Years", sep = ""),
+         subtitle = dataset_title,
+         x = "Year",
+         y = paste("Coefficient of Age")) +
+    theme_minimal()
+  
+  # Return both the results table and the plot.
+  return(list(table = results, plot = p))
+}
+
+# Example usage:
+# For unweighted data:
+# result <- lm_coef_age_by_year(data_object = data_brfss,
+#                               dataset_title = "BRFSS 1993-2023 Dataset",
+#                               is_weighted = FALSE,
+#                               age_var = "age")
+# knitr::kable(result$table, caption = "BRFSS 1993-2023 Dataset")
+# print(result$plot)
+#
+# For weighted survey data:
+# result <- lm_coef_age_by_year(data_object = svy_brfss,
+#                               dataset_title = "BRFSS 1993-2023 Dataset",
+#                               is_weighted = TRUE,
+#                               age_var = "age",
+#                               weight_var = "ASECWT")
+# knitr::kable(result$table, caption = "BRFSS 1993-2023 Dataset")
+# print(result$plot)
+
+
+```
+
+```{r}
+
+# For unweighted data:
+age_coef_over_time_brfss <- lm_coef_age_by_year(data_object = data_brfss,
+                              dataset_title = "BRFSS 1993-2023 Dataset",
+                              is_weighted = FALSE,
+                              age_var = "age_5yr_num")
+knitr::kable(age_coef_over_time_brfss$table, caption = "BRFSS 1993-2023 Dataset")
+print(age_coef_over_time_brfss$plot)
+
+# Weighted data
+age_coef_over_time_cps <- lm_coef_age_by_year(data_object = svy_cps,
+                              dataset_title = "CPS Dataset",
+                              is_weighted = TRUE,
+                              age_var = "age")
+knitr::kable(age_coef_over_time_cps$table, caption = "CPS Dataset")
+print(age_coef_over_time_cps$plot)
+
+age_coef_over_time_gss <- lm_coef_age_by_year(data_object = svy_gss,
+                          dataset_title = "GSS Dataset",
+                          is_weighted = TRUE,
+                          srh_var = "health",
+                          age_var = "age",
+                          weight_var = "wtsscomp")
+knitr::kable(age_coef_over_time_gss$table, caption = "GSS Dataset")
+print(age_coef_over_time_gss$plot)
+
+age_coef_over_time_nhanes <- lm_coef_age_by_year(data_object = svy_nhanes,
+                          dataset_title = "NHANES Dataset",
+                          is_weighted = TRUE,
+                          srh_var = "srh",
+                          age_var = "age",
+                          weight_var = "WTINT2YR")
+knitr::kable(age_coef_over_time_nhanes$table, caption = "NHANES Dataset")
+print(age_coef_over_time_nhanes$plot)
+
+age_coef_over_time_nhanes_k <- lm_coef_age_by_year(data_object = svy_nhanes_k,
+                          dataset_title = "NHANES Dataset",
+                          is_weighted = TRUE,
+                          srh_var = "srh",
+                          age_var = "age",
+                          weight_var = "dem_wghts")
+knitr::kable(age_coef_over_time_nhanes_k$table, caption = "NHANES Dataset K")
+print(age_coef_over_time_nhanes_k$plot)
+
+
+age_coef_over_time_meps <- lm_coef_age_by_year(data_object = svy_meps, 
+                                                dataset_title = "MEPS", 
+                                                is_weighted = TRUE, 
+                                                weight_var = "weight")
+knitr::kable(age_coef_over_time_meps$table, caption = "MEPS")
+print(age_coef_over_time_meps$plot)
+
+```
+
+
+# Sensitivity Analysis of Self-Rated Health Trends per Age Group: Evaluating Timeframe-Dependent Variability
+
+_Timeframe-Specific Trend Analysis of Self-Rated Health Across Datasets: Evaluating Variations in Trend Intensity_
+
+*Method Section:* 
+For each age group and candidate time interval (e.g., 2014–2024, 2009–2024, etc.), self‐rated health was regressed on survey year (using design‐based regression when applicable) to obtain trend estimates and 95% confidence intervals, which were then summarized in a faceted plot.
+
+*Interpretation*
+Positive coefficients indicate that over the specified time period, for that age group, SRH is increasing (people are rating their health higher in more recent years), non-significant means no change, negative coefficients mean SRH is decreasing over time. 
+
+*Function Description:*
+This function, analyze_trend_age_group_year_range_direct, takes either a survey design object (weighted) or a regular data frame (unweighted) containing variables for year, self‐rated health (SRH), and age group. It then:
+
+1. Identifies the overall min and max years in the data,
+2. Defines candidate time intervals (e.g., 2014–max, 2009–max, etc.),
+3. For each interval and each age group, subsets the data and runs a direct regression of srh ~ year (using svyglm if weighted, or lm if unweighted),
+4. Extracts the slope (coefficient for year), standard error, p‐value, and 95% CI,
+5. Compiles these estimates into a tibble and creates a faceted ggplot (facets = intervals, points = slope estimates, color = significance).
+
+Supply a dataset or survey design object, indicate whether it’s weighted, specify the variable names (including weight), and the function returns both a results table and a final plot that show the estimated linear trend in SRH over time for each age group and interval.
+
+```{r fctn_analyze_trend_age_group_year_range_direct}
+
+# Load required packages
+library(tidyverse)
+library(survey)
+
+analyze_trend_age_group_year_range_direct <- function(
+  data_object,
+  is_weighted = TRUE,          # TRUE if data_object is a survey design object
+  dataset_title,               # A string 
+  age_group_var,               # The variable name (as a string) for the age group
+  year_var = "year",           
+  srh_var = "srh",           #   (default "srh")
+  weight_var = "ASECWT"        # Name of weight variable (if needed)
+) {
+  # ------------------------------------------------------------------
+  # 1. Determine the available year range in the data
+  # ------------------------------------------------------------------
+  if (is_weighted) {
+    # For survey design objects, the actual data are in the "variables" slot.
+    years <- data_object$variables[[year_var]]
+  } else {
+    # For unweighted data, we assume data_object is a data frame.
+    years <- data_object[[year_var]]
+  }
+  
+  min_year <- min(years, na.rm = TRUE)
+  max_year <- max(years, na.rm = TRUE)
+  
+  message("Data cover years: ", min_year, " to ", max_year)
+  
+  # ------------------------------------------------------------------
+  # 2. Define candidate lower bounds for intervals based on available years
+  # ------------------------------------------------------------------
+  candidates <- c()
+  if (max_year >= 2014 && min_year <= 2014) candidates <- c(candidates, 2014)
+  if (max_year >= 2009 && min_year <= 2009) candidates <- c(candidates, 2009)
+  if (max_year >= 2004 && min_year <= 2004) candidates <- c(candidates, 2004)
+  if (max_year >= 1999 && min_year <= 1999) candidates <- c(candidates, 1999)
+  
+  # For 1989: if data go back that far, or if min_year is between 1989 and 1999
+  if (min_year <= 1989 && max_year >= 1989) {
+    candidates <- c(candidates, 1989)
+  } else if (min_year > 1989 && min_year < 1999) {
+    candidates <- c(candidates, min_year)
+  }
+  
+  # Always include the full range if not already included
+  if (!(min_year %in% candidates)) {
+    candidates <- c(candidates, min_year)
+  }
+  
+  # Sort descending so the most recent intervals appear first
+  candidates <- sort(unique(candidates), decreasing = TRUE)
+  message("Candidate interval lower bounds: ", paste(candidates, collapse = ", "))
+  
+  # ------------------------------------------------------------------
+  # 3. Loop over each candidate interval and each age group
+  #    For each, run direct regressions on the micro data:
+  #    - Weighted: svyglm(srh ~ year, design = ...)
+  #    - Unweighted: lm(srh ~ year, data = ...)
+  # ------------------------------------------------------------------
+  results <- tibble()
+  
+  for (lb in candidates) {
+    # Subset to [lb, max_year]
+    if (is_weighted) {
+      # Subset the survey design by direct indexing of 'variables'
+      design_interval <- data_object[
+        data_object$variables[[year_var]] >= lb &
+          data_object$variables[[year_var]] <= max_year, 
+      ]
+      data_interval <- design_interval$variables
+    } else {
+      data_interval <- data_object %>%
+        filter(.data[[year_var]] >= lb, .data[[year_var]] <= max_year)
+    }
+    
+    # Identify the age groups in this subset
+    age_groups <- unique(data_interval[[age_group_var]])
+    
+    for (ag in age_groups) {
+      # Subset further by age group
+      if (is_weighted) {
+        design_age <- design_interval[
+          design_interval$variables[[age_group_var]] == ag,
+        ]
+        data_age <- design_age$variables
+      } else {
+        data_age <- data_interval %>%
+          filter(.data[[age_group_var]] == ag)
+      }
+      
+      # Sanity check: ensure at least some variety in years
+      distinct_years <- length(unique(data_age[[year_var]]))
+      if (distinct_years < 2) {
+        message("Warning: Age group '", ag, "' in interval ", lb, "-", max_year,
+                " has only ", distinct_years, " distinct year(s). Skipping regression.")
+        next
+      }
+      
+      # Also check total sample size for a rough sanity threshold
+      n_obs <- nrow(data_age)
+      if (n_obs < 30) {
+        message("Warning: Age group '", ag, "' in interval ", lb, "-", max_year,
+                " has only ", n_obs, " observations. Interpret with caution.")
+      }
+      
+      # ------------------------------------------------------------------
+      # 4. Direct regression of srh ~ year on micro data
+      # ------------------------------------------------------------------
+      if (is_weighted) {
+        # Survey-weighted regression
+        mod <- svyglm(
+          formula = as.formula(paste0(srh_var, " ~ ", year_var)),
+          design = design_age
+        )
+        # Extract slope for year
+        coef_year <- summary(mod)$coefficients[year_var, ]
+      } else {
+        # Unweighted regression on the micro data
+        mod <- lm(
+          formula = as.formula(paste0(srh_var, " ~ ", year_var)),
+          data = data_age
+        )
+        coef_year <- summary(mod)$coefficients[year_var, ]
+      }
+      
+      estimate <- coef_year["Estimate"]
+      se_coef  <- coef_year["Std. Error"]
+      pvalue   <- coef_year["Pr(>|t|)"]
+      
+      # 95% CI
+      lower_ci <- estimate - 1.96 * se_coef
+      upper_ci <- estimate + 1.96 * se_coef
+      
+      sig_flag <- ifelse(pvalue < 0.05, "Significant", "Not Significant")
+      
+      # Print info to console
+      cat("Dataset:", dataset_title, " | Interval:", lb, "-", max_year, 
+          " | Age Group:", ag, "\n")
+      print(coef_year)
+      cat("\n")
+      
+      # Store in results tibble
+      results <- bind_rows(results, tibble(
+        dataset      = dataset_title,
+        interval     = paste0(lb, "-", max_year),
+        age_group    = as.character(ag),
+        estimate     = estimate,
+        se           = se_coef,
+        pvalue       = pvalue,
+        lower_ci     = lower_ci,
+        upper_ci     = upper_ci,
+        significance = sig_flag
+      ))
+      
+    } # end loop over age groups
+  } # end loop over candidate intervals
+  
+  # ------------------------------------------------------------------
+  # 5. Plot the results
+  # ------------------------------------------------------------------
+  # Convert age_group to factor for consistent ordering
+  results <- results %>%
+    mutate(age_group = factor(age_group, levels = sort(unique(age_group))))
+  
+  # Create the faceted plot
+  plot <- ggplot(results, aes(x = age_group, y = estimate, color = significance)) +
+    geom_point(size = 3) +
+    geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), width = 0.2) +
+    facet_wrap(~ interval) +
+    labs(
+      title = paste0("Trend in SRH by Age Group"),
+      subtitle = paste0(dataset_title),
+      x = "Age Group",
+      y = "Coefficient for Year (Slope)"
+    ) +
+    theme_minimal() +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          legend.position = "none")  # Remove legend for significance
+  
+  print(plot)
+  
+  # Return a list with both the results and the plot
+  return(list(results = results, plot = plot))
+}
+
+```
+
+
+Apply function:
+```{r}
+
+# unweighted
+trend_year_ranges_brfss <- analyze_trend_age_group_year_range_direct(
+  data_object   = data_brfss,           # your survey design object
+  is_weighted   = FALSE,
+  dataset_title = "BRFSS",
+  age_group_var = "age_group",
+  year_var = "year",           # Variable name for the survey year (default "year")
+  srh_var = "health"#,             # Variable name for self-rated health (default "srh")
+ # weight_var = "ASECWT"        # Name of weight variable (if needed)
+)
+
+# weighted 
+trend_year_ranges_cps <- analyze_trend_age_group_year_range_direct(
+  data_object   = svy_cps,           # your survey design object
+  is_weighted   = TRUE,
+  dataset_title = "CPS",
+  age_group_var = "age_group",
+  year_var = "year",           # Variable name for the survey year (default "year")
+  srh_var = "srh",             # Variable name for self-rated health (default "srh")
+  weight_var = "ASECWT"        # Name of weight variable (if needed)
+)
+
+trend_year_ranges_gss <- analyze_trend_age_group_year_range_direct(
+  data_object   = svy_gss,           #  survey design object
+  is_weighted   = TRUE,
+  dataset_title = "GSS",
+  age_group_var = "age_group",
+  year_var = "year",           
+  srh_var = "health",             
+  weight_var = "wtsscomp"        # weight variable (if needed)
+)
+
+trend_year_ranges_nhanes <- analyze_trend_age_group_year_range_direct(
+                          data_object = svy_nhanes,
+                          dataset_title = "NHANES Dataset",
+                          is_weighted = TRUE,
+                          age_group_var = "age_group",
+                          year_var = "year",
+                          srh_var = "srh",
+                          weight_var = "WTINT2YR")
+
+
+trend_year_ranges_nhanes_k <- analyze_trend_age_group_year_range_direct(data_object = svy_nhanes_k,
+                          dataset_title = "NHANES Dataset",
+                          is_weighted = TRUE,
+                          srh_var = "srh",
+                          age_group_var = "age_group",
+                          year_var = "year",
+                          weight_var = "dem_wghts")
+
+trend_year_ranges_cps$results
+trend_year_ranges_cps$plot
+
+trend_year_ranges_brfss$results
+trend_year_ranges_brfss$plot
+
+trend_year_ranges_gss$results
+trend_year_ranges_gss$plot
+
+trend_year_ranges_nhanes$results
+trend_year_ranges_nhanes$plot
+
+trend_year_ranges_nhanes_k$results
+trend_year_ranges_nhanes_k$plot
+
+
+```
+

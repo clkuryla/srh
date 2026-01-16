@@ -1,0 +1,171 @@
+---
+title: "CLK SRH Gloria Methods"
+author: "Christine Lucille Kuryla"
+date: "2024-12-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+# SRH NHANES 4
+srh_nhanes <- read_csv("data/nhanes4_selected_apcsrh.csv") %>% 
+  mutate(year_clk = year) %>% 
+  select(-year) %>% 
+  mutate(cohort_clk = cohort) %>% 
+  select(-cohort) %>% 
+  mutate(age_clk = age) %>% 
+  select(-age) %>% 
+  select(-c("SDDSRVYR", "SDMVSTRA", "SDMVPSU" ))
+  
+  
+
+# Gloria's Aim 2 Data
+original_df <- read.csv("/Users/christinekuryla/Documents/Columbia_Courses/QMSS Time Series Panel Forecasting/lab_1_self_rated_health/self_rated_health/big_data/NHANES/Gloria_preprocessed/Data-3/Core_Dataset_Aim2.csv")
+
+intersect(colnames(srh_nhanes), colnames(original_df))
+# "SEQN"     "age"      "year"     "cohort"   
+
+dim(original_df) # 73906
+dim(srh_nhanes) # 97836
+
+original_df_merged <- merge(srh_nhanes, original_df, 
+                            by = "SEQN") 
+
+dim(original_df_merged) # 55030
+
+data_nhanes <- original_df_merged %>% 
+  dplyr::mutate(phenoageadv_delta_levinenocrp_scale = scale(phenoageadv_delta_levinenocrp_nosexstrat),
+         phenoageadv_delta_elasticnet_scale = scale(phenoageadv_delta_elasticnet_nosexstrat),
+         kdmadv_delta_levinenocrp_scale = scale(kdmadv_delta_levinenocrp_nosexstrat),
+         kdmadv_delta_elasticnet_scale = scale(kdmadv_delta_elasticnet_nosexstrat),
+         hdlog_levinenocrp_scale = scale(hdlog_levinenocrp_nosexstrat),
+         hdlog_elasticnet_scale = scale(hdlog_elasticnet_nosexstrat)) %>% 
+  mutate(age_group = as.factor( 
+                            cut(
+                            age,
+                            breaks = c(17, 29, 39, 49, 59, 69, Inf),
+                            labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            levels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            right = TRUE
+                          )))
+
+colnames(data_nhanes)
+
+```
+
+
+```{r}
+
+nhanes_svy <- data_nhanes %>%
+  as_survey_design(
+    ids = SDMVPSU,           # PSU identifiers (use 1 if not available)
+  #  weights = WTINT2YR,  # original -- interview weights -- larger sample size but fewer covariates
+    weights = WTMEC2YR, # Gloria's -- enable more covariates
+    strata = SDMVSTRA,
+    nest = TRUE
+    )
+
+phenoageadv_delta_levinenocrp_scale
+phenoageadv_delta_elasticnet_scale
+
+```
+
+```{r}
+
+
+nhanes_svy %>%
+  #mutate(age_group = cut(age, breaks = 6)) %>% 
+  group_by(age_group, year) %>%
+  summarise(
+    mean_health = survey_mean(phenoageadv_delta_levinenocrp_scale, na.rm = TRUE)
+  ) %>% 
+  ggplot(aes(x = year, y = mean_health, color = age_group)) +
+  #  geom_smooth(alpha = 0.2) +
+  geom_line() +
+  geom_point() +
+  labs(
+    title = "Average SRH Per Year for Each Age Group",
+    subtitle = "NHANES IV",
+    x = "Year",
+    y = "Average Self-Rated Health",
+    color = "Age Group"
+  ) +
+  theme_minimal()
+
+nhanes_svy %>% 
+  group_by(age, year) %>% 
+  summarize(mean_health = survey_mean(srh)) %>% 
+  ggplot(aes(x = age, y = mean_health)) +
+  geom_line(color = "cornflowerblue") +
+  facet_wrap(~ year) +
+  labs(title = "Self-Rated Health By Age (Per Year)",
+       subtitle = "NHANES IV Dataset",
+       x = "Age of Respondent", 
+       y = "Average SRH",
+       )
+
+# Perform weighted regression for each year
+weighted_lm_by_year <- nhanes_svy %>%
+  group_by(year) %>%
+  group_map_dfr(~ {
+    model <- survey::svyglm(phenoageadv_delta_levinenocrp_scale ~ srh, design = .x)
+    tidy(model, conf.int = TRUE)
+  }) %>%
+  filter(term == "srh") %>%
+  select(year, estimate, std.error, conf.low, conf.high, statistic, p.value)
+
+knitr::kable(weighted_lm_by_year)
+
+# Visualize
+ggplot(weighted_lm_by_year, aes(x = year, y = estimate)) +
+  geom_point() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                position=position_dodge(0.05)) +
+  geom_smooth(method = "lm", se = TRUE, alpha = 0.3) +
+  labs(
+    title = "Regression of 'Age' Coefficient Over Years",
+    subtitle = "NHANES IV Dataset",
+    x = "Year",
+    y = "Coefficient of Age"
+  ) +
+  theme_minimal()
+
+
+```
+
+```{r}
+
+# make this a heat map?
+
+nhanes_svy %>%
+  #mutate(age_group = cut(age, breaks = 6)) %>% 
+  group_by(age_group, year) %>%
+  summarise(
+    corr = srvyr::survey_corr(phenoageadv_delta_levinenocrp_nosexstrat, srh, na.rm = TRUE)
+  ) %>% 
+  ggplot(aes(x = year, y = corr, color = age_group)) +
+  #  geom_smooth(alpha = 0.2) +
+  geom_line() +
+  geom_point() +
+  labs(
+    title = "Average SRH Per Year for Each Age Group",
+    subtitle = "NHANES IV",
+    x = "Year",
+    y = "Average Self-Rated Health",
+    color = "Age Group"
+  ) +
+  theme_minimal()
+
+
+hist(data_nhanes$phenoageadv_delta_levinenocrp_nosexstrat)
+
+cor(data_nhanes$phenoageadv_delta_levinenocrp_nosexstrat, data_nhanes$srh, na.rm = TRUE)
+
+
+```
+
+

@@ -1,0 +1,579 @@
+---
+title: "power"
+author: "Christine Lucille Kuryla"
+date: "2025-05-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(here)
+library(survey)
+library(tidyverse)
+```
+ 
+```{r}
+
+# CPS 
+table(data_cps$year) # 1996-2024, annual (29 waves) 
+mean(table(data_cps$year)) # mean=130637.4
+range(data_cps$year) # range=93785 to 150186
+nrow(data_cps) # 3788484     (3,788,484)
+svymean(~srh, svy_cps, deff = TRUE) 
+#          mean        SE   DEff
+# srh 3.6673966 0.0006893 1.4899
+
+# BRFSS
+table(data_brfss$year) #1993-2024, annual (32 waves)
+mean(table(data_brfss$year)) # mean=321,286.9
+range(table(data_brfss$year)) # 24838 (101548) to 500301
+nrow(data_brfss) # 10281180       (10,281,180)
+colnames(data_brfss) # phys/ment/func, seatbelt, smoke, marital, educa, pregnant
+
+# GSS
+table(data_gss$year) # 1972-2022 (31 waves)
+mean(table(data_gss$year)) # 1756.839
+range(table(data_gss$year)) # 914 to 3696
+nrow(data_gss) # 54462         (54,462)
+colnames(data_gss) # happy, life, educ, polviews, class, satfin
+svymean(~health, gss_svy, deff = TRUE) 
+#             mean        SE   DEff
+# health 2.9942747 0.0041248 809.18
+gss_svy_1 <- data_gss %>% filter(year == 2014) %>% 
+  as_survey_design(
+    ids = 1,           # PSU identifiers (use 1 if not available)
+    weights = wtsscomp  # wtssall pre 2018, wtsscomp combined //Use 'wtss' for single-year analysis
+  )
+svymean(~health, gss_svy_1, deff = "replace") 
+#           mean       SE   DEff
+# health 2.918678 0.023552 1.3163
+
+# NHIS
+table(data_nhis$YEAR) # 1972 - 2023, annual (52 years)
+mean(table(data_nhis$YEAR)) # 95805.85
+range(table(data_nhis$YEAR)) # 35115 132891
+nrow(data_nhis) # 4981904        (4,981,904)
+svymean(~HEALTH, svy_nhis, deff = "replace") 
+#            mean        SE   DEff
+# HEALTH 2.1531129 0.0019628 13.664
+svy_nhis_1 <- data_nhis %>% filter(YEAR == 2014) %>% 
+#  filter(!(is.na(HHWEIGHT))) %>% 
+ # filter(!(is.na(SAMPWEIGHT))) %>% 
+  as_survey_design(
+    ids = PSU,           # PSU identifiers (use 1 if not available)
+  #  weights = SAMPWEIGHT,  # missing some every once in a while
+  #  weights = HHWEIGHT, # missing 2019+
+    strata = STRATA, 
+    nest = TRUE
+    )
+svymean(~HEALTH, svy_nhis_1, deff = "replace") 
+#            mean        SE   DEff
+# HEALTH 2.1231292 0.0058813 3.3624
+
+nhis_design <- svydesign(
+  ids     = ~PSU, 
+  strata  = ~STRATA, 
+  weights = ~HHWEIGHT,         # full-sample weight
+  data    = data_nhis %>% filter(YEAR == 2011),
+  nest    = TRUE)
+# svymean(~HEALTH, nhis_design, deff = "replace")
+#             mean        SE   DEff
+# HEALTH 2.1336099 0.0062557 3.4361
+
+
+# IVS
+table(data_ivs_usa$year) # 1982 - 2017 (7 waves) (1982 1990 1995 1999 2006 2011 2017)
+mean(table(data_ivs_usa$year)) # 1827.143
+range(table(data_ivs_usa$year)) # 1192 to 2583
+nrow(data_ivs_usa) # 12790     (12,790)
+colnames(data_ivs_usa) # happy, lifesat, political, trust, ethnicity, freedom of choice
+
+# NHANES (K)
+table(data_nhanes$release_nb) # waves 2-10 (9 waves)
+mean(table(data_nhanes$release_nb)) # 5195.667
+range(table(data_nhanes$release_nb)) # 4845 to 5617
+nrow(data_nhanes) # 46761           (46,761)
+svymean(~health, svy_nhanes_k, deff = TRUE) 
+#            mean       SE   DEff
+# health 2.641861 0.005705 1.6716
+
+# NHANES (CLK)
+table(data_nhanes_clk$year) # 1999-2018 (10 waves) ----- online has 11-12 waves
+mean(table(data_nhanes_clk$year)) # 9783.6 
+range(table(data_nhanes_clk$year)) # 5849 to 11026
+nrow(data_nhanes_clk) # 97836
+
+
+
+
+######## TOTAL N
+# 3788484 + 10281180 + 54462 + 4981904 + 12790 + 97836
+# 19216656
+# 19,216,656
+# Waves
+# > 29 + 32 + 31 + 52 +7 + 10
+# 161
+
+```
+
+
+# Coef plot
+```{r}
+
+# CPS
+ggplot(weighted_lm_by_year, aes(x = year, y = estimate)) +
+#  geom_line() +
+  geom_point() +
+  geom_smooth(method = "lm") + 
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+ # geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
+  labs(
+    title = "Change in 'Age' Coefficient Over Years",
+    subtitle = "CPS Dataset",
+    x = "Year",
+    y = "Coefficient of Age"
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "maroon") +
+  theme_minimal()
+
+```
+
+```{r}
+
+# BRFSS
+
+lm_health_v_age_0 <- data_brfss %>%
+  group_by(year) %>%
+  do(broom::tidy(lm(srh ~ age_5yr_num, data = .), conf.int = TRUE)) %>%  # Add conf.int = TRUE for CIs
+  filter(term == "age_5yr_num") %>%
+  select(year, coef = estimate, conf.low, conf.high, se = std.error, t_statistic = statistic,  p_value = p.value)
+
+# View the results with confidence intervals, se, t statistic, and p value
+# print(lm_health_v_age_0)
+knitr::kable(lm_health_v_age_0,
+             caption = "BRFSS 1993 - 2023 Dataset")
+
+# Plot coefficients
+ggplot(lm_health_v_age_0, aes(x = year, y = coef)) +
+  geom_point() +
+  geom_errorbar(aes(ymin=conf.low, ymax=conf.high), width=.2,
+                 position=position_dodge(0.05)) +
+  labs(
+    title = "Change in 'Age' Coefficient Over Years",
+    subtitle = "BRFSS 1993 - 2023 Dataset",
+    x = "Year",
+    y = "Coefficient of Age"
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "maroon") +
+  theme_minimal()
+
+```
+
+
+
+
+
+# Aim 1
+```{r}
+
+## ================================================================
+##  Aim 2 Power Calculation – BRFSS 20XX      last edit: 2025-05-04
+##  Author: <your name>
+## ================================================================
+##  Overview --------------------------------------------------------
+##  1.  Specify raw sample size and design effect (Deff)
+##  2.  Compute effective sample size (n_eff)
+##  3.  Choose desired power (1 – β), alpha, and effect metric
+##  4.  Derive minimum-detectable f² and ΔR²
+##  5.  Repeat for smallest age–sex stratum (optional)
+##  6.  [Optional] Show equivalent detectable odds ratio
+##  7.  [Optional] Quick pilot code to *estimate* Deff from one year
+## -----------------------------------------------------------------
+
+## -----------------------------------------------------------------
+## 1. Inputs you may want to change
+## -----------------------------------------------------------------
+raw_n      <- 321286    # BRFSS adult sample size for one year (mean = 321286) (min = 101548)
+deff       <- 1.5       # conservative BRFSS design effect
+alpha      <- 0.05      # two-sided
+power_des  <- 0.80      # target (1 – beta)
+n_cov      <- 5         # number of other predictors in the model
+                     # (age, sex, race, SES, plus the domain score)
+##  Smaller stratum example (e.g., age 18-24)  ---------------------
+raw_n_stratum <- raw_n/6   # raw cases in smallest age group
+deff_stratum  <- deff    # assume same Deff; change if known
+
+## -----------------------------------------------------------------
+## 2.  Effective sample size
+## -----------------------------------------------------------------
+n_eff         <- raw_n          / deff
+n_eff_stratum <- raw_n_stratum  / deff_stratum
+
+## -----------------------------------------------------------------
+## 3.  Critical z-scores for α and power
+## -----------------------------------------------------------------
+z_alpha <- qnorm(1 - alpha/2)     # two-sided
+z_beta  <- qnorm(power_des)       # power = Φ(z_beta)
+
+## -----------------------------------------------------------------
+## 4.  Minimum-detectable f² and ΔR²
+##     Formula (Soper 2021):
+##        f²_min = (z_alpha + z_beta)^2 / n_eff
+##        ΔR²    = f²_min / (1 + f²_min)
+## -----------------------------------------------------------------
+f2_full <- (z_alpha + z_beta)^2 / n_eff
+dR2_full <- f2_full / (1 + f2_full)
+
+f2_str  <- (z_alpha + z_beta)^2 / n_eff_stratum
+dR2_str <- f2_str / (1 + f2_str)
+
+##  ---- Report -----------------------------------------------------
+cat("\n=====  BRFSS Aim 2 Power – Incremental R²  =====\n")
+sprintf("Full sample effective n  : %6.0f", n_eff)  |> cat("\n")
+sprintf("Min detectable f²        : %9.5e", f2_full) |> cat("\n")
+sprintf("Min detectable ΔR²       : %9.5e (%.3f%%)",
+        dR2_full, 100 * dR2_full)                    |> cat("\n")
+
+cat("\n-- Smallest age group --\n")
+sprintf("Stratum effective n      : %6.0f", n_eff_stratum) |> cat("\n")
+sprintf("Min detectable ΔR²       : %9.5e (%.3f%%)",
+        dR2_str, 100 * dR2_str)                       |> cat("\n")
+
+## -----------------------------------------------------------------
+## 5.  Optional: translate to minimum-detectable odds ratio
+## -----------------------------------------------------------------
+# Assumptions: outcome prevalence (poor/fair SRH) ~ 0.18
+prev <- 0.18
+# Use function from 'samplesize' or manual calculation; here, quick
+# approximation via pwr.f2.test equivalence:
+library(pwr)
+# Convert a target OR to Cohen's h, then to f2; do a quick search
+target_OR <- 1.10            # OR per 1-SD predictor you *care* about
+# Quick, back-of-the-envelope detectable OR (Z test for log-OR)
+se_logOR  <- sqrt(1/(n_eff * prev * (1 - prev)))
+md_OR     <- exp((z_alpha + qnorm(power_des)) * se_logOR)
+
+cat("\n=====  Optional OR translation  =====\n")
+sprintf("With prevalence %.0f%%, smallest detectable OR ≈ %.3f",
+        100*prev, md_OR) |> cat("\n")
+
+## -----------------------------------------------------------------
+## 6.  [Optional] Pilot code to *estimate* Deff from one BRFSS year
+## -----------------------------------------------------------------
+## Uncomment and run after loading the actual dataset
+# library(survey)
+# brfss_design <- svydesign(
+#          ids     = ~psu,
+#          strata  = ~stratum,
+#          weights = ~finalwt,
+#          data    = brfss20xx,
+#          nest    = TRUE)
+#
+# svymean(~srh, brfss_design, deff = TRUE)   # prints Deff
+#
+# # Plug that Deff back into the block above and re-run script
+
+
+
+# Using mean (321286)
+
+
+
+
+# The mean BRFSS wave has 321286 respondents, giving an effective sample of 214191 (Deff = 1.5) the study is powered at 80 % (α = 0.05) to detect an incremental ΔR² as small as 0.004 % attributable to a one-SD change in the physical-health domain score; even in the smallest age group (n_eff ≈ 35698) we can detect ΔR² of 0.022 %.
+
+# Using minimum (101548)
+
+
+```
+
+```{r}
+
+## ================================================================
+##  Aim-2 Power Script  (BRFSS)      last edit: 2025-05-04
+##  Adds COHEN'S d ↔ f² conversions
+## ================================================================
+##  Contents --------------------------------------------------------
+##   1. User inputs
+##   2. Helper functions:  d ↔ r ↔ f²
+##   3. Core calculations  (full sample + smallest stratum)
+##   4. Optional: show detectable OR for poor/fair SRH
+##   5. Optional: pilot code to *estimate* Deff
+## -----------------------------------------------------------------
+
+## -----------------------------------------------------------------
+## 1.  USER INPUTS  -------------------------------------------------
+## -----------------------------------------------------------------
+raw_n      <- 101548    # BRFSS adult sample size (one year)
+deff       <- 1.5       # Design effect (conservative)
+alpha      <- 0.05      # two-sided test
+power_des  <- 0.80      # desired power (1 – beta)
+
+## --- Stratum: smallest age cell you plan to report  --------------
+raw_n_stratum <- raw_n/6      # raw cases (e.g., age 18-24)
+
+## --- Effect-size assumption  -------------------------------------
+## Choose EITHER:
+assumed_f2 <- 0.01          # <- Cohen's *small* effect in regression
+assumed_d  <- 0.20            # set e.g. 0.20 if you prefer d
+
+## If you give 'assumed_d' instead, the script converts it to f²
+## -----------------------------------------------------------------
+
+## -----------------------------------------------------------------
+## 2.  Helper functions  -------------------------------------------
+## -----------------------------------------------------------------
+d_to_r  <- function(d) d / sqrt(d^2 + 4)
+r_to_d  <- function(r) 2 * r / sqrt(1 - r^2)
+f2_to_r <- function(f2) sqrt(f2 / (1 + f2))
+r_to_f2 <- function(r)  r^2 / (1 - r^2)
+d_to_f2 <- function(d)  d^2 / 4
+f2_to_d <- function(f2) 2 * sqrt(f2)
+
+## Whichever metric is supplied, make sure we have f²
+if (is.finite(assumed_d)) {
+  assumed_f2 <- d_to_f2(assumed_d)
+  message(sprintf("Converted d = %.2f  →  f² = %.4f", 
+                  assumed_d, assumed_f2))
+}
+
+## -----------------------------------------------------------------
+## 3.  CORE CALCULATIONS  ------------------------------------------
+## -----------------------------------------------------------------
+## Effective n
+n_eff         <- raw_n         / deff
+n_eff_stratum <- raw_n_stratum / deff
+
+## Critical Z’s
+z_alpha <- qnorm(1 - alpha/2)
+z_beta  <- qnorm(power_des)
+
+## ------- A. Achieved power for the ASSUMED effect  ---------------
+library(pwr)
+## Full sample
+u <- 1                      # one extra predictor (domain score)
+v <- n_eff - u - 1          # residual DF
+power_full <- pwr.f2.test(u, v, f2 = assumed_f2, 
+                          sig.level = alpha)$power
+
+## Stratum
+v_str <- n_eff_stratum - u - 1
+power_str <- pwr.f2.test(u, v_str, f2 = assumed_f2, 
+                         sig.level = alpha)$power
+
+## ------- B.  Minimum-detectable effect (MDE)  --------------------
+##  Formula:  f²_min = (z_alpha + z_beta)^2 / n_eff
+f2_min_full <- (z_alpha + z_beta)^2 / n_eff
+d_min_full  <- f2_to_d(f2_min_full)
+
+f2_min_str  <- (z_alpha + z_beta)^2 / n_eff_stratum
+d_min_str   <- f2_to_d(f2_min_str)
+
+## ---------------  Report results ---------------------------------
+cat("\n=================  POWER REPORT  =================\n")
+cat(sprintf("Design-adj. effective n  (full) : %8.0f\n", n_eff))
+cat(sprintf("Assumed effect:  f² = %.4f  (d ≈ %.2f)\n", 
+            assumed_f2, f2_to_d(assumed_f2)))
+cat(sprintf("  Achieved power (full)         : %.1f%%\n", 
+            100 * power_full))
+cat(sprintf("  Achieved power (smallest str.) : %.1f%%\n", 
+            100 * power_str))
+
+cat("\n-- Minimum Detectable Effect at 80%% power --\n")
+cat(sprintf("  Full sample : f² = %.5e  (ΔR² = %.4f%%, d ≈ %.3f)\n",
+            f2_min_full, 100 * f2_min_full / (1 + f2_min_full), d_min_full))
+cat(sprintf("  Stratum     : f² = %.5e  (ΔR² = %.4f%%, d ≈ %.3f)\n",
+            f2_min_str,  100 * f2_min_str  / (1 + f2_min_str),  d_min_str))
+
+## -----------------------------------------------------------------
+## 4.  OPTIONAL – detectable odds ratio for dichotomous SRH --------
+## -----------------------------------------------------------------
+prev <- 0.18                              # prevalence of poor/fair SRH
+se_logOR <- sqrt(1 / (n_eff * prev * (1 - prev)))
+md_OR    <- exp((z_alpha + qnorm(power_des)) * se_logOR)
+cat("\nDetectable OR at 80% power (poor/fair SRH):", 
+    sprintf("≈ %.3f\n", md_OR))
+
+## -----------------------------------------------------------------
+## 5.  OPTIONAL – pilot Deff estimation (commented) -----------------
+## -----------------------------------------------------------------
+# library(survey)
+# brfss_design <- svydesign(
+#     ids     = ~psu,
+#     strata  = ~stratum,
+#     weights = ~finalwt,
+#     data    = brfss20xx,
+#     nest    = TRUE)
+# svymean(~srh, brfss_design, deff = TRUE)
+# -> Plug returned Deff into 'deff' above and rerun
+
+# Using mean
+# Assuming a small standardized effect (Cohen’s d = 0.20; f² = 0.01), the BRFSS effective sample (214191 after Deff = 1.5) provides >99 % power (α = 0.05) to detect the incremental variance explained by the physical-health domain score; even the smallest age stratum (n_eff ≈ 35698) retains >99 % power. The minimum detectable effect at 80 % power corresponds to d = 0.012 (ΔR² ≈ 0.0037 %) in the full sample and d = 0.03 (ΔR² ≈ 0.0220 %) in an age stratum.
+
+# Using min
+# # Assuming a small standardized effect (Cohen’s d = 0.20; f² = 0.01), and the smallest wave of BRFSS (n = 101548) the BRFSS effective sample (67699 after Deff = 1.5) provides >99 % power (α = 0.05) to detect the incremental variance explained by the physical/mental/functional-health domain scores; even the smallest age stratum (n_eff ≈ 11283) retains >99 % power. The minimum detectable effect at 80 % power corresponds to d = 0.022 (ΔR² ≈ 0.0116 %) in the full sample and d = 0.053 (ΔR² ≈ 0.0695 %) in an age stratum.
+
+
+```
+
+# Power for all 6
+
+```{r}
+
+
+# ------------------------------------------------------------------
+#  Power table for six surveys  |  paste or source into R
+# ------------------------------------------------------------------
+library(dplyr)
+library(pwr)
+
+## ----------------- Input your numbers here -----------------------
+survey_df <- tibble(
+  survey   = c("NHIS", "BRFSS", "NHANES", "GSS", "CPS", "IVS"),
+  raw_n    = c(95805, 321286, 9783, 1756, 130637, 1827),
+#  raw_n    = c(95805/6, 321286/6, 9783/6, 1756/6, 130637/6, 1827/6),
+  deff     = c(1.5, 3.4, 1.7, 1.5, 1, 1.3)
+)
+
+alpha  <- 0.05
+power_target <- 0.80
+z_alpha <- qnorm(1 - alpha/2)
+z_beta  <- qnorm(power_target)
+
+prev <- 0.20          # prevalence of poor/fair SRH (adjust if needed)
+
+## ----------------- Helper converters -----------------------------
+f2_to_d <- function(f2) 2 * sqrt(f2)
+
+## ----------------- Calculate table columns -----------------------
+results <- survey_df %>%
+  mutate(
+    n_eff  = raw_n / deff,
+    n_eff_cell = n_eff / 6,                     # smallest age band
+    f2_min = (z_alpha + z_beta)^2 / n_eff_cell,
+    d_min  = 2 * sqrt(f2_min),
+    dR2_min = f2_min / (1 + f2_min),
+    # ---- NEW: detectable odds ratio -------------------
+    se_logOR = sqrt(1 / (n_eff_cell * prev * (1 - prev))),
+    OR_min   = exp((z_alpha + z_beta) * se_logOR)
+  ) %>%
+  mutate(
+    across(c(n_eff_cell), round, 0),
+    across(c(dR2_min), ~ round(.x * 100, 2)),   # percent
+    across(c(d_min),   ~ round(.x, 2)),
+    across(c(OR_min),  ~ round(.x, 2))
+  )
+
+print(results)
+
+## ------- Copy–paste results into your markdown table -------------
+
+
+```
+
+```{r}
+
+# NHIS
+# 0.108416
+data_nhis %>% filter(HEALTH %in% c(4,5)) %>% summarize(n = n()) / data_nhis %>% filter(HEALTH %in% c(1, 2, 3, 4,5)) %>%  summarize(n = n())
+
+# BRFSS
+# 0.1834729
+data_brfss %>% filter(srh %in% c(1,2)) %>% summarize(n = n()) / data_brfss %>% summarize(n = n())
+
+# NHANES
+# 0.1649188
+data_nhanes_clk %>% filter(srh %in% c(1,2)) %>% summarize(n = n()) / data_nhanes_clk %>% summarize(n = n())
+
+# GSS
+# 0.2504682
+data_gss %>% filter(health %in% c(1,2)) %>% summarize(n = n()) / data_gss %>% summarize(n = n())
+
+# CPS
+# 0.1391298
+data_cps %>% filter(srh %in% c(1,2)) %>% summarize(n = n()) / data_cps %>% summarize(n = n())
+
+# IVS
+# 0.04448788
+data_ivs_usa %>% filter(health %in% c(1,2)) %>% summarize(n = n()) / data_ivs_usa %>% summarize(n = n())
+
+
+
+```
+
+
+# NHIS stats
+
+```{r}
+hist(data_nhis$HEALTH)
+
+data_nhis <- data_nhis %>% 
+  filter(HEALTH %in% 1:5) %>% 
+  mutate(srh = 6 - HEALTH)
+
+hist(data_nhis$srh)
+
+
+# NHIS SRH info
+
+# I treat SRH as a continuous variable (1-5) in my analyses
+
+# nrow(data_nhis) = 4959749 for all years
+# length(unique(data_nhis$YEAR)) = 52
+# d_eff = 1.5
+# average number of respondents per survey year (wave) is 95380
+# N_eff = 63586
+
+# NHIS SRH distribution
+# I reverse coded standard  variable "HEALTH" in NHIS into "srh" so that 1 = poor, 2 = fair, 3 = good, 4 = very good, 5 = excellent
+
+# mean and sd
+mean(data_nhis$srh) # 3.875936
+sd(data_nhis$srh) # 1.103926
+
+# total srh distribution of all years 
+table(data_nhis$srh) # 1 = 132855,  2 = 404861, 3 = 1356226, 4 = 1116622, 5 = 1949185 
+
+# percent srh distribution of all years
+table(data_nhis$srh) / nrow(data_nhis) #     1 = 0.02678664, 2 = 0.08162933, 3 =  0.27344650, 4 =  0.22513680, 5 = 0.39300073
+
+
+```
+
+```{r}
+
+# ---- packages ----
+library(powerMediation)   # install.packages("powerMediation")
+
+# ---- inputs ----
+p_event   <- 0.101        # 7.4% baseline hospitalization prevalence
+or_unit   <- 1.235         # effect you want to detect
+beta      <- log(or_unit)
+sd_SRH    <- 1.10         # empirical SD of 5-level SRH
+alpha     <- 0.05
+N_eff     <- 95380 / 1.5  # design-effect adjusted N  ≈ 63587
+N_stratum <- N_eff / 6    # if you run separate age strata
+
+# ---- analytic power ----
+pow_full   <- powerLogisticCon(n   = N_eff,
+                               beta = beta,
+                               sdx  = sd_SRH,
+                               p1   = p_event,
+                               alpha= alpha)
+
+pow_age    <- powerLogisticCon(n   = N_stratum,
+                               beta = beta,
+                               sdx  = sd_SRH,
+                               p1   = p_event,
+                               alpha= alpha)
+
+cat(sprintf("Full-sample power : %.1f%%\n", 100*pow_full))
+cat(sprintf("Per-age-group power: %.1f%%\n", 100*pow_age))
+
+
+```
+

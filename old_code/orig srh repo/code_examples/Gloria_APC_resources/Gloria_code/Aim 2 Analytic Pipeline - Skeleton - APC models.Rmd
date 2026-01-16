@@ -1,0 +1,521 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+title: "Aim 2 Analytic Pipeline - Skeleton - APC models"
+author: "Gloria Huei-Jong Graf"
+date: "2/28/2023"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(mc.cores = parallel::detectCores())
+library(plyr)
+library(tidyverse)
+library(foreign)
+library(haven)
+library(survey)
+library(srvyr)
+library(stargazer)
+library(patchwork)
+library(kableExtra)
+library(lme4)
+library(brms)
+library(rstanarm)
+library(arm)
+library(here)
+
+
+
+
+```
+
+This document contains skeleton code to setup and/or run all formal APC analyses in Aim 2 of Graf dissertation. APC analyses follow the general approach followed by Yang and Land (specified below). Outputs are saved to the "Aim 2 Outputs" folder.
+
+I identify APC effects using different statistical approaches: 
+
+1) Hierarchical APC Estimation with Cross-Classified Random Effects (HAPC-CCREM)
+
+2) The Constrained Coefficients GLIM estimator (CGLIM), including the Intrinsic Estimator (IE)
+
+3) Median Polish Estimation
+
+```{r loading-data, echo = FALSE}
+#original_df = read.csv("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Core_Dataset_Aim2.csv")
+original_df <- read.csv(here("big_data/NHANES/Gloria_preprocessed/Data-3/Core_Dataset_Aim2.csv"))
+
+# Standardizing bioage variable
+original_df = 
+  original_df %>%
+  dplyr::mutate(phenoageadv_delta_levinenocrp_scale = scale(phenoageadv_delta_levinenocrp_nosexstrat),
+         phenoageadv_delta_elasticnet_scale = scale(phenoageadv_delta_elasticnet_nosexstrat),
+         kdmadv_delta_levinenocrp_scale = scale(kdmadv_delta_levinenocrp_nosexstrat),
+         kdmadv_delta_elasticnet_scale = scale(kdmadv_delta_elasticnet_nosexstrat),
+         hdlog_levinenocrp_scale = scale(hdlog_levinenocrp_nosexstrat),
+         hdlog_elasticnet_scale = scale(hdlog_elasticnet_nosexstrat))
+
+# Creating dataset for BHAPC models (non-survey object, restricting to NHANES4, Black or White race, age <=80, complete information, n=28991)
+bhapc_df =
+  original_df %>%
+  mutate(age_4yr = as.character(age_4yr),
+         cohort_4yr = as.character(cohort_4yr),
+         period_4yr = as.character(period_4yr),
+         race = factor(race, levels = c("White", "Black")),
+         gender = factor(gender, levels = c(1, 2), labels = c("Men", "Women")),
+         lnWTMEC4YR = ifelse(WTMEC4YR == 0, 0, log(WTMEC4YR))) %>%
+  filter(year != 1991 & race %in% c("Black", "White") & age_4yr <= 80 &
+          !is.na(phenoageadv_delta_elasticnet_nosexstrat) & !is.na(age) & !is.na(age_squared) & !is.na(race) & !is.na(gender) & !is.na(period_4yr) & !is.na(cohort_4yr)) %>%
+  droplevels()
+
+# Creating dataset for IE/MP models (survey object, n=55081, restricting to NHANES4)
+surveymatrix_df =
+  original_df %>%
+  mutate(age_4yr = as.character(age_4yr),
+         cohort_4yr = as.character(cohort_4yr),
+         period_4yr = as.character(period_4yr),
+         race = factor(race, levels = c("White", "Black", "Other")),
+         gender = factor(gender, levels = c(1, 2), labels = c("Men", "Women")),
+         lnWTMEC4YR = ifelse(WTMEC4YR == 0, 0, log(WTMEC4YR))) %>%
+  filter(year != 1991) %>%
+  droplevels()
+
+svydesign_all = 
+  surveymatrix_df %>% 
+  as_survey_design(ids=SDMVPSU, strata=SDMVSTRA, weights=WTMEC4YR, nest = TRUE)
+
+svydesign_core =
+  subset(svydesign_all, race %in% c("White", "Black") & age_4yr <= 80 & !is.na(phenoageadv_delta_elasticnet_nosexstrat) & !is.na(age) & !is.na(age_squared) & !is.na(race) & !is.na(gender) & !is.na(period_4yr) & !is.na(cohort_4yr))
+svydesign_wm =
+  subset(svydesign_all, race == "White" & gender == "Men" & age_4yr <= 80 &
+          !is.na(phenoageadv_delta_elasticnet_nosexstrat) & !is.na(age) & !is.na(age_squared) & !is.na(race) & !is.na(period_4yr) & !is.na(cohort_4yr))
+svydesign_ww =
+  subset(svydesign_all, race == "White" & gender == "Women" & age_4yr <= 80 &
+          !is.na(phenoageadv_delta_elasticnet_nosexstrat) & !is.na(age) & !is.na(age_squared) & !is.na(race) & !is.na(period_4yr) & !is.na(cohort_4yr))
+svydesign_bm =
+  subset(svydesign_all, race == "Black" & gender == "Men" & age_4yr <= 80 &
+          !is.na(phenoageadv_delta_elasticnet_nosexstrat) & !is.na(age) & !is.na(age_squared) & !is.na(race) & !is.na(period_4yr) & !is.na(cohort_4yr))
+svydesign_bw =
+  subset(svydesign_all, race == "Black" & gender == "Women" & age_4yr <= 80 &
+          !is.na(phenoageadv_delta_elasticnet_nosexstrat) & !is.na(age) & !is.na(age_squared) & !is.na(race) & !is.na(period_4yr) & !is.na(cohort_4yr))
+```
+
+### Examining race-sex stratum sample sizes
+```{r echo = FALSE}
+addmargins((table(bhapc_df$age_4yr, bhapc_df$period_4yr))) %>%
+  knitr::kable(caption = "Number of participants by cohort, full sample") %>%
+  row_spec(0,bold=TRUE) %>% 
+  kableExtra::kable_classic(html_font = "Times New Roman")
+
+addmargins(table(subset(bhapc_df, race == "White" & gender == "Men")$age_4yr, subset(bhapc_df, race == "White" & gender == "Men")$period_4yr)) %>%
+  knitr::kable(caption = "Number of participants by cohort, White men") %>%
+  row_spec(0,bold=TRUE) %>% 
+  kableExtra::kable_classic(html_font = "Times New Roman")
+
+addmargins(table(subset(bhapc_df, race == "White" & gender == "Women")$age_4yr, subset(bhapc_df, race == "White" & gender == "Women")$period_4yr)) %>%
+  knitr::kable(caption = "Number of participants by cohort, White women") %>%
+  row_spec(0,bold=TRUE) %>% 
+  kableExtra::kable_classic(html_font = "Times New Roman")
+
+addmargins(table(subset(bhapc_df, race == "Black" & gender == "Men")$age_4yr, subset(bhapc_df, race == "Black" & gender == "Men")$period_4yr)) %>%
+  knitr::kable(caption = "Number of participants by cohort, Black men") %>%
+  row_spec(0,bold=TRUE) %>% 
+  kableExtra::kable_classic(html_font = "Times New Roman")
+
+addmargins(table(subset(bhapc_df, race == "Black" & gender == "Women")$age_4yr, subset(bhapc_df, race == "Black" & gender == "Women")$period_4yr)) %>%
+  knitr::kable(caption = "Number of participants by cohort, Black women") %>%
+  row_spec(0,bold=TRUE) %>% 
+  kableExtra::kable_classic(html_font = "Times New Roman")
+```
+
+## Identification of APC effects using different statistical approaches
+
+### Bayesian HAPC models
+
+#### Unstratified models
+
+```{r}
+# UNSTRATIFIED MODELS
+bayesian_unstrat_paaelasticnet = stan_lmer(phenoageadv_delta_elasticnet_scale ~ age + scale(age_squared) + race + gender + lnWTMEC4YR + (1|period_4yr) + (1|cohort_4yr) + (1|SDMVSTRA/SDMVPSU), data = bhapc_df, adapt_delta = 0.998, iter = 6000)
+bayesian_unstrat_kdmaelasticnet = stan_lmer(kdmadv_delta_elasticnet_scale ~ age + scale(age_squared) + race + gender + lnWTMEC4YR + (1|period_4yr) + (1|cohort_4yr) + (1|SDMVSTRA/SDMVPSU), data = bhapc_df, adapt_delta = 0.998, iter = 6000)
+bayesian_unstrat_hdlogelasticnet = stan_lmer(hdlog_elasticnet_scale ~ age + scale(age_squared) + race + gender + lnWTMEC4YR + (1|period_4yr) + (1|cohort_4yr) + (1|SDMVSTRA/SDMVPSU), data = bhapc_df, adapt_delta = 0.998, iter = 6000)
+
+# Saving rstanarm unstratified models
+saveRDS(bayesian_unstrat_paaelasticnet, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_unstrat_paaelasticnet.rds")
+saveRDS(bayesian_unstrat_kdmaelasticnet, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_unstrat_kdmaelasticnet.rds")
+saveRDS(bayesian_unstrat_hdlogelasticnet, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_unstrat_hdlogelasticnet.rds")
+
+# Pulling and saving coefficients from unstratified models
+coef_bayesian_unstrat_paaelasticnet =
+  summary(bayesian_unstrat_paaelasticnet) %>%
+  as.data.frame() %>%
+  mutate(measure = "paaelasticnet")
+coef_bayesian_unstrat_kdmaaelasticnet =
+  summary(bayesian_unstrat_kdmaelasticnet) %>%
+  as.data.frame() %>%
+  mutate(measure = "kdmaelasticnet")
+coef_bayesian_unstrat_hdlogelasticnet =
+  summary(bayesian_unstrat_hdlogelasticnet) %>%
+  as.data.frame() %>%
+  mutate(measure = "hdlogelasticnet")
+
+coef_bayesian_unstrat = 
+  coef_bayesian_unstrat_paaelasticnet %>%
+  rbind(coef_bayesian_unstrat_kdmaaelasticnet) %>%
+  rbind(coef_bayesian_unstrat_hdlogelasticnet)
+
+write_csv(coef_bayesian_unstrat, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC_bayesian_unstrat.csv")
+```
+
+#### Stratified models
+
+```{r}
+# Creation of race-sex subgroups
+wm_df = 
+  bhapc_df %>% 
+  filter(race == "White" & gender == "Men")
+ww_df = 
+  bhapc_df %>% 
+  filter(race == "White" & gender == "Women")
+bm_df = 
+  bhapc_df %>% 
+  filter(race == "Black" & gender == "Men")
+bw_df = 
+  bhapc_df %>% 
+  filter(race == "Black" & gender == "Women")
+
+# STRATIFIED MODELS
+
+bayesian_wm_paaelasticnet <- stan_lmer(phenoageadv_delta_elasticnet_scale ~ age + scale(age_squared) + lnWTMEC4YR + (1|period_4yr) + (1|cohort_4yr) + (1|SDMVSTRA/SDMVPSU), data = wm_df, adapt_delta = 0.998, iter = 5000)
+bayesian_ww_paaelasticnet <- stan_lmer(phenoageadv_delta_elasticnet_scale ~ age + scale(age_squared) + lnWTMEC4YR + (1|period_4yr) + (1|cohort_4yr) + (1|SDMVSTRA/SDMVPSU), data = ww_df, adapt_delta = 0.999, iter = 5000)
+bayesian_bm_paaelasticnet <- stan_lmer(phenoageadv_delta_elasticnet_scale ~ age + scale(age_squared) + lnWTMEC4YR + (1|period_4yr) + (1|cohort_4yr) + (1|SDMVSTRA/SDMVPSU), data = bm_df, adapt_delta = 0.998, iter = 5000)
+bayesian_bw_paaelasticnet <- stan_lmer(phenoageadv_delta_elasticnet_scale ~ age + scale(age_squared) + lnWTMEC4YR + (1|period_4yr) + (1|cohort_4yr) + (1|SDMVSTRA/SDMVPSU), data = bw_df, adapt_delta = 0.998, iter = 5000)
+
+bayesian_wm_kdmaelasticnet <- stan_lmer(scale(kdmadv_delta_elasticnet_nosexstrat) ~ age + scale(age_squared) + lnWTMEC4YR + (1|period_4yr) + (1|cohort_4yr) + (1|SDMVSTRA/SDMVPSU), data = wm_df, adapt_delta = 0.998, iter = 5000)
+bayesian_ww_kdmaelasticnet <- stan_lmer(scale(kdmadv_delta_elasticnet_nosexstrat) ~ age + scale(age_squared) + lnWTMEC4YR + (1|period_4yr) + (1|cohort_4yr) + (1|SDMVSTRA/SDMVPSU), data = ww_df, adapt_delta = 0.998, iter = 5000)
+bayesian_bm_kdmaelasticnet <- stan_lmer(scale(kdmadv_delta_elasticnet_nosexstrat) ~ age + scale(age_squared) + lnWTMEC4YR + (1|period_4yr) + (1|cohort_4yr) + (1|SDMVSTRA/SDMVPSU), data = bm_df, adapt_delta = 0.998, iter = 5000)
+bayesian_bw_kdmaelasticnet <- stan_lmer(scale(kdmadv_delta_elasticnet_nosexstrat) ~ age + scale(age_squared) + lnWTMEC4YR + (1|period_4yr) + (1|cohort_4yr) + (1|SDMVSTRA/SDMVPSU), data = bw_df, adapt_delta = 0.998, iter = 5000)
+
+bayesian_wm_hdlogelasticnet <- stan_lmer(hdlog_elasticnet_scale ~ age + scale(age_squared) + lnWTMEC4YR + (1|period_4yr) + (1|cohort_4yr) + (1|SDMVSTRA/SDMVPSU), data = wm_df, adapt_delta = 0.998, iter = 5000)
+bayesian_ww_hdlogelasticnet <- stan_lmer(hdlog_elasticnet_scale ~ age + scale(age_squared) + lnWTMEC4YR + (1|period_4yr) + (1|cohort_4yr) + (1|SDMVSTRA/SDMVPSU), data = ww_df, adapt_delta = 0.998, iter = 5000)
+bayesian_bm_hdlogelasticnet <- stan_lmer(hdlog_elasticnet_scale ~ age + scale(age_squared) + lnWTMEC4YR + (1|period_4yr) + (1|cohort_4yr) + (1|SDMVSTRA/SDMVPSU), data = bm_df, adapt_delta = 0.998, iter = 5000)
+bayesian_bw_hdlogelasticnet <- stan_lmer(hdlog_elasticnet_scale ~ age + scale(age_squared) + lnWTMEC4YR + (1|period_4yr) + (1|cohort_4yr) + (1|SDMVSTRA/SDMVPSU), data = bw_df, adapt_delta = 0.998, iter = 5000)
+
+# Saving rstanarm stratified models
+saveRDS(bayesian_wm_paaelasticnet, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_wm_paaelasticnet.rds")
+saveRDS(bayesian_ww_paaelasticnet, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_ww_paaelasticnet.rds")
+saveRDS(bayesian_bm_paaelasticnet, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_bm_paaelasticnet.rds")
+saveRDS(bayesian_bw_paaelasticnet, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_bw_paaelasticnet.rds")
+
+saveRDS(bayesian_wm_kdmaelasticnet, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_wm_kdmaelasticnet.rds")
+saveRDS(bayesian_ww_kdmaelasticnet, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_ww_kdmaelasticnet.rds")
+saveRDS(bayesian_bm_kdmaelasticnet, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_bm_kdmaelasticnet.rds")
+saveRDS(bayesian_bw_kdmaelasticnet, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_bw_kdmaelasticnet.rds")
+
+saveRDS(bayesian_wm_hdlogelasticnet, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_wm_hdlogelasticnet.rds")
+saveRDS(bayesian_ww_hdlogelasticnet, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_ww_hdlogelasticnet.rds")
+saveRDS(bayesian_bm_hdlogelasticnet, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_bm_hdlogelasticnet.rds")
+saveRDS(bayesian_bw_hdlogelasticnet, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_bw_hdlogelasticnet.rds")
+
+# Pulling and saving coefficients from stratified models
+coef_bayesian_wm_paaelasticnet =
+  summary(bayesian_wm_paaelasticnet) %>%
+  as.data.frame() %>%
+  mutate(pop = "wm", measure = "paaelasticnet")
+coef_bayesian_ww_paaelasticnet =
+  summary(bayesian_ww_paaelasticnet) %>%
+  as.data.frame() %>%
+  mutate(pop = "ww", measure = "paaelasticnet")
+coef_bayesian_bm_paaelasticnet =
+  summary(bayesian_bm_paaelasticnet) %>%
+  as.data.frame() %>%
+  mutate(pop = "bm", measure = "paaelasticnet")
+coef_bayesian_bw_paaelasticnet =
+  summary(bayesian_bw_paaelasticnet) %>%
+  as.data.frame() %>%
+  mutate(pop = "bw", measure = "paaelasticnet")
+
+coef_bayesian_paaelasticnet_strat =
+  coef_bayesian_wm_paaelasticnet %>%
+  rbind(coef_bayesian_ww_paaelasticnet) %>%
+  rbind(coef_bayesian_bm_paaelasticnet) %>%
+  rbind(coef_bayesian_bw_paaelasticnet)
+
+coef_bayesian_wm_kdmaelasticnet =
+  summary(bayesian_wm_kdmaelasticnet) %>%
+  as.data.frame() %>%
+  mutate(pop = "wm", measure = "kdmaelasticnet")
+coef_bayesian_ww_kdmaelasticnet =
+  summary(bayesian_ww_kdmaelasticnet) %>%
+  as.data.frame() %>%
+  mutate(pop = "ww", measure = "kdmaelasticnet")
+coef_bayesian_bm_kdmaelasticnet =
+  summary(bayesian_bm_kdmaelasticnet) %>%
+  as.data.frame() %>%
+  mutate(pop = "bm", measure = "kdmaelasticnet")
+coef_bayesian_bw_kdmaelasticnet =
+  summary(bayesian_bw_kdmaelasticnet) %>%
+  as.data.frame() %>%
+  mutate(pop = "bw", measure = "kdmaelasticnet")
+
+coef_bayesian_kdmaelasticnet_strat =
+  coef_bayesian_wm_kdmaelasticnet %>%
+  rbind(coef_bayesian_ww_kdmaelasticnet) %>%
+  rbind(coef_bayesian_bm_kdmaelasticnet) %>%
+  rbind(coef_bayesian_bw_kdmaelasticnet)
+
+coef_bayesian_wm_hdlogelasticnet =
+  summary(bayesian_wm_hdlogelasticnet) %>%
+  as.data.frame() %>%
+  mutate(pop = "wm", measure = "hdlogelasticnet")
+coef_bayesian_ww_hdlogelasticnet =
+  summary(bayesian_ww_hdlogelasticnet) %>%
+  as.data.frame() %>%
+  mutate(pop = "ww", measure = "hdlogelasticnet")
+coef_bayesian_bm_hdlogelasticnet =
+  summary(bayesian_bm_hdlogelasticnet) %>%
+  as.data.frame() %>%
+  mutate(pop = "bm", measure = "hdlogelasticnet")
+coef_bayesian_bw_hdlogelasticnet =
+  summary(bayesian_bw_hdlogelasticnet) %>%
+  as.data.frame() %>%
+  mutate(pop = "bw", measure = "hdlogelasticnet")
+
+coef_bayesian_hdlogelasticnet_strat =
+  coef_bayesian_wm_hdlogelasticnet %>%
+  rbind(coef_bayesian_ww_hdlogelasticnet) %>%
+  rbind(coef_bayesian_bm_hdlogelasticnet) %>%
+  rbind(coef_bayesian_bw_hdlogelasticnet)
+
+coef_bayesian_strat = 
+  coef_bayesian_paaelasticnet_strat %>%
+  rbind(coef_bayesian_kdmaelasticnet_strat) %>%
+  rbind(coef_bayesian_hdlogelasticnet_strat)
+
+write_csv(coef_bayesian_strat, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC_bayesian_strat.csv")
+```
+
+### Constrained Coefficients estimators (CGLIM & IE)
+Performed using the APC Stata module: https://econpapers.repec.org/software/bocbocode/s456754.htm. Sample code available at: https://yangclaireyang.web.unc.edu/age-period-cohort-analysis-new-models-methods-and-empirical-applications/chapter-5/
+
+#### Creation of APC matrix for use in Stata
+```{r echo = FALSE}
+apcmatrix_all =
+  svydesign_core %>%
+  group_by(period_4yr, age_4yr, cohort_4yr) %>%
+  dplyr::summarise(phenoageadv_delta_levinenocrp = survey_mean(phenoageadv_delta_levinenocrp_scale, na.rm = T),
+            phenoageadv_delta_elasticnet = survey_mean(phenoageadv_delta_elasticnet_scale, na.rm = T),
+            kdmadv_delta_levinenocrp = survey_mean(kdmadv_delta_levinenocrp_scale, na.rm = T),
+            kdmadv_delta_elasticnet = survey_mean(kdmadv_delta_elasticnet_scale, na.rm = T),
+            hdlog_levinenocrp = survey_mean(hdlog_levinenocrp_scale, na.rm = T),
+            hdlog_elasticnet = survey_mean(hdlog_elasticnet_scale, na.rm = T)) %>%
+  pivot_longer(cols = phenoageadv_delta_levinenocrp:hdlog_elasticnet_se, names_to = "variable", values_to = "value") %>%
+  mutate(value = ifelse(value == 0, NA, value),
+         period_4yr = as.numeric(period_4yr),
+         age_4yr = as.numeric(age_4yr),
+         cohort_4yr = as.numeric(cohort_4yr)) %>%
+  pivot_wider(names_from = variable, values_from = value) %>%
+  ungroup() %>%
+  arrange(period_4yr, age_4yr, cohort_4yr)
+
+apcmatrix_wm =
+  svydesign_wm %>%
+  group_by(period_4yr, age_4yr, cohort_4yr) %>%
+  dplyr::summarise(phenoageadv_delta_levinenocrp = survey_mean(phenoageadv_delta_levinenocrp_scale, na.rm = T),
+            phenoageadv_delta_elasticnet = survey_mean(phenoageadv_delta_elasticnet_scale, na.rm = T),
+            kdmadv_delta_levinenocrp = survey_mean(kdmadv_delta_levinenocrp_scale, na.rm = T),
+            kdmadv_delta_elasticnet = survey_mean(kdmadv_delta_elasticnet_scale, na.rm = T),
+            hdlog_levinenocrp = survey_mean(hdlog_levinenocrp_scale, na.rm = T),
+            hdlog_elasticnet = survey_mean(hdlog_elasticnet_scale, na.rm = T)) %>%
+  pivot_longer(cols = phenoageadv_delta_levinenocrp:hdlog_elasticnet_se, names_to = "variable", values_to = "value") %>%
+  mutate(value = ifelse(value == 0, NA, value),
+         period_4yr = as.numeric(period_4yr),
+         age_4yr = as.numeric(age_4yr),
+         cohort_4yr = as.numeric(cohort_4yr)) %>%
+  pivot_wider(names_from = variable, values_from = value) %>%
+  ungroup() %>%
+  mutate(race = "White",
+         gender = "Men")
+
+apcmatrix_ww =
+  svydesign_ww %>%
+  group_by(period_4yr, age_4yr, cohort_4yr) %>%
+  dplyr::summarise(phenoageadv_delta_levinenocrp = survey_mean(phenoageadv_delta_levinenocrp_scale, na.rm = T),
+            phenoageadv_delta_elasticnet = survey_mean(phenoageadv_delta_elasticnet_scale, na.rm = T),
+            kdmadv_delta_levinenocrp = survey_mean(kdmadv_delta_levinenocrp_scale, na.rm = T),
+            kdmadv_delta_elasticnet = survey_mean(kdmadv_delta_elasticnet_scale, na.rm = T),
+            hdlog_levinenocrp = survey_mean(hdlog_levinenocrp_scale, na.rm = T),
+            hdlog_elasticnet = survey_mean(hdlog_elasticnet_scale, na.rm = T)) %>%
+  pivot_longer(cols = phenoageadv_delta_levinenocrp:hdlog_elasticnet_se, names_to = "variable", values_to = "value") %>%
+  mutate(value = ifelse(value == 0, NA, value),
+         period_4yr = as.numeric(period_4yr),
+         age_4yr = as.numeric(age_4yr),
+         cohort_4yr = as.numeric(cohort_4yr)) %>%
+  pivot_wider(names_from = variable, values_from = value) %>%
+  ungroup() %>%
+  mutate(race = "White",
+         gender = "Women")
+
+apcmatrix_bm =
+  svydesign_bm %>%
+  group_by(period_4yr, age_4yr, cohort_4yr) %>%
+  dplyr::summarise(phenoageadv_delta_levinenocrp = survey_mean(phenoageadv_delta_levinenocrp_scale, na.rm = T),
+            phenoageadv_delta_elasticnet = survey_mean(phenoageadv_delta_elasticnet_scale, na.rm = T),
+            kdmadv_delta_levinenocrp = survey_mean(kdmadv_delta_levinenocrp_scale, na.rm = T),
+            kdmadv_delta_elasticnet = survey_mean(kdmadv_delta_elasticnet_scale, na.rm = T),
+            hdlog_levinenocrp = survey_mean(hdlog_levinenocrp_scale, na.rm = T),
+            hdlog_elasticnet = survey_mean(hdlog_elasticnet_scale, na.rm = T)) %>%
+  pivot_longer(cols = phenoageadv_delta_levinenocrp:hdlog_elasticnet_se, names_to = "variable", values_to = "value") %>%
+  mutate(value = ifelse(value == 0, NA, value),
+         period_4yr = as.numeric(period_4yr),
+         age_4yr = as.numeric(age_4yr),
+         cohort_4yr = as.numeric(cohort_4yr)) %>%
+  pivot_wider(names_from = variable, values_from = value) %>%
+  ungroup() %>%
+  mutate(race = "Black",
+         gender = "Men")
+
+apcmatrix_bw =
+  svydesign_bw %>%
+  group_by(period_4yr, age_4yr, cohort_4yr) %>%
+  dplyr::summarise(phenoageadv_delta_levinenocrp = survey_mean(phenoageadv_delta_levinenocrp_scale, na.rm = T),
+            phenoageadv_delta_elasticnet = survey_mean(phenoageadv_delta_elasticnet_scale, na.rm = T),
+            kdmadv_delta_levinenocrp = survey_mean(kdmadv_delta_levinenocrp_scale, na.rm = T),
+            kdmadv_delta_elasticnet = survey_mean(kdmadv_delta_elasticnet_scale, na.rm = T),
+            hdlog_levinenocrp = survey_mean(hdlog_levinenocrp_scale, na.rm = T),
+            hdlog_elasticnet = survey_mean(hdlog_elasticnet_scale, na.rm = T)) %>%
+  pivot_longer(cols = phenoageadv_delta_levinenocrp:hdlog_elasticnet_se, names_to = "variable", values_to = "value") %>%
+  mutate(value = ifelse(value == 0, NA, value),
+         period_4yr = as.numeric(period_4yr),
+         age_4yr = as.numeric(age_4yr),
+         cohort_4yr = as.numeric(cohort_4yr)) %>%
+  pivot_wider(names_from = variable, values_from = value) %>%
+  ungroup() %>%
+  mutate(race = "Black",
+         gender = "Women")
+
+apcmatrix_strat =
+  rbind(apcmatrix_wm, apcmatrix_ww) %>%
+  rbind(apcmatrix_bm) %>%
+  rbind(apcmatrix_bw)
+
+# write_dta(apcmatrix_all, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/apcmatrix_all.dta", version = 10)
+
+# write_dta(apcmatrix_strat, "C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/apcmatrix_strat.dta", version = 10)
+```
+
+### The Median Polish Estimator: example (models run directly in output file)
+https://rdrr.io/r/stats/medpolish.html
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2946643/
+
+```{r echo = FALSE, message = FALSE, warning = FALSE, output = FALSE}
+medpolish_charts_f = function(data, outcome, plottitle){
+
+    ap_matrix = 
+      apcmatrix_all %>%
+      dplyr::select(period_4yr, age_4yr, phenoageadv_delta_elasticnet) %>%
+      filter(age_4yr != 84) %>%
+      pivot_wider(names_from = "period_4yr", values_from = phenoageadv_delta_elasticnet)
+    
+    agegroups_ap = ap_matrix$age_4yr
+    
+    ap_matrix = ap_matrix %>% dplyr::select(-age_4yr)
+    
+    ac_matrix = 
+      apcmatrix_all %>%
+      dplyr::select(cohort_4yr, age_4yr, phenoageadv_delta_elasticnet) %>%
+      pivot_wider(names_from = "cohort_4yr", values_from = phenoageadv_delta_elasticnet) 
+    
+    agegroups_ac = ac_matrix$age_4yr
+    
+    ac_matrix = ac_matrix %>% dplyr::select(-age_4yr)
+    
+    pc_matrix = 
+      apcmatrix_all %>%
+      dplyr::select(period_4yr, cohort_4yr, phenoageadv_delta_elasticnet) %>%
+      pivot_wider(names_from = "cohort_4yr", values_from = phenoageadv_delta_elasticnet)
+    
+    periodgroups = pc_matrix$period_4yr
+    
+    pc_matrix = pc_matrix %>% dplyr::select(-period_4yr)
+    
+    medpolish_cohorteff_all =
+      medpolish(ap_matrix, na.rm = TRUE)
+    
+    medpolish_periodeff_all =
+      medpolish(ac_matrix, na.rm = TRUE)
+    
+    medpolish_ageeff_all =
+      medpolish(pc_matrix, na.rm = TRUE)
+    
+    medpolish_cohort_output = 
+      medpolish_cohorteff_all$residuals %>%
+      as.data.frame() %>%
+      mutate(age_4yr = agegroups_ap) %>%
+      pivot_longer(c(`1999`:`2015`), names_to = "period_4yr", values_to = "residuals") %>%
+      mutate(period_4yr = as.numeric(period_4yr),
+             age_4yr = as.numeric(age_4yr)) %>%
+      mutate(cohort_4yr = period_4yr - age_4yr) %>%
+      dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+      filter(!is.na(residuals))
+    
+    medpolish_period_output =
+      medpolish_periodeff_all$residuals %>%
+      as.data.frame() %>%
+      mutate(age_4yr = agegroups_ac) %>%
+      pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+      mutate(cohort_4yr = as.numeric(cohort_4yr),
+             age_4yr = as.numeric(age_4yr)) %>%
+      mutate(period_4yr = cohort_4yr + age_4yr) %>%
+      dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+      filter(!is.na(residuals))
+    
+    medpolish_age_output =
+      medpolish_ageeff_all$residuals %>%
+      as.data.frame() %>%
+      mutate(period_4yr = periodgroups) %>%
+      pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+      mutate(cohort_4yr = as.numeric(cohort_4yr),
+             period_4yr = as.numeric(period_4yr)) %>%
+      mutate(age_4yr = period_4yr - cohort_4yr) %>%
+      dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+      filter(!is.na(residuals))
+    
+    medpolish_age_p =
+      medpolish_age_output %>%
+      ggplot(aes(x=age_4yr, y=residuals)) +
+      geom_point() +
+      stat_summary(geom = "line", fun = "mean", col = "royalblue", linewidth = 1) +
+      theme_minimal() + 
+      labs(title = "PhenoAge")
+    
+    medpolish_period_p =
+      medpolish_period_output %>%
+      ggplot(aes(x=period_4yr, y=residuals)) +
+      geom_point() +
+      stat_summary(geom = "line", fun = "mean", col = "royalblue", linewidth = 1) +
+      theme_minimal()
+    
+    medpolish_cohort_p =
+      medpolish_cohort_output %>%
+      ggplot(aes(x=cohort_4yr, y=residuals)) +
+      geom_point() +  
+      stat_summary(geom = "line", fun = "mean", col = "royalblue", linewidth = 1) +
+      theme_minimal()
+    
+    medpolish_age_p / medpolish_period_p / medpolish_cohort_p
+
+}
+```
+
+
+```{r echo = FALSE, warnings = FALSE, message = FALSE}
+medpolish_charts_f(medpolish_weightedmeans_all, "phenoageadv_delta_elasticnet_nosexstrat", "PhenoAge")
+medpolish_charts_f(medpolish_weightedmeans_all, "kdmadv_all", "KDM")
+medpolish_charts_f(medpolish_weightedmeans_all, "hdlog_all", "HD (log)")
+```
+
+
+
+
+
+

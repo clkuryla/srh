@@ -1,0 +1,595 @@
+---
+title: "NHANES IV SRH and Health Covariates"
+author: "Christine Lucille Kuryla"
+date: "2025-01-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(here)
+library(survey)
+library(srvyr)
+library(broom)
+library(Hmisc)
+library(tidyverse)
+library(rlang)
+
+```
+
+NHANES IV has a wealth of data. We are going to explore the relationship between many health variables and SRH, and see if that changes with age over time.
+
+### Load and wrangle data
+
+```{r}
+
+# Load and wrangle nhanes data 
+
+data_nh <- read_csv(here("code_examples/kamaryn_nhanes/nhanes_1999-2018_2023-11-29.csv"))
+
+dim(data_nh)
+sum(is.na(data_nh$health)) # note there are 38579 NA's for health out of 96241 subj
+
+year_to_wave <- read_csv(here("big_data/NHANES/nhanes_4/nh4_year_to_wave.csv")) %>% 
+  mutate(release_nb = wave) 
+
+data_nhanes <- data_nh %>% 
+  filter(visit == 1) %>% 
+  filter(age_visit >= 18) %>% 
+  filter(!(is.na(health))) %>% # remove subjects without our primary variable of interest
+ # left_join(year_to_wave, by = "release_nb") %>% # year of survey (***note each survey is two years, this is aproximate and just the first year)
+  mutate(srh = 6 - health) %>%  # recode SRH to be more intuitive (Excellent = 5 to Poor = 1)
+  mutate(age = age_visit) # more intuitive naming for APC analyses
+
+# variables of interest: 
+# self-rated health: "health" originally, reverse recoded to "srh"
+# age at survey: "age_visit"
+# age at follow-up (censored/deceased): "age_last"
+# vital status at follow-up (alive/decesased): "deceased"
+# year/wave: "release_nb"
+# SEQN: "BaseID"
+# "ddem_wghts"	Full Sample 2 Year MEC Exam Weight	WTMEC2YR
+# "dem_wghts_4yr"	Full Sample 4 Year MEC Exam Weight	WTMEC4YR
+
+
+# Adding gloria's for weight variable: SDDSRVYR and other clock and APC things if needed 
+
+data_nhanes_gloria <- read.csv(here("big_data/NHANES/Gloria_preprocessed/Data-3/Core_Dataset_Aim2.csv"))
+
+data_nhanes <- data_nhanes %>% 
+  mutate(SEQN = as.character(BaseID)) %>% 
+  left_join(data_nhanes_gloria %>% 
+              rename(race_decoded = race) %>% 
+              mutate(age = as.numeric(age)), 
+            by = c("SEQN", "age")) %>% 
+  mutate(age = as.numeric(age))
+
+# add more
+
+data_nhanes <- data_nhanes %>% 
+  mutate(age_group = as.factor( 
+                            cut(
+                            age,
+                            breaks = c(17, 29, 39, 49, 59, 69, Inf),
+                            labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            levels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            right = TRUE
+                          )),
+         health_cat = factor(srh, 
+                        levels = 1:5,
+                        labels = c("Poor", "Fair", "Good", "Very Good", "Excellent")))
+
+# more new columns to enable APC
+data_nhanes <- data_nhanes %>% 
+  mutate(period_cut_6 = as.factor(cut(data_nhanes$year, 6)),
+    period_cut_10 = as.factor(cut(data_nhanes$year, 10)),
+    period_cut_12 = as.factor(cut(data_nhanes$year, 12)),
+    period_groups = as.factor(cut(data_nhanes$year, 12)),
+    period_10yr = as.factor(
+                            cut(
+                            year,
+                            breaks = c(1973, 1982, 1990, 1998, 2006, 2014, Inf),
+                            labels = c("1974-1982", "1982-1990", "1990-1998", 
+                                       "1998-2006", "2006-2014", "2014-2022"),
+                            right = TRUE
+                            )
+                          ),
+    period_decade = as.factor(
+                            cut(
+                            year,
+                            breaks = c(1973, 1979, 1989, 1999, 2009, 2019, Inf),
+                            labels = c("1974-1979", "1980-1989", "1990-1999",
+                                       "2000-2009", "2010-2019", "2020-2024"),
+                            right = TRUE
+                            )
+                          ),
+    age_group = as.factor( 
+                            cut(
+                            age,
+                            breaks = c(17, 29, 39, 49, 59, 69, Inf),
+                            labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            right = TRUE
+                          )),
+    age_groups = as.factor( 
+                            cut(
+                            age,
+                            breaks = c(17, 29, 39, 49, 59, 69, Inf),
+                            labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            right = TRUE
+                          )),
+    age_group_small = as.factor( 
+                            cut(
+                              age,
+                              breaks = c(seq(15, 75, by = 5), Inf),  # Define breaks up to 75 and include Inf for the last group
+                              labels = c("16-20", "21-25", "26-30", "31-35", "36-40", "41-45", "46-50", "51-55", "56-60", "61-65", "66-70", "71-75", "76+"),
+                              right = FALSE  # Makes intervals left-closed, i.e., [x, y)
+                            )
+                          )
+                          ,
+    generation = factor(
+      case_when(
+        cohort >= 1901 & cohort <= 1927 ~ "Greatest (1901-1927)",
+        cohort >= 1928 & cohort <= 1945 ~ "Silent (1928-1945)",
+        cohort >= 1946 & cohort <= 1964 ~ "Boomers (1946-1964)",
+        cohort >= 1965 & cohort <= 1980 ~ "Gen X (1965-1980)",
+        cohort >= 1981 & cohort <= 1996 ~ "Millennials (1981-1996)",
+        cohort >= 1997 & cohort <= 2012 ~ "Gen Z (1997-2012)",
+        TRUE ~ "Other"
+      ),
+      levels = c(
+        "Greatest (1901-1927)",
+        "Silent (1928-1945)",
+        "Boomers (1946-1964)",
+        "Gen X (1965-1980)",
+        "Millennials (1981-1996)",
+        "Gen Z (1997-2012)"#,
+     #   "Other"
+      )
+    ),
+    generation_two_sections = factor(
+      case_when(
+        generation == "Greatest (1901-1927)" & cohort <= 1914 ~ "Greatest Early (1901-1914)",
+        generation == "Greatest (1901-1927)" & cohort > 1914 ~ "Greatest Late (1915-1927)",
+        generation == "Silent (1928-1945)" & cohort <= 1936 ~ "Silent Early (1928-1936)",
+        generation == "Silent (1928-1945)" & cohort > 1936 ~ "Silent Late (1937-1945)",
+        generation == "Boomers (1946-1964)" & cohort <= 1955 ~ "Boomers Early (1946-1955)",
+        generation == "Boomers (1946-1964)" & cohort > 1955 ~ "Boomers Late (1956-1964)",
+        generation == "Gen X (1965-1980)" & cohort <= 1972 ~ "Gen X Early (1965-1972)",
+        generation == "Gen X (1965-1980)" & cohort > 1972 ~ "Gen X Late (1973-1980)",
+        generation == "Millennials (1981-1996)" & cohort <= 1988 ~ "Millennials Early (1981-1988)",
+        generation == "Millennials (1981-1996)" & cohort > 1988 ~ "Millennials Late (1989-1996)",
+        generation == "Gen Z (1997-2012)" & cohort <= 2004 ~ "Gen Z Early (1997-2004)",
+        generation == "Gen Z (1997-2012)" & cohort > 2004 ~ "Gen Z Late (2005-2012)",
+        TRUE ~ "Other"
+      ),
+      levels = c(
+        "Greatest Early (1901-1914)", "Greatest Late (1915-1927)",
+        "Silent Early (1928-1936)", "Silent Late (1937-1945)",
+        "Boomers Early (1946-1955)", "Boomers Late (1956-1964)",
+        "Gen X Early (1965-1972)", "Gen X Late (1973-1980)",
+        "Millennials Early (1981-1988)", "Millennials Late (1989-1996)",
+        "Gen Z Early (1997-2004)", "Gen Z Late (2005-2012)"#,
+     #   "Other"
+      )
+    ),
+    generation_three_sections = factor(
+      case_when(
+        generation == "Greatest (1901-1927)" & cohort <= 1910 ~ "Greatest Early (1901-1910)",
+        generation == "Greatest (1901-1927)" & cohort > 1910 & cohort <= 1918 ~ "Greatest Mid (1911-1918)",
+        generation == "Greatest (1901-1927)" & cohort > 1918 ~ "Greatest Late (1919-1927)",
+        generation == "Silent (1928-1945)" & cohort <= 1934 ~ "Silent Early (1928-1934)",
+        generation == "Silent (1928-1945)" & cohort > 1934 & cohort <= 1940 ~ "Silent Mid (1935-1940)",
+        generation == "Silent (1928-1945)" & cohort > 1940 ~ "Silent Late (1941-1945)",
+        generation == "Boomers (1946-1964)" & cohort <= 1951 ~ "Boomers Early (1946-1951)",
+        generation == "Boomers (1946-1964)" & cohort > 1951 & cohort <= 1958 ~ "Boomers Mid (1952-1958)",
+        generation == "Boomers (1946-1964)" & cohort > 1958 ~ "Boomers Late (1959-1964)",
+        generation == "Gen X (1965-1980)" & cohort <= 1970 ~ "Gen X Early (1965-1970)",
+        generation == "Gen X (1965-1980)" & cohort > 1970 & cohort <= 1976 ~ "Gen X Mid (1971-1976)",
+        generation == "Gen X (1965-1980)" & cohort > 1976 ~ "Gen X Late (1977-1980)",
+        generation == "Millennials (1981-1996)" & cohort <= 1986 ~ "Millennials Early (1981-1986)",
+        generation == "Millennials (1981-1996)" & cohort > 1986 & cohort <= 1992 ~ "Millennials Mid (1987-1992)",
+        generation == "Millennials (1981-1996)" & cohort > 1992 ~ "Millennials Late / Gen Z (1993-2004)",
+    #    generation == "Gen Z (1997-2012)" & cohort <= 2002 ~ "Gen Z Early (1997-2002)",
+    #    generation == "Gen Z (1997-2012)" & cohort > 2002 & cohort <= 2008 ~ "Gen Z Mid (2003-2008)",
+    #    generation == "Gen Z (1997-2012)" & cohort > 2008 ~ "Gen Z Late (2009-2012)",
+        TRUE ~ "Other"
+      ),
+      levels = c(
+        "Greatest Early (1901-1910)", "Greatest Mid (1911-1918)", "Greatest Late (1919-1927)",
+        "Silent Early (1928-1934)", "Silent Mid (1935-1940)", "Silent Late (1941-1945)",
+        "Boomers Early (1946-1951)", "Boomers Mid (1952-1958)", "Boomers Late (1959-1964)",
+        "Gen X Early (1965-1970)", "Gen X Mid (1971-1976)", "Gen X Late (1977-1980)",
+        "Millennials Early (1981-1986)", "Millennials Mid (1987-1992)", 
+        "Millennials Late / Gen Z (1993-2004)"
+        #"Millennials Late (1993-1996)",
+      #  "Gen Z Early (1997-2002)", "Gen Z Mid (2003-2008)", "Gen Z Late (2009-2012)" #,
+      #  "Other"
+      )
+    ))
+  
+
+```
+
+### Available variables
+
+```{r}
+
+colnames(data_nhanes)
+
+```
+
+
+## Create survey design object
+
+```{r}
+
+svy_nhanes <- data_nhanes %>%
+  filter(!(is.na(SDMVPSU))) %>% 
+  as_survey_design(
+  #  ids = 1,
+    ids = SDMVPSU,           # PSU identifiers (use 1 if not available)
+  #  weights = WTINT2YR,  # original -- interview weights -- larger sample size but fewer covariates
+    weights = WTMEC2YR, # Gloria's -- enable more covariates
+    strata = SDMVSTRA,
+    nest = TRUE
+    )
+
+```
+
+# Relationship between SRH and time, age, and cohort (overall)
+
+## Relationship between SRH and X over time (per wave)
+
+```{r}
+
+# We will need model formula, design (svy_nhanes), and family 
+# family=stats::gaussian(), family=quasibinomial(), family=quasipoisson()
+
+# This will extract the coefficient for the first term in the model summary
+
+# coefficient <- model_summary$coefficients[2,"Estimate"]
+# se <- model_summary$coefficients[2,"Std. Error"]
+# t_value <- model_summary$coefficients[2,"t value"] 
+# p_value <- model_summary$coefficients[2,"Pr(>|t|)"]
+
+svyglm(formula = srh ~ heart_dis,
+       design = svy_nhanes,
+       family = stats::gaussian()
+         )
+
+######
+# This function gives us a tibble of the glm
+#####
+
+srh_vs_X_results <- function(formula,
+                                      design = svy_nhanes,
+                                      family = stats::gaussian(),
+                                      group_by_1) {
+  
+  # Convert string formula to R formula
+  f <- as.formula(formula)
+  
+  # Extract variable names
+  vars_in_formula <- all.vars(f)
+  var_1 <- vars_in_formula[1]  # y-variable
+  var_2 <- vars_in_formula[2]  # x-variable
+  
+  # Convert them to symbols for filter
+  var_1_sym <- rlang::sym(var_1)
+  var_2_sym <- rlang::sym(var_2)
+  
+  # Grouping, modeling, returning a data frame of results
+  model_results <- design %>%
+    # Filter out NAs for just the variables in the model
+    filter(!is.na(!!var_1_sym)) %>%
+    filter(!is.na(!!var_2_sym)) %>%
+    group_by({{group_by_1}}) %>%  #, {{group_by_2}}) %>%
+    group_map_dfr(~ {
+      
+      # Check if there's enough variation in the *response* variable
+      if (length(unique(.x$variables[[var_1]])) < 2) {
+        # Not enough variation in var_1 => return row of NAs
+        return(tibble(
+          group_1     = unique(.x$variables[[rlang::as_name(enquo(group_by_1))]]),
+     #     group_2     = unique(.x$variables[[rlang::as_name(enquo(group_by_2))]]),
+          formula     = as.character(formula),
+          coefficient = NA_real_,
+          se          = NA_real_,
+          t_value     = NA_real_,
+          p_value     = NA_real_
+        ))
+      }
+      
+      # Fit the model
+      model_var <- survey::svyglm(formula = f, design = ., family = family)
+      
+      # Extract the summary coefficients
+      coefs <- summary(model_var)$coefficients
+      
+      # We want the row corresponding to var_2
+      # If that row doesn't exist, return NA for that group
+      if (!var_2 %in% rownames(coefs)) {
+        return(tibble(
+          group_1     = unique(.x$variables[[rlang::as_name(enquo(group_by_1))]]),
+     #     group_2     = unique(.x$variables[[rlang::as_name(enquo(group_by_2))]]),
+          formula     = as.character(formula),
+          coefficient = NA_real_,
+          se          = NA_real_,
+          t_value     = NA_real_,
+          p_value     = NA_real_
+        ))
+      }
+      
+      tibble(
+        group_1     = unique(.x$variables[[rlang::as_name(enquo(group_by_1))]]),
+    #    group_2     = unique(.x$variables[[rlang::as_name(enquo(group_by_2))]]),
+        formula     = as.character(formula),
+        coefficient = coefs[var_2, "Estimate"],
+        se          = coefs[var_2, "Std. Error"],
+        t_value     = coefs[var_2, "t value"],
+        p_value     = coefs[var_2, "Pr(>|t|)"]
+      )
+    }) %>%
+    ungroup() %>% 
+    filter(formula == var_2)
+  
+  model_results
+}
+
+####
+#This function plots the relationship
+####
+
+srh_vs_X_plot <- function(model_results, title = NULL){
+  group_by_1 <- colnames(model_results)[1]   # Grab the name of the first column as a string
+  group_by_1_sym <- sym(group_by_1)   # Convert it to a symbol for tidy evaluation
+  title <- model_results$formula[1]
+  title <- title
+  
+  ggplot(model_results, aes(x = !!group_by_1_sym, y = coefficient)) +
+    geom_line() +
+    geom_point() +
+    geom_errorbar(aes(ymin = coefficient - se, ymax = coefficient + se), 
+                  width = 0.2) +
+    labs(title = title)
+}
+
+#Test
+
+srh_vs_X_results_data <- srh_vs_X_results(formula = srh ~ stroke, 
+        # design = svy_nhanes, 
+       #  family = stats::gaussian(), 
+         group_by_1 = year)
+
+srh_vs_X_plot(srh_vs_X_results_data)
+
+### Apply function
+
+## Relationship between SRH and X by year
+
+X <- "heart_dis"
+srh_vs_X_results_data <- srh_vs_X_results(formula = formula(paste0("srh ~ ", X)), group_by_1 = year)
+srh_vs_X_results_data
+srh_vs_X_plot(srh_vs_X_results_data)
+
+####
+# Use this function if you just want the plots:
+####
+
+plot_var_vs_srh_per_something <- function(X, group_by_1){
+      group_by_1_sym <- sym(group_by_1)
+      model_results <- srh_vs_X_results(formula = formula(paste0("srh ~ ", X)),
+                               group_by_1 = !!group_by_1_sym)
+      srh_vs_X_plot(model_results)
+}
+
+# test
+plot_var_vs_srh_per_something("stroke", "age_group")
+```
+
+### Apply functions
+
+Now we have a 
+
+```{r}
+
+# Functions of interest
+svy_nhanes %>% 
+  group_by(year) %>% 
+  svyglm(formula = srh ~ phq9,
+         design = .,
+         family = stats::gaussian()
+           ) %>% 
+  summary() 
+
+## Relationship between SRH and X over time
+
+plot_var_vs_srh_per_something("heart_dis" , "year")
+
+## Relationship between SRH and X for age groups
+
+## Relationship between SRH and X for cohorts
+
+
+```
+
+# Does the relationship between SRH and X for different age groups change over time? For cohorts? 
+
+## Define functions
+
+
+We have various outcome variables, of different types (continuous, dichotomous, categorical, and count). In the future we will want to possibly adjust for other covariates. Therefore, we will write a function with the model as an input, but for now, also allow for hust the variable of interest. This can be modified as needed.
+
+```{r}
+
+# We will need model formula, design (svy_nhanes), and family 
+# family=stats::gaussian(), family=quasibinomial(), family=quasipoisson()
+
+# This will extract the coefficient for the first term in the model summary
+
+# coefficient <- model_summary$coefficients[2,"Estimate"]
+# se <- model_summary$coefficients[2,"Std. Error"]
+# t_value <- model_summary$coefficients[2,"t value"] 
+# p_value <- model_summary$coefficients[2,"Pr(>|t|)"]
+
+svyglm(formula = srh ~ heart_dis,
+       design = svy_nhanes,
+       family = stats::gaussian()
+         )
+
+######
+# This function gives us a tibble of the glm
+#####
+srh_vs_X_per_Y_results <- function(formula,
+                                      design = svy_nhanes,
+                                      family = stats::gaussian(),
+                                      group_by_1,
+                                      group_by_2) {
+  
+  # Convert string formula to R formula
+  f <- as.formula(formula)
+  
+  # Extract variable names
+  vars_in_formula <- all.vars(f)
+  var_1 <- vars_in_formula[1]  # y-variable
+  var_2 <- vars_in_formula[2]  # x-variable
+  
+  # Convert them to symbols for filter
+  var_1_sym <- rlang::sym(var_1)
+  var_2_sym <- rlang::sym(var_2)
+  
+  # Grouping, modeling, returning a data frame of results
+  model_results <- design %>%
+    # Filter out NAs for just the variables in the model
+    filter(!is.na(!!var_1_sym)) %>%
+    filter(!is.na(!!var_2_sym)) %>%
+    group_by({{group_by_1}}, {{group_by_2}}) %>%
+    group_map_dfr(~ {
+      
+      # Check if there's enough variation in the *response* variable
+      if (length(unique(.x$variables[[var_1]])) < 2) {
+        # Not enough variation in var_1 => return row of NAs
+        return(tibble(
+          group_1     = unique(.x$variables[[rlang::as_name(enquo(group_by_1))]]),
+          group_2     = unique(.x$variables[[rlang::as_name(enquo(group_by_2))]]),
+          formula     = as.character(formula),
+          coefficient = NA_real_,
+          se          = NA_real_,
+          t_value     = NA_real_,
+          p_value     = NA_real_
+        ))
+      }
+      
+      # Fit the model
+      model_var <- survey::svyglm(formula = f, design = ., family = family)
+      
+      # Extract the summary coefficients
+      coefs <- summary(model_var)$coefficients
+      
+      # We want the row corresponding to var_2
+      # If that row doesn't exist, return NA for that group
+      if (!var_2 %in% rownames(coefs)) {
+        return(tibble(
+          group_1     = unique(.x$variables[[rlang::as_name(enquo(group_by_1))]]),
+          group_2     = unique(.x$variables[[rlang::as_name(enquo(group_by_2))]]),
+          formula     = as.character(formula),
+          coefficient = NA_real_,
+          se          = NA_real_,
+          t_value     = NA_real_,
+          p_value     = NA_real_
+        ))
+      }
+      
+      tibble(
+        group_1     = unique(.x$variables[[rlang::as_name(enquo(group_by_1))]]),
+        group_2     = unique(.x$variables[[rlang::as_name(enquo(group_by_2))]]),
+        formula     = as.character(formula),
+        coefficient = coefs[var_2, "Estimate"],
+        se          = coefs[var_2, "Std. Error"],
+        t_value     = coefs[var_2, "t value"],
+        p_value     = coefs[var_2, "Pr(>|t|)"]
+      )
+    }) %>%
+    ungroup() %>% 
+    filter(formula == var_2)
+  
+  model_results
+}
+
+
+####
+#This function plots the relationship
+####
+
+srh_vs_X_per_Y_plot <- function(model_results, title = NULL){
+  group_by_1 <- colnames(model_results)[1]   # Grab the name of the first column as a string
+  group_by_1_sym <- sym(group_by_1)   # Convert it to a symbol for tidy evaluation
+  title <- model_results$formula[1]
+  title <- title
+    group_by_2 <- colnames(model_results)[2]   # Grab the name of the first column as a string
+  group_by_2_sym <- sym(group_by_2) 
+  
+  ggplot(model_results, aes(x = !!group_by_1_sym, y = coefficient, color = !!group_by_2_sym)) +
+    geom_line() +
+    geom_point() +
+    geom_errorbar(aes(ymin = coefficient - se, ymax = coefficient + se), 
+                  width = 0.2) +
+    labs(title = title)
+}
+
+#Test
+
+srh_vs_X_per_Y_results_data <- srh_vs_X_per_Y_results(formula = srh ~ heart_dis, 
+        # design = svy_nhanes, 
+       #  family = stats::gaussian(), 
+         group_by_1 = year,
+         group_by_2 = age_group)
+
+srh_vs_X_per_Y_plot(srh_vs_X_per_Y_results_data)
+
+### Apply function
+
+## Relationship between SRH and X by year
+
+X <- "heart_dis"
+srh_vs_X_per_Y_results_data <- srh_vs_X_per_Y_results(formula = formula(paste0("srh ~ ", X)), group_by_1 = year)
+srh_vs_X_per_Y_results_data
+srh_vs_X_per_Y_plot(srh_vs_X_per_Y_results_data)
+
+####
+# Use this function if you just want the plots:
+####
+
+plot_srh_vs_X_per_Y_per_something <- function(X, group_by_1){
+      group_by_1_sym <- sym(group_by_1)
+      model_results <- srh_vs_X_per_Y_results(formula = formula(paste0("srh ~ ", X)),
+                               group_by_1 = !!group_by_1_sym)
+      srh_vs_X_per_Y_plot(model_results)
+}
+
+# test
+plot_srh_vs_X_per_Y_per_something("stroke", "age_group")
+```
+
+### Apply functions
+
+Now we have a 
+
+```{r}
+
+# Functions of interest
+
+## Relationship between SRH and X over time
+
+## Relationship between SRH and X for age groups
+
+## Relationship between SRH and X for cohorts
+
+
+```
+
+
+## Relationship between SRH and X by age group per wave
+
+

@@ -1,0 +1,576 @@
+---
+title: "Aim 2 Analytic Pipeline - Skeleton - Graphical Analysis"
+author: "Gloria Huei-Jong Graf"
+date: "2/23/2023"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache = TRUE)
+library(tidyverse)
+library(foreign)
+library(survey)
+library(srvyr)
+library(patchwork)
+library(kableExtra)
+```
+
+```{r loading-data, echo = FALSE, warnings = FALSE}
+original_df = read.csv("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Core_Dataset_Aim2.csv") %>%
+  mutate(race = factor(race, levels = c("White", "Black", "Other")),
+         gender = factor(gender, levels = c(1, 2), labels = c("Men", "Women")))
+
+aim2_df = 
+  original_df %>%
+  filter(race %in% c("White", "Black"),
+         year != 1991) %>%
+  droplevels() %>%
+  mutate(period_4yr = ifelse(year %in% c(1999,2001), 1999,
+                      ifelse(year %in% c(2003,2005), 2003,
+                      ifelse(year %in% c(2007,2009), 2007,
+                      ifelse(year %in% c(2011,2013), 2011,
+                      ifelse(year %in% c(2015,2017), 2015, year))))))
+
+aim2_df =
+  aim2_df %>%
+  mutate(cohort_4yr = period_4yr - age_4yr) %>%
+  mutate(cohort_4yr = ifelse(cohort_4yr == 1915, 1919,
+                      ifelse(cohort_4yr == 1995, 1991, cohort_4yr)))
+```
+
+```{r echo = FALSE}
+# Define survey weights for 1999-2016
+aim2_df =
+  aim2_df %>%
+  mutate(WTMEC_allwaves_constructed = WTMEC2YR/10,
+         age_4yr = factor(age_4yr),
+         cohort_4yr = factor(cohort_4yr),
+         period_4yr = factor(period_4yr))
+
+# Define indicator for analysis population of interest; create survey design object for the subset of interest
+aim2_df =
+  aim2_df %>%
+  mutate(FullAnalysis = ifelse(age >= 20 & pregnant != 1 & race %in% c("White", "Black"), 1, 0),
+         Black_all = ifelse(age >= 20 & pregnant != 1 & race == "Black", 1, 0),
+         Black_women = ifelse(age >= 20 & pregnant != 1 & race == "Black" & gender == "Women", 1, 0),
+         Black_men = ifelse(age >= 20 & pregnant != 1 & race == "Black" & gender == "Men", 1, 0),
+         White_all = ifelse(age >= 20 & pregnant != 1 & race == "White", 1, 0),
+         White_women = ifelse(age >= 20 & pregnant != 1 & race == "White" & gender == "Women", 1, 0),
+         White_men = ifelse(age >= 20 & pregnant != 1 & race == "White" & gender == "Men", 1, 0))
+
+# Defining survey design for overall dataset
+svydesign_overall =
+  svydesign(data=aim2_df, id=~SDMVPSU, strata=~SDMVSTRA, weights=~WTMEC4YR, nest=TRUE)
+
+# Create a survey design object for the subset of interest
+subset_all <- subset(svydesign_overall, FullAnalysis == 1)
+subset_black_allgenders = subset(svydesign_overall, Black_all == 1)
+subset_black_women = subset(svydesign_overall, Black_women == 1)
+subset_black_men = subset(svydesign_overall, Black_men == 1)
+subset_white_allgenders = subset(svydesign_overall, White_all == 1)
+subset_white_women = subset(svydesign_overall, White_women == 1)
+subset_white_men = subset(svydesign_overall, White_men == 1)
+```
+
+This document contains skeleton code needed to conduct initial graphical analysis of APC effects for Aim 2 of Graf's dissertation. APC analyses follow the general approach followed by Yang and Land (specified below). This document covers steps 1 and 2. 
+
+1) Construction of synthetic birth cohorts
+
+2) Graphical assessment of age, period, and cohort effects
+
+3) Comparison of one-, two-, and three-factor models
+
+4) Identification of APC effects using different statistical approaches: the Constrained Coefficients GLIM estimator (CGLIM), Hierarchical APC Estimation with Cross-Classified Random Effects (HAPC-CCREM), and The Median Polish Estimator.
+
+## Participant counts and data setup
+
+```{r echo = FALSE}
+table(aim2_df$period_4yr, aim2_df$race, aim2_df$gender) %>%
+  knitr::kable(caption = "Number of participants by wave", col.names = c("Wave", "Race", "Sex", "n")) %>%
+  kableExtra::kable_classic(html_font = "Times New Roman") %>%
+  row_spec(0, bold=TRUE)
+
+table(aim2_df$cohort_4yr, aim2_df$race, aim2_df$gender) %>%
+  knitr::kable(caption = "Number of participants by 4-year birth cohorts", col.names = c("Cohort", "Race", "Sex", "n")) %>%
+  kableExtra::kable_classic(html_font = "Times New Roman") %>%
+  row_spec(0, bold=TRUE)
+```
+
+```{r functions-1d, echo = FALSE, warning = FALSE, message = FALSE}
+svydesign_1d = 
+  aim2_df %>% 
+  as_survey_design(ids=SDMVPSU, strata=SDMVSTRA, weights=WTMEC4YR, nest = TRUE)
+
+plot1D_all_f = function(var1, bioage_var, ymin, ymax){
+    
+  var1 = enquo(var1)
+  bioage_var = enquo(bioage_var)
+  
+  df =
+    svydesign_1d %>%
+    group_by(!!var1) %>%
+    summarise(bioage_var = survey_mean(!!bioage_var, na.rm = T)) %>%
+    mutate(bioage_var = ifelse(bioage_var == 0, NA, bioage_var))
+  
+  ggplot(df, aes(x = !!var1, y = bioage_var, group = 1)) +
+    geom_line(linewidth = 0.5) +
+    geom_point() +
+    theme_minimal() + 
+    ylab(as_label(bioage_var)) +
+    ylim(ymin, ymax)
+
+}
+
+plot1D_strat_f = function(var1, bioage_var, ymin, ymax){
+  
+  var1 = enquo(var1)
+  bioage_var = enquo(bioage_var)
+  
+  df =
+    svydesign_1d %>%
+    group_by(!!var1, gender, race) %>%
+    summarise(bioage_var = survey_mean(!!bioage_var, na.rm = T)) %>%
+    mutate(bioage_var = ifelse(bioage_var == 0, NA, bioage_var))
+  
+  ggplot(df, aes(x = !!var1, y = bioage_var, group = 1)) +
+    geom_line(linewidth = 0.5) +
+    geom_point() +
+    facet_wrap(c("gender", "race")) +
+    theme_minimal() + 
+    ylab(as_label(bioage_var)) +
+    ylim(ymin, ymax)
+  
+}
+```
+
+## Graphical assessment of one-dimensional age, period, and cohort effects
+
+### Age effects - overall
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+a_phenoageadv_delta_levinenocrp_all = plot1D_all_f(age_4yr, phenoageadv_delta_levinenocrp_nosexstrat, -6, 0)
+a_phenoageadv_delta_levineoriginal_all = plot1D_all_f(age_4yr, phenoageadv_delta_levineoriginal_nosexstrat, -6, 0)
+a_phenoageadv_delta_elasticnet_nosexstrat_all = plot1D_all_f(age_4yr, phenoageadv_delta_elasticnet_nosexstrat, -6, 0)
+
+a_kdmadv_delta_levinenocrp_nosexstrat_all = plot1D_all_f(age_4yr, kdmadv_delta_levinenocrp_nosexstrat, -6, 0)
+a_kdmadv_delta_levineoriginal_all = plot1D_all_f(age_4yr, kdmadv_delta_levineoriginal_nosexstrat, -6, 0)
+a_kdmadv_delta_elasticnet_nosexstrat_all = plot1D_all_f(age_4yr, kdmadv_delta_elasticnet_nosexstrat, -6, 0)
+
+a_hdlog_levinenocrp_nosexstrat_all = plot1D_all_f(age_4yr, hdlog_levinenocrp_nosexstrat, 2, 5)
+a_hdlog_levineoriginal_nosexstrat_all = plot1D_all_f(age_4yr, hdlog_levineoriginal_nosexstrat, 2, 5)
+a_hdlog_elasticnet_nosexstrat_all = plot1D_all_f(age_4yr, hdlog_elasticnet_nosexstrat, 2, 5)
+
+a_phenoageadv_delta_levinenocrp_all + a_phenoageadv_delta_levineoriginal_all + a_phenoageadv_delta_elasticnet_nosexstrat_all + a_kdmadv_delta_levinenocrp_nosexstrat_all + a_kdmadv_delta_levineoriginal_all + a_kdmadv_delta_elasticnet_nosexstrat_all + a_hdlog_levinenocrp_nosexstrat_all + a_hdlog_levineoriginal_nosexstrat_all + a_hdlog_elasticnet_nosexstrat_all + plot_layout(nrow = 3)
+
+rm(a_phenoageadv_delta_levinenocrp_all, a_phenoageadv_delta_levineoriginal_all, a_phenoageadv_delta_elasticnet_nosexstrat_all, a_kdmadv_delta_levinenocrp_nosexstrat_all, a_kdmadv_delta_levineoriginal_all, a_kdmadv_delta_elasticnet_nosexstrat_all, a_hdlog_levinenocrp_nosexstrat_all, a_hdlog_levineoriginal_nosexstrat_all, a_hdlog_elasticnet_nosexstrat_all)
+```
+
+### Period effects - overall
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+p_phenoageadv_delta_levinenocrp_all = plot1D_all_f(period_4yr, phenoageadv_delta_levinenocrp_nosexstrat, -6, 0)
+p_phenoageadv_delta_levineoriginal_all = plot1D_all_f(period_4yr, phenoageadv_delta_levineoriginal_nosexstrat, -6, 0)
+p_phenoageadv_delta_elasticnet_nosexstrat_all = plot1D_all_f(period_4yr, phenoageadv_delta_elasticnet_nosexstrat, -6, 0)
+
+p_kdmadv_delta_levinenocrp_nosexstrat_all = plot1D_all_f(period_4yr, kdmadv_delta_levinenocrp_nosexstrat, -6, 0)
+p_kdmadv_delta_levineoriginal_all = plot1D_all_f(period_4yr, kdmadv_delta_levineoriginal_nosexstrat, -6, 0)
+p_kdmadv_delta_elasticnet_nosexstrat_all = plot1D_all_f(period_4yr, kdmadv_delta_elasticnet_nosexstrat, -6, 0)
+
+p_hdlog_levinenocrp_nosexstrat_all = plot1D_all_f(period_4yr, hdlog_levinenocrp_nosexstrat, 2, 5)
+p_hdlog_levineoriginal_nosexstrat_all = plot1D_all_f(period_4yr, hdlog_levineoriginal_nosexstrat, 2, 5)
+p_hdlog_elasticnet_nosexstrat_all = plot1D_all_f(period_4yr, hdlog_elasticnet_nosexstrat, 2, 5)
+
+p_phenoageadv_delta_levinenocrp_all + p_phenoageadv_delta_levineoriginal_all + p_phenoageadv_delta_elasticnet_nosexstrat_all + p_kdmadv_delta_levinenocrp_nosexstrat_all + p_kdmadv_delta_levineoriginal_all + p_kdmadv_delta_elasticnet_nosexstrat_all + p_hdlog_levinenocrp_nosexstrat_all + p_hdlog_levineoriginal_nosexstrat_all + p_hdlog_elasticnet_nosexstrat_all + plot_layout(nrow = 3)
+
+rm(p_phenoageadv_delta_levinenocrp_all, p_phenoageadv_delta_levineoriginal_all, p_phenoageadv_delta_elasticnet_nosexstrat_all, p_kdmadv_delta_levinenocrp_nosexstrat_all, p_kdmadv_delta_levineoriginal_all, p_kdmadv_delta_elasticnet_nosexstrat_all, p_hdlog_levinenocrp_nosexstrat_all, p_hdlog_levineoriginal_nosexstrat_all, p_hdlog_elasticnet_nosexstrat_all)
+```
+
+### Cohort effects - overall
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+c_phenoageadv_delta_levinenocrp_all = plot1D_all_f(cohort_4yr, phenoageadv_delta_levinenocrp_nosexstrat, -6, 0)
+c_phenoageadv_delta_levineoriginal_all = plot1D_all_f(cohort_4yr, phenoageadv_delta_levineoriginal_nosexstrat, -6, 0)
+c_phenoageadv_delta_elasticnet_nosexstrat_all = plot1D_all_f(cohort_4yr, phenoageadv_delta_elasticnet_nosexstrat, -6, 0)
+
+c_kdmadv_delta_levinenocrp_nosexstrat_all = plot1D_all_f(cohort_4yr, kdmadv_delta_levinenocrp_nosexstrat, -6, 0)
+c_kdmadv_delta_levineoriginal_all = plot1D_all_f(cohort_4yr, kdmadv_delta_levineoriginal_nosexstrat, -6, 0)
+c_kdmadv_delta_elasticnet_nosexstrat_all = plot1D_all_f(cohort_4yr, kdmadv_delta_elasticnet_nosexstrat, -6, 0)
+
+c_hdlog_levinenocrp_nosexstrat_all = plot1D_all_f(cohort_4yr, hdlog_levinenocrp_nosexstrat, 2, 5)
+c_hdlog_levineoriginal_nosexstrat_all = plot1D_all_f(cohort_4yr, hdlog_levineoriginal_nosexstrat, 2, 5)
+c_hdlog_elasticnet_nosexstrat_all = plot1D_all_f(cohort_4yr, hdlog_elasticnet_nosexstrat, 2, 5)
+
+c_phenoageadv_delta_levinenocrp_all + c_phenoageadv_delta_levineoriginal_all + c_phenoageadv_delta_elasticnet_nosexstrat_all + c_kdmadv_delta_levinenocrp_nosexstrat_all + c_kdmadv_delta_levineoriginal_all + c_kdmadv_delta_elasticnet_nosexstrat_all + c_hdlog_levinenocrp_nosexstrat_all + c_hdlog_levineoriginal_nosexstrat_all + c_hdlog_elasticnet_nosexstrat_all + plot_layout(nrow = 3)
+
+rm(c_phenoageadv_delta_levinenocrp_all, c_phenoageadv_delta_levineoriginal_all, c_phenoageadv_delta_elasticnet_nosexstrat_all, c_kdmadv_delta_levinenocrp_nosexstrat_all, c_kdmadv_delta_levineoriginal_all, c_kdmadv_delta_elasticnet_nosexstrat_all, c_hdlog_levinenocrp_nosexstrat_all, c_hdlog_levineoriginal_nosexstrat_all, c_hdlog_elasticnet_nosexstrat_all)
+```
+
+### Age effects - stratified
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+a_phenoageadv_delta_levinenocrp_nosexstrat_strat = plot1D_strat_f(age_4yr, phenoageadv_delta_levinenocrp_nosexstrat, -6, 2.5)
+a_phenoageadv_delta_levineoriginal_strat = plot1D_strat_f(age_4yr, phenoageadv_delta_levineoriginal_nosexstrat, -6, 2.5)
+a_phenoageadv_delta_elasticnet_nosexstrat_strat = plot1D_strat_f(age_4yr, phenoageadv_delta_elasticnet_nosexstrat, -6, 2.5)
+
+a_kdmadv_delta_levinenocrp_nosexstrat_strat = plot1D_strat_f(age_4yr, kdmadv_delta_levinenocrp_nosexstrat, -6, 2.5)
+a_kdmadv_delta_levineoriginal_strat = plot1D_strat_f(age_4yr, kdmadv_delta_levineoriginal_nosexstrat, -6, 2.5)
+a_kdmageadv_delta_elasticnet_nosexstrat_strat = plot1D_strat_f(age_4yr, kdmadv_delta_elasticnet_nosexstrat, -6, 2.5)
+
+a_hdlog_levinenocrp_nosexstrat_strat = plot1D_strat_f(age_4yr, hdlog_levinenocrp_nosexstrat, 2, 5.5)
+a_hdlog_levineoriginal_nosexstrat_strat = plot1D_strat_f(age_4yr, hdlog_levineoriginal_nosexstrat, 2, 5.5)
+a_hdlog_elasticnet_nosexstrat_strat = plot1D_strat_f(age_4yr, hdlog_elasticnet_nosexstrat, 2, 5.5)
+
+a_phenoageadv_delta_levinenocrp_nosexstrat_strat + a_phenoageadv_delta_levineoriginal_strat + a_phenoageadv_delta_elasticnet_nosexstrat_strat + a_kdmadv_delta_levinenocrp_nosexstrat_strat + a_kdmadv_delta_levineoriginal_strat + a_kdmageadv_delta_elasticnet_nosexstrat_strat + a_hdlog_levinenocrp_nosexstrat_strat + a_hdlog_levineoriginal_nosexstrat_strat + a_hdlog_elasticnet_nosexstrat_strat + plot_layout(nrow = 3)
+
+rm(a_phenoageadv_delta_levinenocrp_nosexstrat_strat, a_phenoageadv_delta_levineoriginal_strat, a_phenoageadv_delta_elasticnet_nosexstrat_strat, a_kdmadv_delta_levinenocrp_nosexstrat_strat, a_kdmadv_delta_levineoriginal_strat, a_kdmageadv_delta_elasticnet_nosexstrat_strat, a_hdlog_levinenocrp_nosexstrat_strat, a_hdlog_levineoriginal_nosexstrat_strat, a_hdlog_elasticnet_nosexstrat_strat)
+```
+
+### Period effects - stratified
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+p_phenoageadv_delta_levinenocrp_nosexstrat_strat = plot1D_strat_f(period_4yr, phenoageadv_delta_levinenocrp_nosexstrat, -6, 2.5)
+p_phenoageadv_delta_levineoriginal_strat = plot1D_strat_f(period_4yr, phenoageadv_delta_levineoriginal_nosexstrat, -6, 2.5)
+p_phenoageadv_delta_elasticnet_nosexstrat_strat = plot1D_strat_f(period_4yr, phenoageadv_delta_elasticnet_nosexstrat, -6, 2.5)
+
+p_kdmadv_delta_levinenocrp_nosexstrat_strat = plot1D_strat_f(period_4yr, kdmadv_delta_levinenocrp_nosexstrat, -6, 2.5)
+p_kdmadv_delta_levineoriginal_strat = plot1D_strat_f(period_4yr, kdmadv_delta_levineoriginal_nosexstrat, -6, 2.5)
+p_kdmadv_delta_elasticnet_nosexstrat_strat = plot1D_strat_f(period_4yr, kdmadv_delta_elasticnet_nosexstrat, -6, 2.5)
+
+p_hdlog_levinenocrp_nosexstrat_strat = plot1D_strat_f(period_4yr, hdlog_levinenocrp_nosexstrat, 2, 5)
+p_hdlog_levineoriginal_nosexstrat_strat = plot1D_strat_f(period_4yr, hdlog_levineoriginal_nosexstrat, 2, 5)
+p_hdlog_elasticnet_nosexstrat_strat = plot1D_strat_f(period_4yr, hdlog_elasticnet_nosexstrat, 2, 5)
+
+p_phenoageadv_delta_levinenocrp_nosexstrat_strat + p_phenoageadv_delta_levineoriginal_strat + p_phenoageadv_delta_elasticnet_nosexstrat_strat + p_kdmadv_delta_levinenocrp_nosexstrat_strat + p_kdmadv_delta_levineoriginal_strat + p_kdmadv_delta_elasticnet_nosexstrat_strat + p_hdlog_levinenocrp_nosexstrat_strat + p_hdlog_levineoriginal_nosexstrat_strat + p_hdlog_elasticnet_nosexstrat_strat + plot_layout(nrow = 3)
+
+rm(p_phenoageadv_delta_levinenocrp_nosexstrat_strat, p_phenoageadv_delta_levineoriginal_strat, p_phenoageadv_delta_elasticnet_nosexstrat_strat, p_kdmadv_delta_levinenocrp_nosexstrat_strat, p_kdmadv_delta_levineoriginal_strat, p_kdmadv_delta_elasticnet_nosexstrat_strat, p_hdlog_levinenocrp_nosexstrat_strat, p_hdlog_levineoriginal_nosexstrat_strat, p_hdlog_elasticnet_nosexstrat_strat)
+```
+
+### Cohort effects - stratified
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+c_phenoageadv_delta_levinenocrp_nosexstrat_strat = plot1D_strat_f(cohort_4yr, phenoageadv_delta_levinenocrp_nosexstrat, -6, 2.5)
+c_phenoageadv_delta_levineoriginal_strat = plot1D_strat_f(cohort_4yr, phenoageadv_delta_levineoriginal_nosexstrat, -6, 2.5)
+c_phenoageadv_delta_elasticnet_nosexstrat_strat = plot1D_strat_f(cohort_4yr, phenoageadv_delta_elasticnet_nosexstrat, -6, 2.5)
+
+c_kdmadv_delta_levinenocrp_nosexstrat_strat = plot1D_strat_f(cohort_4yr, kdmadv_delta_levinenocrp_nosexstrat, -6, 2.5)
+c_kdmadv_delta_levineoriginal_strat = plot1D_strat_f(cohort_4yr, kdmadv_delta_levineoriginal_nosexstrat, -6, 2.5)
+c_kdmageadv_delta_elasticnet_nosexstrat_strat = plot1D_strat_f(cohort_4yr, kdmadv_delta_elasticnet_nosexstrat, -6, 2.5)
+
+c_hdlog_levinenocrp_nosexstrat_strat = plot1D_strat_f(cohort_4yr, hdlog_levinenocrp_nosexstrat, 2, 5)
+c_hdlog_levineoriginal_nosexstrat_strat = plot1D_strat_f(cohort_4yr, hdlog_levineoriginal_nosexstrat, 2, 5)
+c_hdlog_elasticnet_nosexstrat_strat = plot1D_strat_f(cohort_4yr, hdlog_elasticnet_nosexstrat, 2, 5)
+
+c_phenoageadv_delta_levinenocrp_nosexstrat_strat + c_phenoageadv_delta_levineoriginal_strat + c_phenoageadv_delta_elasticnet_nosexstrat_strat + c_kdmadv_delta_levinenocrp_nosexstrat_strat + c_kdmadv_delta_levineoriginal_strat + c_kdmageadv_delta_elasticnet_nosexstrat_strat + c_hdlog_levinenocrp_nosexstrat_strat + c_hdlog_levineoriginal_nosexstrat_strat + c_hdlog_elasticnet_nosexstrat_strat + plot_layout(nrow = 3)
+
+rm(c_phenoageadv_delta_levinenocrp_nosexstrat_strat, c_phenoageadv_delta_levineoriginal_strat, c_phenoageadv_delta_elasticnet_nosexstrat_strat, c_kdmadv_delta_levinenocrp_nosexstrat_strat, c_kdmadv_delta_levineoriginal_strat, c_kdmageadv_delta_elasticnet_nosexstrat_strat, c_hdlog_levinenocrp_nosexstrat_strat, c_hdlog_levineoriginal_nosexstrat_strat, c_hdlog_elasticnet_nosexstrat_strat)
+```
+
+
+## Graphical assessment of two-dimensional age effects
+
+```{r functions-2d, echo = FALSE, warning = FALSE, message = FALSE}
+svydesign_2d = 
+  aim2_df %>% 
+  mutate(cohort_4yr = factor(cohort_4yr),
+         period_4yr = factor(period_4yr),
+         age_4yr = factor(age_4yr)) %>%
+  as_survey_design(ids=SDMVPSU, strata=SDMVSTRA, weights=WTMEC4YR, nest = TRUE)
+
+plot2D_all_f = function(var1, var2, bioage_var, ymin, ymax){
+
+  var1 = enquo(var1)
+  var2 = enquo(var2)
+  bioage_var = enquo(bioage_var)
+  
+  df =
+    svydesign_2d %>%
+    group_by(!!var1, !!var2) %>%
+    summarise(bioage_var = survey_mean(!!bioage_var, na.rm = T)) %>%
+    mutate(bioage_var = ifelse(bioage_var == 0, NA, bioage_var))
+  
+  ggplot(df, aes(x = !!var1, y = bioage_var)) +
+    geom_line(aes(color = !!var2, group = !!var2), linewidth = 0.5) +
+    geom_point(aes(color = !!var2)) +
+    theme_minimal() + 
+    ylab(as_label(bioage_var)) +
+    ylim(ymin, ymax)
+
+}
+
+plot2D_strat_f = function(var1, var2, bioage_var, ymin, ymax){
+    
+  var1 = enquo(var1)
+  var2 = enquo(var2)
+  bioage_var = enquo(bioage_var)
+  
+  df =
+    svydesign_2d %>%
+    group_by(!!var1, !!var2, gender, race) %>%
+    summarise(bioage_var = survey_mean(!!bioage_var, na.rm = T)) %>%
+    mutate(bioage_var = ifelse(bioage_var == 0, NA, bioage_var))
+
+  ggplot(df, aes(x = !!var1, y = bioage_var)) +
+    geom_line(aes(color = !!var2, group = !!var2), linewidth = 0.5) +
+    geom_point(aes(color = !!var2)) +
+    theme_minimal() + 
+    ylab(as_label(bioage_var)) +
+    facet_wrap(c("gender", "race")) +
+    ylim(ymin, ymax)
+  
+}
+```
+
+### Age effects by period - overall
+
+```{r echo = FALSE, warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+ap_phenoageadv_delta_levinenocrp_all = plot2D_all_f(age_4yr, period_4yr, phenoageadv_delta_levinenocrp_nosexstrat, -6, 1)
+ap_phenoageadv_delta_levineoriginal_all = plot2D_all_f(age_4yr, period_4yr, phenoageadv_delta_levineoriginal_nosexstrat, -6, 1)
+ap_phenoageadv_delta_elasticnet_nosexstrat_all = plot2D_all_f(age_4yr, period_4yr, phenoageadv_delta_elasticnet_nosexstrat, -6, 1)
+
+ap_kdmadv_delta_levinenocrp_nosexstrat_all = plot2D_all_f(age_4yr, period_4yr, kdmadv_delta_levinenocrp_nosexstrat, -6, 1)
+ap_kdmadv_delta_levineoriginal_all = plot2D_all_f(age_4yr, period_4yr, kdmadv_delta_levineoriginal_nosexstrat, -6, 1)
+ap_kdmadv_delta_elasticnet_nosexstrat_all = plot2D_all_f(age_4yr, period_4yr, kdmadv_delta_elasticnet_nosexstrat, -6, 1)
+
+ap_hdlog_levinenocrp_nosexstrat_all = plot2D_all_f(age_4yr, period_4yr, hdlog_levinenocrp_nosexstrat, 2, 5)
+ap_hdlog_levineoriginal_nosexstrat_all = plot2D_all_f(age_4yr, period_4yr, hdlog_levineoriginal_nosexstrat, 2, 5)
+ap_hdlog_elasticnet_nosexstrat_all = plot2D_all_f(age_4yr, period_4yr, hdlog_elasticnet_nosexstrat, 2, 5)
+
+ap_phenoageadv_delta_levinenocrp_all + ap_phenoageadv_delta_levineoriginal_all + ap_phenoageadv_delta_elasticnet_nosexstrat_all + ap_kdmadv_delta_levinenocrp_nosexstrat_all + ap_kdmadv_delta_levineoriginal_all + ap_kdmadv_delta_elasticnet_nosexstrat_all + ap_hdlog_levinenocrp_nosexstrat_all + ap_hdlog_levineoriginal_nosexstrat_all + ap_hdlog_elasticnet_nosexstrat_all + plot_layout(nrow = 3, guides = "collect")
+
+rm(ap_phenoageadv_delta_levinenocrp_all, ap_phenoageadv_delta_levineoriginal_all, ap_phenoageadv_delta_elasticnet_nosexstrat_all, ap_kdmadv_delta_levinenocrp_nosexstrat_all, ap_kdmadv_delta_levineoriginal_all, ap_kdmadv_delta_elasticnet_nosexstrat_all, ap_hdlog_levinenocrp_nosexstrat_all, ap_hdlog_levineoriginal_nosexstrat_all, ap_hdlog_elasticnet_nosexstrat_all)
+```
+
+### Age effects by period - stratified
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+ap_phenoageadv_delta_levinenocrp_nosexstrat_strat = plot2D_strat_f(age_4yr, period_4yr, phenoageadv_delta_levinenocrp_nosexstrat, -8, 3)
+ap_phenoageadv_delta_levineoriginal_strat = plot2D_strat_f(age_4yr, period_4yr, phenoageadv_delta_levineoriginal_nosexstrat, -8, 3)
+ap_phenoageadv_delta_elasticnet_nosexstrat_strat = plot2D_strat_f(age_4yr, period_4yr, phenoageadv_delta_elasticnet_nosexstrat, -8, 3)
+
+ap_kdmadv_delta_levinenocrp_nosexstrat_strat = plot2D_strat_f(age_4yr, period_4yr, kdmadv_delta_levinenocrp_nosexstrat, -8, 3)
+ap_kdmadv_delta_levineoriginal_strat = plot2D_strat_f(age_4yr, period_4yr, kdmadv_delta_levineoriginal_nosexstrat, -8, 3)
+ap_kdmadv_delta_elasticnet_nosexstrat_strat = plot2D_strat_f(age_4yr, period_4yr, kdmadv_delta_elasticnet_nosexstrat, -8, 3)
+
+ap_hdlog_levinenocrp_nosexstrat_strat = plot2D_strat_f(age_4yr, period_4yr, hdlog_levinenocrp_nosexstrat, 2, 6)
+ap_hdlog_levineoriginal_nosexstrat_strat = plot2D_strat_f(age_4yr, period_4yr, hdlog_levineoriginal_nosexstrat, 2, 6)
+ap_hdlog_elasticnet_nosexstrat_strat = plot2D_strat_f(age_4yr, period_4yr, hdlog_elasticnet_nosexstrat, 2, 6)
+
+ap_phenoageadv_delta_levinenocrp_nosexstrat_strat + ap_phenoageadv_delta_levineoriginal_strat + ap_phenoageadv_delta_elasticnet_nosexstrat_strat + ap_kdmadv_delta_levinenocrp_nosexstrat_strat + ap_kdmadv_delta_levineoriginal_strat + ap_kdmadv_delta_elasticnet_nosexstrat_strat + ap_hdlog_levinenocrp_nosexstrat_strat + ap_hdlog_levineoriginal_nosexstrat_strat + ap_hdlog_elasticnet_nosexstrat_strat + plot_layout(nrow = 3, guides = "collect")
+
+rm(ap_phenoageadv_delta_levinenocrp_nosexstrat_strat, ap_phenoageadv_delta_levineoriginal_strat, ap_phenoageadv_delta_elasticnet_nosexstrat_strat, ap_kdmadv_delta_levinenocrp_nosexstrat_strat, ap_kdmadv_delta_levineoriginal_strat, ap_kdmadv_delta_elasticnet_nosexstrat_strat, ap_hdlog_levinenocrp_nosexstrat_strat, ap_hdlog_levineoriginal_nosexstrat_strat, ap_hdlog_elasticnet_nosexstrat_strat)
+```
+
+### Age effects by cohort - overall
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+ac_phenoageadv_delta_levinenocrp_all = plot2D_all_f(age_4yr, cohort_4yr, phenoageadv_delta_levinenocrp_nosexstrat, -6, 0)
+ac_phenoageadv_delta_levineoriginal_all = plot2D_all_f(age_4yr, cohort_4yr, phenoageadv_delta_levineoriginal_nosexstrat, -6, 0)
+ac_phenoageadv_delta_elasticnet_nosexstrat_all = plot2D_all_f(age_4yr, cohort_4yr, phenoageadv_delta_elasticnet_nosexstrat, -6, 0)
+
+ac_kdmadv_delta_levinenocrp_nosexstrat_all = plot2D_all_f(age_4yr, cohort_4yr, kdmadv_delta_levinenocrp_nosexstrat, -6, 0)
+ac_kdmadv_delta_levineoriginal_all = plot2D_all_f(age_4yr, cohort_4yr, kdmadv_delta_levineoriginal_nosexstrat, -6, 0)
+ac_kdmadv_delta_elasticnet_nosexstrat_all = plot2D_all_f(age_4yr, cohort_4yr, kdmadv_delta_elasticnet_nosexstrat, -6, 0)
+
+ac_hdlog_levinenocrp_nosexstrat_all = plot2D_all_f(age_4yr, cohort_4yr, hdlog_levinenocrp_nosexstrat, 2, 5)
+ac_hdlog_levineoriginal_nosexstrat_all = plot2D_all_f(age_4yr, cohort_4yr, hdlog_levineoriginal_nosexstrat, 2, 5)
+ac_hdlog_elasticnet_nosexstrat_all = plot2D_all_f(age_4yr, cohort_4yr, hdlog_elasticnet_nosexstrat, 2, 5)
+
+ac_phenoageadv_delta_levinenocrp_all + ac_phenoageadv_delta_levineoriginal_all + ac_phenoageadv_delta_elasticnet_nosexstrat_all + ac_kdmadv_delta_levinenocrp_nosexstrat_all + ac_kdmadv_delta_levineoriginal_all + ac_kdmadv_delta_elasticnet_nosexstrat_all + ac_hdlog_levinenocrp_nosexstrat_all + ac_hdlog_levineoriginal_nosexstrat_all + ac_hdlog_elasticnet_nosexstrat_all + plot_layout(nrow = 3, guides = "collect")
+
+rm(ac_phenoageadv_delta_levinenocrp_all, ac_phenoageadv_delta_levineoriginal_all, ac_phenoageadv_delta_elasticnet_nosexstrat_all, ac_kdmadv_delta_levinenocrp_nosexstrat_all, ac_kdmadv_delta_levineoriginal_all, ac_kdmadv_delta_elasticnet_nosexstrat_all, ac_hdlog_levinenocrp_nosexstrat_all, ac_hdlog_levineoriginal_nosexstrat_all, ac_hdlog_elasticnet_nosexstrat_all)
+```
+
+### Age effects by cohort - stratified
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+ac_phenoageadv_delta_levinenocrp_nosexstrat_strat = plot2D_strat_f(age_4yr, cohort_4yr, phenoageadv_delta_levinenocrp_nosexstrat, -7.5, 3)
+ac_phenoageadv_delta_levineoriginal_strat = plot2D_strat_f(age_4yr, cohort_4yr, phenoageadv_delta_levineoriginal_nosexstrat, -7.5, 3)
+ac_phenoageadv_delta_elasticnet_nosexstrat_strat = plot2D_strat_f(age_4yr, cohort_4yr, phenoageadv_delta_elasticnet_nosexstrat, -7.5, 3)
+
+ac_kdmadv_delta_levinenocrp_nosexstrat_strat = plot2D_strat_f(age_4yr, cohort_4yr, kdmadv_delta_levinenocrp_nosexstrat, -7.5, 3)
+ac_kdmadv_delta_levineoriginal_strat = plot2D_strat_f(age_4yr, cohort_4yr, kdmadv_delta_levineoriginal_nosexstrat, -7.5, 3)
+ac_kdmadv_delta_elasticnet_nosexstrat_strat = plot2D_strat_f(age_4yr, cohort_4yr, kdmadv_delta_elasticnet_nosexstrat, -7.5, 3)
+
+ac_hdlog_levinenocrp_nosexstrat_strat = plot2D_strat_f(age_4yr, cohort_4yr, hdlog_levinenocrp_nosexstrat, 2, 5.5)
+ac_hdlog_levineoriginal_nosexstrat_strat = plot2D_strat_f(age_4yr, cohort_4yr, hdlog_levineoriginal_nosexstrat, 2, 5.5)
+ac_hdlog_elasticnet_nosexstrat_strat = plot2D_strat_f(age_4yr, cohort_4yr, hdlog_elasticnet_nosexstrat, 2, 5.5)
+
+ac_phenoageadv_delta_levinenocrp_nosexstrat_strat + ac_phenoageadv_delta_levineoriginal_strat + ac_phenoageadv_delta_elasticnet_nosexstrat_strat + ac_kdmadv_delta_levinenocrp_nosexstrat_strat + ac_kdmadv_delta_levineoriginal_strat + ac_kdmadv_delta_elasticnet_nosexstrat_strat + ac_hdlog_levinenocrp_nosexstrat_strat + ac_hdlog_levineoriginal_nosexstrat_strat + ac_hdlog_elasticnet_nosexstrat_strat + plot_layout(nrow = 3, guides = "collect")
+
+rm(ac_phenoageadv_delta_levinenocrp_nosexstrat_strat, ac_phenoageadv_delta_levineoriginal_strat, ac_phenoageadv_delta_elasticnet_nosexstrat_strat, ac_kdmadv_delta_levinenocrp_nosexstrat_strat, ac_kdmadv_delta_levineoriginal_strat, ac_kdmadv_delta_elasticnet_nosexstrat_strat, ac_hdlog_levinenocrp_nosexstrat_strat, ac_hdlog_levineoriginal_nosexstrat_strat, ac_hdlog_elasticnet_nosexstrat_strat)
+```
+
+
+```{r}
+# ap_phenoageadv_delta_elasticnet_nosexstrat_strat = plot2D_strat_f(age_4yr, period_4yr, phenoageadv_delta_elasticnet_nosexstrat, -8, 3)
+# 
+# ac_phenoageadv_delta_elasticnet_nosexstrat_strat = plot2D_strat_f(age_4yr, cohort_4yr, phenoageadv_delta_elasticnet_nosexstrat, -8, 3)
+# 
+# ac_phenoageadv_delta_elasticnet_nosexstrat_strat + ap_phenoageadv_delta_elasticnet_nosexstrat_strat
+
+```
+
+
+## Graphical assessment of two-dimensional period effects
+
+### Period effects by age - overall
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+pa_phenoageadv_delta_levinenocrp_all = plot2D_all_f(period_4yr, age_4yr, phenoageadv_delta_levinenocrp_nosexstrat, -6, 1)
+pa_phenoageadv_delta_levineoriginal_all = plot2D_all_f(period_4yr, age_4yr, phenoageadv_delta_levineoriginal_nosexstrat, -6, 1)
+pa_phenoageadv_delta_elasticnet_nosexstrat_all = plot2D_all_f(period_4yr, age_4yr, phenoageadv_delta_elasticnet_nosexstrat, -6, 1)
+
+pa_kdmadv_delta_levinenocrp_nosexstrat_all = plot2D_all_f(period_4yr, age_4yr, kdmadv_delta_levinenocrp_nosexstrat, -6, 1)
+pa_kdmadv_delta_levineoriginal_all = plot2D_all_f(period_4yr, age_4yr, kdmadv_delta_levineoriginal_nosexstrat, -6, 1)
+pa_kdmadv_delta_elasticnet_nosexstrat_all = plot2D_all_f(period_4yr, age_4yr, kdmadv_delta_elasticnet_nosexstrat, -6, 1)
+
+pa_hdlog_levinenocrp_nosexstrat_all = plot2D_all_f(period_4yr, age_4yr, hdlog_levinenocrp_nosexstrat, 2, 5)
+pa_hdlog_levineoriginal_nosexstrat_all = plot2D_all_f(period_4yr, age_4yr, hdlog_levineoriginal_nosexstrat, 2, 5)
+pa_hdlog_elasticnet_nosexstrat_all = plot2D_all_f(period_4yr, age_4yr, hdlog_elasticnet_nosexstrat, 2, 5)
+
+pa_phenoageadv_delta_levinenocrp_all + pa_phenoageadv_delta_levineoriginal_all + pa_phenoageadv_delta_elasticnet_nosexstrat_all + pa_kdmadv_delta_levinenocrp_nosexstrat_all + pa_kdmadv_delta_levineoriginal_all + pa_kdmadv_delta_elasticnet_nosexstrat_all + pa_hdlog_levinenocrp_nosexstrat_all + pa_hdlog_levineoriginal_nosexstrat_all + pa_hdlog_elasticnet_nosexstrat_all + plot_layout(nrow = 3, guides = "collect")
+
+rm(pa_phenoageadv_delta_levinenocrp_all, pa_phenoageadv_delta_levineoriginal_all, pa_phenoageadv_delta_elasticnet_nosexstrat_all, pa_kdmadv_delta_levinenocrp_nosexstrat_all, pa_kdmadv_delta_levineoriginal_all, pa_kdmadv_delta_elasticnet_nosexstrat_all, pa_hdlog_levinenocrp_nosexstrat_all, pa_hdlog_levineoriginal_nosexstrat_all, pa_hdlog_elasticnet_nosexstrat_all)
+```
+
+### Period effects by age - stratified
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+pa_phenoageadv_delta_levinenocrp_nosexstrat_strat = plot2D_strat_f(period_4yr, age_4yr, phenoageadv_delta_levinenocrp_nosexstrat, -8, 3)
+pa_phenoageadv_delta_levineoriginal_strat = plot2D_strat_f(period_4yr, age_4yr, phenoageadv_delta_levineoriginal_nosexstrat, -8, 3)
+pa_phenoageadv_delta_elasticnet_nosexstrat_strat = plot2D_strat_f(period_4yr, age_4yr, phenoageadv_delta_elasticnet_nosexstrat, -8, 3)
+
+pa_kdmadv_delta_levinenocrp_nosexstrat_strat = plot2D_strat_f(period_4yr, age_4yr, kdmadv_delta_levinenocrp_nosexstrat, -8, 3)
+pa_kdmadv_delta_levineoriginal_strat = plot2D_strat_f(period_4yr, age_4yr, kdmadv_delta_levineoriginal_nosexstrat, -8, 3)
+pa_kdmadv_delta_elasticnet_nosexstrat_strat = plot2D_strat_f(period_4yr, age_4yr, kdmadv_delta_elasticnet_nosexstrat, -8, 3)
+
+pa_hdlog_levinenocrp_nosexstrat_strat = plot2D_strat_f(period_4yr, age_4yr, hdlog_levinenocrp_nosexstrat, 2, 6)
+pa_hdlog_levineoriginal_nosexstrat_strat = plot2D_strat_f(period_4yr, age_4yr, hdlog_levineoriginal_nosexstrat, 2, 6)
+pa_hdlog_elasticnet_nosexstrat_strat = plot2D_strat_f(period_4yr, age_4yr, hdlog_elasticnet_nosexstrat, 2, 6)
+
+pa_phenoageadv_delta_levinenocrp_nosexstrat_strat + pa_phenoageadv_delta_levineoriginal_strat + pa_phenoageadv_delta_elasticnet_nosexstrat_strat + pa_kdmadv_delta_levinenocrp_nosexstrat_strat + pa_kdmadv_delta_levineoriginal_strat + pa_kdmadv_delta_elasticnet_nosexstrat_strat + pa_hdlog_levinenocrp_nosexstrat_strat + pa_hdlog_levineoriginal_nosexstrat_strat + pa_hdlog_elasticnet_nosexstrat_strat + plot_layout(nrow = 3, guides = "collect")
+
+rm(pa_phenoageadv_delta_levinenocrp_nosexstrat_strat, pa_phenoageadv_delta_levineoriginal_strat, pa_phenoageadv_delta_elasticnet_nosexstrat_strat, pa_kdmadv_delta_levinenocrp_nosexstrat_strat, pa_kdmadv_delta_levineoriginal_strat, pa_kdmadv_delta_elasticnet_nosexstrat_strat, pa_hdlog_levinenocrp_nosexstrat_strat, pa_hdlog_levineoriginal_nosexstrat_strat, pa_hdlog_elasticnet_nosexstrat_strat)
+```
+
+### Period effects by cohort - overall
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+pc_phenoageadv_delta_levinenocrp_all = plot2D_all_f(period_4yr, cohort_4yr, phenoageadv_delta_levinenocrp_nosexstrat, -6, 0)
+pc_phenoageadv_delta_levineoriginal_all = plot2D_all_f(period_4yr, cohort_4yr, phenoageadv_delta_levineoriginal_nosexstrat, -6, 0)
+pc_phenoageadv_delta_elasticnet_nosexstrat_all = plot2D_all_f(period_4yr, cohort_4yr, phenoageadv_delta_elasticnet_nosexstrat, -6, 0)
+
+pc_kdmadv_delta_levinenocrp_nosexstrat_all = plot2D_all_f(period_4yr, cohort_4yr, kdmadv_delta_levinenocrp_nosexstrat, -6, 0)
+pc_kdmadv_delta_levineoriginal_all = plot2D_all_f(period_4yr, cohort_4yr, kdmadv_delta_levineoriginal_nosexstrat, -6, 0)
+pc_kdmadv_delta_elasticnet_nosexstrat_all = plot2D_all_f(period_4yr, cohort_4yr, kdmadv_delta_elasticnet_nosexstrat, -6, 0)
+
+pc_hdlog_levinenocrp_nosexstrat_all = plot2D_all_f(period_4yr, cohort_4yr, hdlog_levinenocrp_nosexstrat, 2, 5)
+pc_hdlog_levineoriginal_nosexstrat_all = plot2D_all_f(period_4yr, cohort_4yr, hdlog_levineoriginal_nosexstrat, 2, 5)
+pc_hdlog_elasticnet_nosexstrat_all = plot2D_all_f(period_4yr, cohort_4yr, hdlog_elasticnet_nosexstrat, 2, 5)
+
+pc_phenoageadv_delta_levinenocrp_all + pc_phenoageadv_delta_levineoriginal_all + pc_phenoageadv_delta_elasticnet_nosexstrat_all + pc_kdmadv_delta_levinenocrp_nosexstrat_all + pc_kdmadv_delta_levineoriginal_all + pc_kdmadv_delta_elasticnet_nosexstrat_all + pc_hdlog_levinenocrp_nosexstrat_all + pc_hdlog_levineoriginal_nosexstrat_all + pc_hdlog_elasticnet_nosexstrat_all + plot_layout(nrow = 3, guides = "collect")
+
+rm(pc_phenoageadv_delta_levinenocrp_all, pc_phenoageadv_delta_levineoriginal_all, pc_phenoageadv_delta_elasticnet_nosexstrat_all, pc_kdmadv_delta_levinenocrp_nosexstrat, pc_kdmadv_delta_levineoriginal_all, pc_kdmadv_delta_elasticnet_nosexstrat_all, pc_hdlog_levinenocrp_nosexstrat, pc_hdlog_levineoriginal_nosexstrat_all, pc_hdlog_elasticnet_nosexstrat_all)
+```
+
+### Period effects by cohort - stratified
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+pc_phenoageadv_delta_levinenocrp_nosexstrat_strat = plot2D_strat_f(period_4yr, cohort_4yr, phenoageadv_delta_levinenocrp_nosexstrat, -8, 3)
+pc_phenoageadv_delta_levineoriginal_strat = plot2D_strat_f(period_4yr, cohort_4yr, phenoageadv_delta_levineoriginal_nosexstrat, -8, 3)
+pc_phenoageadv_delta_elasticnet_nosexstrat_strat = plot2D_strat_f(period_4yr, cohort_4yr, phenoageadv_delta_elasticnet_nosexstrat, -8, 3)
+
+pc_kdmadv_delta_levinenocrp_nosexstrat_strat = plot2D_strat_f(period_4yr, cohort_4yr, kdmadv_delta_levinenocrp_nosexstrat, -8, 3)
+pc_kdmadv_delta_levineoriginal_strat = plot2D_strat_f(period_4yr, cohort_4yr, kdmadv_delta_levineoriginal_nosexstrat, -8, 3)
+pc_kdmadv_delta_elasticnet_nosexstrat_strat = plot2D_strat_f(period_4yr, cohort_4yr, kdmadv_delta_elasticnet_nosexstrat, -8, 3)
+
+pc_hdlog_levinenocrp_nosexstrat_strat = plot2D_strat_f(period_4yr, cohort_4yr, hdlog_levinenocrp_nosexstrat, 2, 6)
+pc_hdlog_levineoriginal_nosexstrat_strat = plot2D_strat_f(period_4yr, cohort_4yr, hdlog_levineoriginal_nosexstrat, 2, 6)
+pc_hdlog_elasticnet_nosexstrat_strat = plot2D_strat_f(period_4yr, cohort_4yr, hdlog_elasticnet_nosexstrat, 2, 6)
+
+pc_phenoageadv_delta_levinenocrp_nosexstrat_strat + pc_phenoageadv_delta_levineoriginal_strat + pc_phenoageadv_delta_elasticnet_nosexstrat_strat + pc_kdmadv_delta_levinenocrp_nosexstrat_strat + pc_kdmadv_delta_levineoriginal_strat + pc_kdmadv_delta_elasticnet_nosexstrat_strat + pc_hdlog_levinenocrp_nosexstrat_strat + pc_hdlog_levineoriginal_nosexstrat_strat + pc_hdlog_elasticnet_nosexstrat_strat + plot_layout(nrow = 3, guides = "collect")
+
+rm(pc_phenoageadv_delta_levinenocrp_nosexstrat_strat, pc_phenoageadv_delta_levineoriginal_strat, pc_phenoageadv_delta_elasticnet_nosexstrat_strat, pc_kdmadv_delta_levinenocrp_nosexstrat_strat, pc_kdmadv_delta_levineoriginal_strat, pc_kdmadv_delta_elasticnet_nosexstrat_strat, pc_hdlog_levinenocrp_nosexstrat_strat, pc_hdlog_levineoriginal_nosexstrat_strat, pc_hdlog_elasticnet_nosexstrat_strat)
+```
+
+## Graphical assessment of two-dimensional cohort effects
+
+### Cohort effects by age - overall
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+ca_phenoageadv_delta_levinenocrp_all = plot2D_all_f(cohort_4yr, age_4yr, phenoageadv_delta_levinenocrp_nosexstrat, -6, 0)
+ca_phenoageadv_delta_levineoriginal_all = plot2D_all_f(cohort_4yr, age_4yr, phenoageadv_delta_levineoriginal_nosexstrat, -6, 0)
+ca_phenoageadv_delta_elasticnet_nosexstrat_all = plot2D_all_f(cohort_4yr, age_4yr, phenoageadv_delta_elasticnet_nosexstrat, -6, 0)
+
+ca_kdmadv_delta_levinenocrp_nosexstrat_all = plot2D_all_f(cohort_4yr, age_4yr, kdmadv_delta_levinenocrp_nosexstrat, -6, 0)
+ca_kdmadv_delta_levineoriginal_all = plot2D_all_f(cohort_4yr, age_4yr, kdmadv_delta_levineoriginal_nosexstrat, -6, 0)
+ca_kdmadv_delta_elasticnet_nosexstrat_all = plot2D_all_f(cohort_4yr, age_4yr, kdmadv_delta_elasticnet_nosexstrat, -6, 0)
+
+ca_hdlog_levinenocrp_nosexstrat_all = plot2D_all_f(cohort_4yr, age_4yr, hdlog_levinenocrp_nosexstrat, 2, 5)
+ca_hdlog_levineoriginal_nosexstrat_all = plot2D_all_f(cohort_4yr, age_4yr, hdlog_levineoriginal_nosexstrat, 2, 5)
+ca_hdlog_elasticnet_nosexstrat_all = plot2D_all_f(cohort_4yr, age_4yr, hdlog_elasticnet_nosexstrat, 2, 5)
+
+ca_phenoageadv_delta_levinenocrp_all + ca_phenoageadv_delta_levineoriginal_all + ca_phenoageadv_delta_elasticnet_nosexstrat_all + ca_kdmadv_delta_levinenocrp_nosexstrat_all + ca_kdmadv_delta_levineoriginal_all + ca_kdmadv_delta_elasticnet_nosexstrat_all + ca_hdlog_levinenocrp_nosexstrat_all + ca_hdlog_levineoriginal_nosexstrat_all + ca_hdlog_elasticnet_nosexstrat_all + plot_layout(nrow = 3, guides = "collect")
+
+rm(ca_phenoageadv_delta_levinenocrp_all, ca_phenoageadv_delta_levineoriginal_all, ca_phenoageadv_delta_elasticnet_nosexstrat_all, ca_kdmadv_delta_levinenocrp_nosexstrat_all, ca_kdmadv_delta_levineoriginal_all, ca_kdmadv_delta_elasticnet_nosexstrat_all, ca_hdlog_levinenocrp_nosexstrat_all, ca_hdlog_levineoriginal_nosexstrat_all, ca_hdlog_elasticnet_nosexstrat_all)
+```
+
+### Cohort effects by age - stratified
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+ca_phenoageadv_delta_levinenocrp_nosexstrat_strat = plot2D_strat_f(cohort_4yr, age_4yr, phenoageadv_delta_levinenocrp_nosexstrat, -7.5, 3)
+ca_phenoageadv_delta_levineoriginal_strat = plot2D_strat_f(cohort_4yr, age_4yr, phenoageadv_delta_levineoriginal_nosexstrat, -7.5, 3)
+ca_phenoageadv_delta_elasticnet_nosexstrat_strat = plot2D_strat_f(cohort_4yr, age_4yr, phenoageadv_delta_elasticnet_nosexstrat, -7.5, 3)
+
+ca_kdmadv_delta_levinenocrp_nosexstrat_strat = plot2D_strat_f(cohort_4yr, age_4yr, kdmadv_delta_levinenocrp_nosexstrat, -7.5, 3)
+ca_kdmadv_delta_levineoriginal_strat = plot2D_strat_f(cohort_4yr, age_4yr, kdmadv_delta_levineoriginal_nosexstrat, -7.5, 3)
+ca_kdmadv_delta_elasticnet_nosexstrat_strat = plot2D_strat_f(cohort_4yr, age_4yr, kdmadv_delta_elasticnet_nosexstrat, -7.5, 3)
+
+ca_hdlog_levinenocrp_nosexstrat_strat = plot2D_strat_f(cohort_4yr, age_4yr, hdlog_levinenocrp_nosexstrat, 2, 6)
+ca_hdlog_levineoriginal_nosexstrat_strat = plot2D_strat_f(cohort_4yr, age_4yr, hdlog_levineoriginal_nosexstrat, 2, 6)
+ca_hdlog_elasticnet_nosexstrat_strat = plot2D_strat_f(cohort_4yr, age_4yr, hdlog_elasticnet_nosexstrat, 2, 6)
+
+ca_phenoageadv_delta_levinenocrp_nosexstrat_strat + ca_phenoageadv_delta_levineoriginal_strat + ca_phenoageadv_delta_elasticnet_nosexstrat_strat + ca_kdmadv_delta_levinenocrp_nosexstrat_strat + ca_kdmadv_delta_levineoriginal_strat + ca_kdmadv_delta_elasticnet_nosexstrat_strat + ca_hdlog_levinenocrp_nosexstrat_strat + ca_hdlog_levineoriginal_nosexstrat_strat + ca_hdlog_elasticnet_nosexstrat_strat + plot_layout(nrow = 3, guides = "collect")
+
+rm(ca_phenoageadv_delta_levinenocrp_nosexstrat_strat, ca_phenoageadv_delta_levineoriginal_strat, ca_phenoageadv_delta_elasticnet_nosexstrat_strat, ca_kdmadv_delta_levinenocrp_nosexstrat_strat, ca_kdmadv_delta_levineoriginal_strat, ca_kdmadv_delta_elasticnet_nosexstrat_strat, ca_hdlog_levinenocrp_nosexstrat_strat, ca_hdlog_levineoriginal_nosexstrat_strat, ca_hdlog_elasticnet_nosexstrat_strat)
+```
+
+### Cohort effects by period - overall
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+cp_phenoageadv_delta_levinenocrp_all = plot2D_all_f(cohort_4yr, period_4yr, phenoageadv_delta_levinenocrp_nosexstrat, -6, 0)
+cp_phenoageadv_delta_levineoriginal_all = plot2D_all_f(cohort_4yr, period_4yr, phenoageadv_delta_levineoriginal_nosexstrat, -6, 0)
+cp_phenoageadv_delta_elasticnet_nosexstrat_all = plot2D_all_f(cohort_4yr, period_4yr, phenoageadv_delta_elasticnet_nosexstrat, -6, 0)
+
+cp_kdmadv_delta_levinenocrp_nosexstrat_all = plot2D_all_f(cohort_4yr, period_4yr, kdmadv_delta_levinenocrp_nosexstrat, -6, 0)
+cp_kdmadv_delta_levineoriginal_all = plot2D_all_f(cohort_4yr, period_4yr, kdmadv_delta_levineoriginal_nosexstrat, -6, 0)
+cp_kdmadv_delta_elasticnet_nosexstrat_all = plot2D_all_f(cohort_4yr, period_4yr, kdmadv_delta_elasticnet_nosexstrat, -6, 0)
+
+cp_hdlog_levinenocrp_nosexstrat_all = plot2D_all_f(cohort_4yr, period_4yr, hdlog_levinenocrp_nosexstrat, 2, 5)
+cp_hdlog_levineoriginal_nosexstrat_all = plot2D_all_f(cohort_4yr, period_4yr, hdlog_levineoriginal_nosexstrat, 2, 5)
+cp_hdlog_elasticnet_nosexstrat_all = plot2D_all_f(cohort_4yr, period_4yr, hdlog_elasticnet_nosexstrat, 2, 5)
+
+cp_phenoageadv_delta_levinenocrp_all + cp_phenoageadv_delta_levineoriginal_all + cp_phenoageadv_delta_elasticnet_nosexstrat_all + cp_kdmadv_delta_levinenocrp_nosexstrat_all + cp_kdmadv_delta_levineoriginal_all + cp_kdmadv_delta_elasticnet_nosexstrat_all + cp_hdlog_levinenocrp_nosexstrat_all + cp_hdlog_levineoriginal_nosexstrat_all + cp_hdlog_elasticnet_nosexstrat_all + plot_layout(nrow = 3, guides = "collect")
+
+rm(cp_phenoageadv_delta_levinenocrp_all, cp_phenoageadv_delta_levineoriginal_all, cp_phenoageadv_delta_elasticnet_nosexstrat_all, cp_kdmadv_delta_levinenocrp_nosexstrat, cp_kdmadv_delta_levineoriginal_all, cp_kdmadv_delta_elasticnet_nosexstrat_all, cp_hdlog_levinenocrp_nosexstrat, cp_hdlog_levineoriginal_nosexstrat_all, cp_hdlog_elasticnet_nosexstrat_all)
+```
+
+### Cohort effects by period - stratified
+
+```{r echo = FALSE,  warnings = FALSE, message = FALSE, fig.width=18, fig.height=14}
+cp_phenoageadv_delta_levinenocrp_nosexstrat_strat = plot2D_strat_f(cohort_4yr, period_4yr, phenoageadv_delta_levinenocrp_nosexstrat, -7.5, 3)
+cp_phenoageadv_delta_levineoriginal_strat = plot2D_strat_f(cohort_4yr, period_4yr, phenoageadv_delta_levineoriginal_nosexstrat, -7.5, 3)
+cp_phenoageadv_delta_elasticnet_nosexstrat_strat = plot2D_strat_f(cohort_4yr, period_4yr, phenoageadv_delta_elasticnet_nosexstrat, -7.5, 3)
+
+cp_kdmadv_delta_levinenocrp_nosexstrat_strat = plot2D_strat_f(cohort_4yr, period_4yr, kdmadv_delta_levinenocrp_nosexstrat, -7.5, 3)
+cp_kdmadv_delta_levineoriginal_strat = plot2D_strat_f(cohort_4yr, period_4yr, kdmadv_delta_levineoriginal_nosexstrat, -7.5, 3)
+cp_kdmadv_delta_elasticnet_nosexstrat_strat = plot2D_strat_f(cohort_4yr, period_4yr, kdmadv_delta_elasticnet_nosexstrat, -7.5, 3)
+
+cp_hdlog_levinenocrp_nosexstrat_strat = plot2D_strat_f(cohort_4yr, period_4yr, hdlog_levinenocrp_nosexstrat, 2, 5)
+cp_hdlog_levineoriginal_nosexstrat_strat = plot2D_strat_f(cohort_4yr, period_4yr, hdlog_levineoriginal_nosexstrat, 2, 5)
+cp_hdlog_elasticnet_nosexstrat_strat = plot2D_strat_f(cohort_4yr, period_4yr, hdlog_elasticnet_nosexstrat, 2, 6)
+
+cp_phenoageadv_delta_levinenocrp_nosexstrat_strat + cp_phenoageadv_delta_levineoriginal_strat + cp_phenoageadv_delta_elasticnet_nosexstrat_strat + cp_kdmadv_delta_levinenocrp_nosexstrat_strat + cp_kdmadv_delta_levineoriginal_strat + cp_kdmadv_delta_elasticnet_nosexstrat_strat + cp_hdlog_levinenocrp_nosexstrat_strat + cp_hdlog_levineoriginal_nosexstrat_strat + cp_hdlog_elasticnet_nosexstrat_strat + plot_layout(nrow = 3, guides = "collect")
+
+rm(cp_phenoageadv_delta_levinenocrp_nosexstrat_strat, cp_phenoageadv_delta_levineoriginal_strat, cp_phenoageadv_delta_elasticnet_nosexstrat_strat, cp_kdmadv_delta_levinenocrp_nosexstrat_strat, cp_kdmadv_delta_levineoriginal_strat, cp_kdmadv_delta_elasticnet_nosexstrat_strat, cp_hdlog_levinenocrp_nosexstrat_strat, cp_hdlog_levineoriginal_nosexstrat_strat, cp_hdlog_elasticnet_nosexstrat_strat)
+```

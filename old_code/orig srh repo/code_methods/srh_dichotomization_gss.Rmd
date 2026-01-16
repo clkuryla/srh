@@ -1,0 +1,1579 @@
+---
+title: "SRH Categorical and Dichotomized"
+author: "Christine Lucille Kuryla"
+date: "2025-01-09"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(here)
+library(srvyr)
+library(survey)
+#library(Hmisc)
+library(broom)
+library(tidyverse)
+
+library(conflicted)
+conflicts_prefer(dplyr::summarise)
+conflicts_prefer(dplyr::summarize)
+conflicts_prefer(dplyr::select)
+conflicts_prefer(dplyr::mutate)
+conflicts_prefer(dplyr::rename)
+conflicts_prefer(dplyr::filter)
+```
+
+```{r load_and_clean_data}
+data_gss <- read_csv(here("data/extracted_gss_variables.csv")) %>% 
+  filter(cohort != 9999) %>% 
+  filter(!(is.na(health))) %>% 
+#  mutate(south = if_else(region %in% c(4, 5, 6, 7, 8), "South", "Not South")) %>% 
+#  mutate(south = as_factor(south)) %>% 
+#  mutate(region = as_factor(region)) %>% 
+ # mutate(wrkstat = as_factor(wrkstat)) %>% 
+#  mutate(hispanic = as_factor(hispanic)) %>% 
+ # mutate(marital = as_factor(marital)) %>% 
+#  mutate(partyid = as_factor(partyid)) %>% 
+  mutate(health = 5 - health)  %>%  # reverse the coding so it's more intuitive (higher number for excellent, lower number for poor)
+  mutate(happy = 4 - happy) %>% # same
+  mutate(life = 4 - life) %>% # reverse again, these variables tend to be unintuitively ordered!!!
+  mutate(satfin = 4 - satfin) %>% # same again! %>% 
+ mutate(
+    age_group = cut(
+      age,
+      breaks = c(17, 29, 39, 49, 59, 69, Inf),
+      labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+      right = TRUE
+    )
+  ) 
+
+table(data_gss$age_group)
+
+```
+
+
+```{r}
+
+# more categories
+
+data_gss <- data_gss %>% 
+    mutate(
+    health_cat = factor(health, 
+                        levels = 1:4,
+                        labels = c("Poor", "Fair", "Good", "Excellent")),
+    period_cut_6 = as.factor(cut(data_gss$year, 6)),
+    period_cut_10 = as.factor(cut(data_gss$year, 10)),
+    period_cut_12 = as.factor(cut(data_gss$year, 12)),
+    period_groups = as.factor(cut(data_gss$year, 12)),
+    period_10yr = as.factor(
+                            cut(
+                            year,
+                            breaks = c(1971, 1982, 1990, 1998, 2006, 2014, Inf),
+                            labels = c("1972-1982", "1982-1990", "1990-1998", 
+                                       "1998-2006", "2006-2014", "2014-2022"),
+                            right = TRUE
+                            )
+                          ),
+    period_decade = as.factor(
+                            cut(
+                            year,
+                            breaks = c(1971, 1979, 1989, 1999, 2009, 2019, Inf),
+                            labels = c("1972-1979", "1980-1989", "1990-1999",
+                                       "2000-2009", "2010-2019", "2020-2024"),
+                            right = TRUE
+                            )
+                          ),
+    age_group = as.factor( 
+                            cut(
+                            age,
+                            breaks = c(17, 29, 39, 49, 59, 69, Inf),
+                            labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            right = TRUE
+                          )),
+    age_groups = as.factor( 
+                            cut(
+                            age,
+                            breaks = c(17, 29, 39, 49, 59, 69, Inf),
+                            labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            right = TRUE
+                          )),
+    age_group_small = as.factor( 
+                            cut(
+                              age,
+                              breaks = c(seq(15, 75, by = 5), Inf),  # Define breaks up to 75 and include Inf for the last group
+                              labels = c("16-20", "21-25", "26-30", "31-35", "36-40", "41-45", "46-50", "51-55", "56-60", "61-65", "66-70", "71-75", "76+"),
+                              right = FALSE  # Makes intervals left-closed, i.e., [x, y)
+                            )
+                          )
+                          ,
+    generation = factor(
+      case_when(
+        cohort >= 1901 & cohort <= 1927 ~ "Greatest (1901-1927)",
+        cohort >= 1928 & cohort <= 1945 ~ "Silent (1928-1945)",
+        cohort >= 1946 & cohort <= 1964 ~ "Boomers (1946-1964)",
+        cohort >= 1965 & cohort <= 1980 ~ "Gen X (1965-1980)",
+        cohort >= 1981 & cohort <= 1996 ~ "Millennials (1981-1996)",
+        cohort >= 1997 & cohort <= 2012 ~ "Gen Z (1997-2012)",
+        TRUE ~ "Other"
+      ),
+      levels = c(
+        "Greatest (1901-1927)",
+        "Silent (1928-1945)",
+        "Boomers (1946-1964)",
+        "Gen X (1965-1980)",
+        "Millennials (1981-1996)",
+        "Gen Z (1997-2012)"#,
+     #   "Other"
+      )
+    ),
+    generation_two_sections = factor(
+      case_when(
+        generation == "Greatest (1901-1927)" & cohort <= 1914 ~ "Greatest Early (1901-1914)",
+        generation == "Greatest (1901-1927)" & cohort > 1914 ~ "Greatest Late (1915-1927)",
+        generation == "Silent (1928-1945)" & cohort <= 1936 ~ "Silent Early (1928-1936)",
+        generation == "Silent (1928-1945)" & cohort > 1936 ~ "Silent Late (1937-1945)",
+        generation == "Boomers (1946-1964)" & cohort <= 1955 ~ "Boomers Early (1946-1955)",
+        generation == "Boomers (1946-1964)" & cohort > 1955 ~ "Boomers Late (1956-1964)",
+        generation == "Gen X (1965-1980)" & cohort <= 1972 ~ "Gen X Early (1965-1972)",
+        generation == "Gen X (1965-1980)" & cohort > 1972 ~ "Gen X Late (1973-1980)",
+        generation == "Millennials (1981-1996)" & cohort <= 1988 ~ "Millennials Early (1981-1988)",
+        generation == "Millennials (1981-1996)" & cohort > 1988 ~ "Millennials Late (1989-1996)",
+        generation == "Gen Z (1997-2012)" & cohort <= 2004 ~ "Gen Z Early (1997-2004)",
+        generation == "Gen Z (1997-2012)" & cohort > 2004 ~ "Gen Z Late (2005-2012)",
+        TRUE ~ "Other"
+      ),
+      levels = c(
+        "Greatest Early (1901-1914)", "Greatest Late (1915-1927)",
+        "Silent Early (1928-1936)", "Silent Late (1937-1945)",
+        "Boomers Early (1946-1955)", "Boomers Late (1956-1964)",
+        "Gen X Early (1965-1972)", "Gen X Late (1973-1980)",
+        "Millennials Early (1981-1988)", "Millennials Late (1989-1996)",
+        "Gen Z Early (1997-2004)", "Gen Z Late (2005-2012)"#,
+     #   "Other"
+      )
+    ),
+    generation_three_sections = factor(
+      case_when(
+        generation == "Greatest (1901-1927)" & cohort <= 1910 ~ "Greatest Early (1901-1910)",
+        generation == "Greatest (1901-1927)" & cohort > 1910 & cohort <= 1918 ~ "Greatest Mid (1911-1918)",
+        generation == "Greatest (1901-1927)" & cohort > 1918 ~ "Greatest Late (1919-1927)",
+        generation == "Silent (1928-1945)" & cohort <= 1934 ~ "Silent Early (1928-1934)",
+        generation == "Silent (1928-1945)" & cohort > 1934 & cohort <= 1940 ~ "Silent Mid (1935-1940)",
+        generation == "Silent (1928-1945)" & cohort > 1940 ~ "Silent Late (1941-1945)",
+        generation == "Boomers (1946-1964)" & cohort <= 1951 ~ "Boomers Early (1946-1951)",
+        generation == "Boomers (1946-1964)" & cohort > 1951 & cohort <= 1958 ~ "Boomers Mid (1952-1958)",
+        generation == "Boomers (1946-1964)" & cohort > 1958 ~ "Boomers Late (1959-1964)",
+        generation == "Gen X (1965-1980)" & cohort <= 1970 ~ "Gen X Early (1965-1970)",
+        generation == "Gen X (1965-1980)" & cohort > 1970 & cohort <= 1976 ~ "Gen X Mid (1971-1976)",
+        generation == "Gen X (1965-1980)" & cohort > 1976 ~ "Gen X Late (1977-1980)",
+        generation == "Millennials (1981-1996)" & cohort <= 1986 ~ "Millennials Early (1981-1986)",
+        generation == "Millennials (1981-1996)" & cohort > 1986 & cohort <= 1992 ~ "Millennials Mid (1987-1992)",
+        generation == "Millennials (1981-1996)" & cohort > 1992 ~ "Millennials Late / Gen Z (1993-2004)",
+    #    generation == "Gen Z (1997-2012)" & cohort <= 2002 ~ "Gen Z Early (1997-2002)",
+    #    generation == "Gen Z (1997-2012)" & cohort > 2002 & cohort <= 2008 ~ "Gen Z Mid (2003-2008)",
+    #    generation == "Gen Z (1997-2012)" & cohort > 2008 ~ "Gen Z Late (2009-2012)",
+        TRUE ~ "Other"
+      ),
+      levels = c(
+        "Greatest Early (1901-1910)", "Greatest Mid (1911-1918)", "Greatest Late (1919-1927)",
+        "Silent Early (1928-1934)", "Silent Mid (1935-1940)", "Silent Late (1941-1945)",
+        "Boomers Early (1946-1951)", "Boomers Mid (1952-1958)", "Boomers Late (1959-1964)",
+        "Gen X Early (1965-1970)", "Gen X Mid (1971-1976)", "Gen X Late (1977-1980)",
+        "Millennials Early (1981-1986)", "Millennials Mid (1987-1992)", 
+        "Millennials Late / Gen Z (1993-2004)"
+        #"Millennials Late (1993-1996)",
+      #  "Gen Z Early (1997-2002)", "Gen Z Mid (2003-2008)", "Gen Z Late (2009-2012)" #,
+      #  "Other"
+      )
+    )
+  ) %>% 
+  mutate(age_group = as_factor(age_group))
+
+```
+
+# Dichotomize
+
+```{r}
+
+# Define the full set of categories
+all_levels <- c("Excellent", "Good", "Fair", "Poor")
+
+# Use the combinatorial 'combn' function to get all subsets
+all_subsets <- map(1:length(all_levels), ~combn(all_levels, m = .x, simplify = FALSE)) %>%
+  # Flatten the list of lists
+  flatten()
+
+# Filter out the empty set (already not returned by combn) and the full set
+# Keep everything else: these are the potential "Group 1"s
+valid_subsets <- all_subsets %>%
+  discard(~length(.x) == 4)  # remove subset with all 4 categories
+
+# delete the weird ones
+
+valid_subsets <- valid_subsets[c(1:5, 11)]
+
+# Create dichotomized variables
+
+# A helper function to turn a subset (S) into a meaningful column name
+make_dicho_name <- function(S) {
+  # Example name: "Ex_Go" vs "Fa_Po" for c("Excellent","Good"), etc.
+  # We'll join group names with underscores and separate them with "v".
+  group1_name <- str_c(S, collapse = "_")
+  # We find the complement
+  group2 <- setdiff(all_levels, S)
+  group2_name <- str_c(group2, collapse = "_")
+  # Combine them
+  out_name <- str_c("health_dicho_", group1_name, "_v_", group2_name)
+  # For cleanliness, ensure no weird characters/spaces:
+  out_name <- str_replace_all(out_name, "\\s+", "")
+  out_name
+}
+
+data_gss_dichotomized <- data_gss
+
+for (subset_i in valid_subsets) {
+  
+  new_col_name <- make_dicho_name(subset_i)
+  
+  # Dichotomize: if health_cat is in 'subset_i', call it "Group1", else "Group2"
+  data_gss_dichotomized <- data_gss_dichotomized %>%
+    mutate(
+      !!sym(new_col_name) := if_else(health_cat %in% subset_i, 
+                                     1, 0) #"Group1", 
+                                     #"Group2")
+    )
+}
+
+data_gss <- data_gss_dichotomized
+
+dichotomized_var <- colnames(data_gss[(length(data_gss) - length(valid_subsets)+1):(length(data_gss))])
+
+important_dichotomized_var <- dichotomized_var[c(1, 5, 6)]
+
+```
+
+## Survey object
+
+```{r}
+# Create a survey design object using wtssall for multi-year analysis
+gss_svy <- data_gss %>%
+  as_survey_design(
+    ids = 1,           # PSU identifiers (use 1 if not available)
+    weights = wtsscomp  # wtssall pre 2018, wtsscomp combined //Use 'wtss' for single-year analysis
+  )
+```
+
+
+# Functions for the analyses
+
+### Function to create the first figure 
+
+
+```{r}
+
+library(survey)
+library(srvyr)
+library(dplyr)
+library(ggplot2)
+
+#' Plot Weighted Proportion of a Dichotomous Variable
+#'
+#' @param data A srvyr survey object (e.g., as returned by as_survey()).
+#' @param outcome A 0/1 variable representing the dichotomous outcome.
+#' @param group_var The variable to group by (e.g., age group).
+#' @param year_var The variable representing time (e.g., year).
+#' @param title Plot title.
+#' @param subtitle Plot subtitle.
+#'
+#' @return A ggplot object.
+#'
+#' @examples
+#' plot_weighted_proportion(gss_svy, outcome = health_binary,
+#'                          group_var = age_group, year_var = year,
+#'                          title = "Weighted Proportion by Age Group and Year")
+plot_weighted_proportion <- function(data,
+                                     outcome,
+                                     group_var,
+                                     year_var,
+                                     title = "Weighted Proportion Over Time",
+                                     subtitle = "Survey Data") {
+  # Convert unquoted input to symbols for tidy evaluation
+  outcome_sym   <- rlang::ensym(outcome)
+  group_var_sym <- rlang::ensym(group_var)
+  year_var_sym  <- rlang::ensym(year_var)
+  
+  # Compute weighted proportion by group and year
+  df_summary <- data %>%
+    group_by(!!group_var_sym, !!year_var_sym) %>%
+    summarise(
+      # The mean of a 0/1 variable is the proportion = 1
+      prop = survey_mean(!!outcome_sym, na.rm = TRUE),
+      .groups = "drop"  # drop last grouping for a cleaner final dataset
+    )
+  
+  # Create the plot
+  p <- df_summary %>%
+    ggplot(aes(x = !!year_var_sym, y = prop, color = !!group_var_sym)) +
+    geom_line() +
+    geom_point() +
+    labs(
+      title = title,
+      subtitle = subtitle,
+    #  x = rlang::as_label(year_var_sym),
+      x = "Year",
+      y = "Proportion",
+    #  y = paste0("Proportion of ", rlang::as_label(outcome_sym), " = 1"),
+      color = rlang::as_label(group_var_sym)
+    ) +
+    theme_minimal()
+  
+  return(p)
+}
+
+
+```
+
+```{r}
+
+# "health_dicho_Excellent_v_Good_Fair_Poor"
+# "health_dicho_Excellent_Good_v_Fair_Poor"
+# "health_dicho_Excellent_Good_Fair_v_Poor"
+
+p_prop_gss_e_vs_gfp <- plot_weighted_proportion(
+  data = gss_svy,
+  outcome = health_dicho_Excellent_v_Good_Fair_Poor,
+  group_var = age_group,
+  year_var = year,
+  title = "Proportion Reporting Excellent Health by Age Group Over Years",
+  subtitle = "GSS Dataset with Survey Weights"
+)
+
+p_prop_gss_e_vs_gfp
+
+p_prop_gss_eg_vs_fp <- plot_weighted_proportion(
+  data = gss_svy,
+  outcome = health_dicho_Excellent_Good_v_Fair_Poor,
+  group_var = age_group,
+  year_var = year,
+  title = "Proportion Reporting Excellent or Good Health by Age Group Over Years",
+  subtitle = "GSS Dataset with Survey Weights"
+)
+p_prop_gss_eg_vs_fp
+
+p_prop_gss_egf_vs_p <- plot_weighted_proportion(
+  data = gss_svy,
+  outcome = health_dicho_Excellent_Good_Fair_v_Poor,
+  group_var = age_group,
+  year_var = year,
+  title = "Proportion Reporting Excellent, Good, or Fair Health by Age Group Over Years",
+  subtitle = "GSS Dataset with Survey Weights"
+)
+
+p_prop_gss_egf_vs_p
+
+```
+
+# Analyzing Coefficients
+
+```{r}
+
+library(survey)
+library(srvyr)
+library(dplyr)
+library(ggplot2)
+library(broom)       # for tidy()
+library(knitr)       # for kable() if desired
+library(purrr)
+
+#' Weighted Regression of Outcome on a Predictor by Year
+#'
+#' @param survey_data A srvyr survey design object (e.g., gss_svy).
+#' @param outcome The dependent (outcome) variable (e.g., 'health').
+#' @param predictor The predictor variable (e.g., 'age').
+#' @param year_var The variable that indicates the year (e.g., 'year').
+#' @param extra_covars An optional character vector of additional covariates 
+#'                     (default = NULL).
+#' @param alpha The confidence level for conf. intervals (e.g., 0.05 for 95%).
+#'
+#' @return A list containing:
+#'   \item{coefficient_df}{data frame of the regression coefficient for each year.}
+#'   \item{coef_plot}{ggplot object of coefficient estimates over time.}
+#'   \item{coef_trend_plot}{ggplot object of coefficient estimates with linear fit over time.}
+#'   \item{lm_over_time_summary}{lm() summary of how the coefficient changes over time.}
+#'
+#' @details
+#' 1. Groups the data by year, 
+#' 2. Fits a survey-weighted GLM for each group using `svyglm`,
+#' 3. Extracts the coefficient of the `predictor` variable,
+#' 4. Creates two plots: (1) coefficient vs. year with CIs; (2) the same plus a linear fit over time.
+#'
+#' @examples
+#' # Suppose gss_svy is your survey design object
+#' # Weighted regression of health on age for each year:
+#' # result_list <- weighted_regressions_by_year(
+#' #   survey_data = gss_svy,
+#' #   outcome = "health",
+#' #   predictor = "age",
+#' #   year_var = "year"
+#' # )
+#' #
+#' # result_list$coefficient_df
+#' # result_list$coef_plot
+#' # result_list$coef_trend_plot
+#' # result_list$lm_over_time_summary
+weighted_regressions_by_year <- function(survey_data,
+                                         outcome,
+                                         predictor,
+                                         year_var,
+                                         extra_covars = NULL,
+                                         alpha = 0.05) {
+  
+  # --- 1. Build formula for the model ---
+  # outcome ~ predictor (+ optional covariates)
+  if (!is.null(extra_covars)) {
+    rhs <- paste(c(predictor, extra_covars), collapse = " + ")
+  } else {
+    rhs <- predictor
+  }
+  formula_str <- paste(outcome, "~", rhs)
+  model_formula <- as.formula(formula_str)
+  
+  # --- 2. Group by 'year' and fit the models ---
+  #   Using group_map_dfr to run one model per 'year'
+  coefficient_df <- survey_data %>%
+    group_by(.data[[year_var]]) %>%
+    group_map_dfr(~ {
+      # Fit the weighted linear model
+      model <- survey::svyglm(model_formula, design = .x)
+      
+      # Tidy up, with conf.int = TRUE for CIs
+      # conf.level = 1 - alpha (e.g., 95%)
+      model_tidy <- broom::tidy(model, conf.int = TRUE, conf.level = 1 - alpha)
+      
+      # Filter for the term == predictor (or if predictor has multiple terms, adjust accordingly)
+      filter(model_tidy, term == predictor) %>%
+        mutate(
+          year = unique(.x[[year_var]])  # store the year for clarity
+        )
+    }) %>%
+    ungroup() %>%
+    # Select/rename columns for clarity
+    select(year,
+           term,
+           estimate,
+           std.error,
+           statistic,
+           p.value,
+           conf.low,
+           conf.high)
+  
+  # --- 3. Plot the coefficients over time ---
+  coef_plot <- ggplot(coefficient_df, aes(x = year, y = estimate)) +
+    geom_point() +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high),
+                  width = 0.2, position = position_dodge(0.05)) +
+    labs(
+      title = paste("Weighted Coefficients of", predictor, "on", outcome, "by Year"),
+      subtitle = paste("Survey data, ~", predictor, if (!is.null(extra_covars)) paste("+", paste(extra_covars, collapse = " + ")) else ""),
+      x = "Year",
+      y = paste0("Coefficient (", predictor, ")")
+    ) +
+    # geom_hline(yintercept = 0, 
+    # color = "maroon", linetype = "dashed", size = 1,      # thickness of the line
+    # alpha = 0.9    # transparency (light red)
+    # ) +
+    theme_minimal()
+  
+  # --- 4. Fit a linear model of coefficient ~ year (trend over time) ---
+  # Convert 'year' to numeric if it's not already
+  coefficient_df$year <- as.numeric(as.character(coefficient_df$year))
+  coef_trend_lm <- lm(estimate ~ year, data = coefficient_df)
+  lm_over_time_summary <- summary(coef_trend_lm)
+  
+  # Build a second plot with a regression line over time
+  coef_trend_plot <- ggplot(coefficient_df, aes(x = year, y = estimate)) +
+    geom_point() +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high),
+                  width = 0.2, position = position_dodge(0.05)) +
+    geom_smooth(method = "lm", se = TRUE, alpha = 0.3, color = "blue") +
+    labs(
+      title = paste("Trend Over Time for Coefficient of", predictor),
+      subtitle = "With linear fit of the coefficient ~ year",
+      x = "Year",
+      y = paste0("Coefficient (", predictor, ")")
+    ) +
+    # geom_hline(yintercept = 0, 
+    # color = "maroon", linetype = "dashed", size = 1,      # thickness of the line
+    # alpha = 0.9    # transparency (light red)
+    # ) +
+    theme_minimal()
+  
+  # --- 5. Return a list of outputs ---
+  return(list(
+    coefficient_df = coefficient_df,
+    coef_plot = coef_plot,
+    coef_trend_plot = coef_trend_plot,
+    lm_over_time_summary = lm_over_time_summary
+  ))
+}
+
+
+```
+
+### Apply function
+
+```{r}
+
+# health_dicho_Excellent_v_Good_Fair_Poor
+
+# 1. Run Weighted Regressions by Year
+result_list <- weighted_regressions_by_year(
+  survey_data = gss_svy,   # your srvyr design object
+  outcome     = "health_dicho_Excellent_v_Good_Fair_Poor",  # outcome variable
+  predictor   = "age",     # main predictor
+  year_var    = "year"     # group by year
+)
+
+# 2. Check the extracted coefficient estimates
+knitr::kable(result_list$coefficient_df, title = "Excellent v Good/Fair/Poor (GSS)")
+
+# 3. View the summary of how the coefficient changes over time
+result_list$lm_over_time_summary
+
+# 4. Plot the coefficient estimates across years
+print(result_list$coef_plot + labs(subtitle = "Excellent v Good/Fair/Poor (GSS)"))
+
+# 5. Plot the coefficient estimates with a linear trend line
+print(result_list$coef_trend_plot + labs(subtitle = "Excellent v Good/Fair/Poor (GSS)"))
+
+p_coeff_gss_e_vs_gfp <- result_list$coef_trend_plot + labs(subtitle = "Excellent v Good/Fair/Poor (GSS)")
+
+```
+
+```{r}
+
+
+# health_dicho_Excellent_Good_v_Fair_Poor
+
+# 1. Run Weighted Regressions by Year
+result_list <- weighted_regressions_by_year(
+  survey_data = gss_svy,   # your srvyr design object
+  outcome     = "health_dicho_Excellent_Good_v_Fair_Poor",  # outcome variable
+  predictor   = "age",     # main predictor
+  year_var    = "year"     # group by year
+)
+
+# 2. Check the extracted coefficient estimates
+knitr::kable(result_list$coefficient_df, title = "Excellent/Good v Fair/Poor (GSS)")
+
+# 3. View the summary of how the coefficient changes over time
+result_list$lm_over_time_summary
+
+# 4. Plot the coefficient estimates across years
+print(result_list$coef_plot + labs(subtitle = "Excellent/Good v Fair/Poor (GSS)"))
+
+# 5. Plot the coefficient estimates with a linear trend line
+print(result_list$coef_trend_plot + labs(subtitle = "Excellent/Good v Fair/Poor (GSS)"))
+
+p_coeff_gss_eg_vs_fp <- result_list$coef_trend_plot + labs(subtitle = "Excellent/Good vs Fair/Poor (GSS)")
+
+```
+
+```{r}
+
+
+
+# health_dicho_Excellent_Good_Fair_v_Poor
+
+# 1. Run Weighted Regressions by Year
+result_list <- weighted_regressions_by_year(
+  survey_data = gss_svy,   # your srvyr design object
+  outcome     = "health_dicho_Excellent_Good_Fair_v_Poor",  # outcome variable
+  predictor   = "age",     # main predictor
+  year_var    = "year"     # group by year
+)
+
+# 2. Check the extracted coefficient estimates
+knitr::kable(result_list$coefficient_df, title = "Excellent/Good/Fair v Poor (GSS)")
+
+# 3. View the summary of how the coefficient changes over time
+result_list$lm_over_time_summary
+
+# 4. Plot the coefficient estimates across years
+print(result_list$coef_plot + labs(subtitle = "Excellent/Good/Fair v Poor (GSS)"))
+
+# 5. Plot the coefficient estimates with a linear trend line
+print(result_list$coef_trend_plot + labs(subtitle = "Excellent/Good/Fair v Poor (GSS)"))
+
+p_coeff_gss_egf_vs_p <- result_list$coef_trend_plot + labs(subtitle = "Excellent/Good/Fair vs Poor (GSS)")
+
+```
+
+# NHANES
+
+## Load and Wrangle Data
+
+```{r}
+
+# Load and wrangle nhanes data 
+
+data_nh <- read_csv(here("code_examples/kamaryn_nhanes/nhanes_1999-2018_2023-11-29.csv"))
+
+dim(data_nh)
+sum(is.na(data_nh$health)) # note there are 38579 NA's for health out of 96241 subj
+
+year_to_wave <- read_csv(here("big_data/NHANES/nhanes_4/nh4_year_to_wave.csv")) %>% 
+  mutate(release_nb = wave) 
+
+data_nhanes <- data_nh %>% 
+  filter(visit == 1) %>% 
+  filter(age_visit >= 18) %>% 
+  filter(!(is.na(health))) %>% # remove subjects without our primary variable of interest
+ # left_join(year_to_wave, by = "release_nb") %>% # year of survey (***note each survey is two years, this is aproximate and just the first year)
+  mutate(srh = 6 - health) %>%  # recode SRH to be more intuitive (Excellent = 5 to Poor = 1)
+  mutate(age = age_visit) # more intuitive naming for APC analyses
+
+# variables of interest: 
+# self-rated health: "health" originally, reverse recoded to "srh"
+# age at survey: "age_visit"
+# age at follow-up (censored/deceased): "age_last"
+# vital status at follow-up (alive/decesased): "deceased"
+# year/wave: "release_nb"
+# SEQN: "BaseID"
+# "ddem_wghts"	Full Sample 2 Year MEC Exam Weight	WTMEC2YR
+# "dem_wghts_4yr"	Full Sample 4 Year MEC Exam Weight	WTMEC4YR
+
+
+# Adding gloria's for weight variable: SDDSRVYR and other clock and APC things if needed 
+
+data_nhanes_gloria <- read.csv(here("big_data/NHANES/Gloria_preprocessed/Data-3/Core_Dataset_Aim2.csv"))
+
+data_nhanes <- data_nhanes %>% 
+  mutate(SEQN = as.character(BaseID)) %>% 
+  left_join(data_nhanes_gloria %>% 
+              rename(race_decoded = race) %>% 
+              mutate(age = as.numeric(age)), 
+            by = c("SEQN", "age")) %>% 
+  mutate(age = as.numeric(age))
+
+# add more
+
+data_nhanes <- data_nhanes %>% 
+  mutate(age_group = as.factor( 
+                            cut(
+                            age,
+                            breaks = c(17, 29, 39, 49, 59, 69, Inf),
+                            labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            levels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            right = TRUE
+                          )),
+         health_cat = factor(srh, 
+                        levels = 1:5,
+                        labels = c("Poor", "Fair", "Good", "Very Good", "Excellent")))
+
+
+```
+
+```{r}
+
+# more new columns to enable APC
+data_nhanes <- data_nhanes %>% 
+  mutate(period_cut_6 = as.factor(cut(data_nhanes$year, 6)),
+    period_cut_10 = as.factor(cut(data_nhanes$year, 10)),
+    period_cut_12 = as.factor(cut(data_nhanes$year, 12)),
+    period_groups = as.factor(cut(data_nhanes$year, 12)),
+    period_10yr = as.factor(
+                            cut(
+                            year,
+                            breaks = c(1973, 1982, 1990, 1998, 2006, 2014, Inf),
+                            labels = c("1974-1982", "1982-1990", "1990-1998", 
+                                       "1998-2006", "2006-2014", "2014-2022"),
+                            right = TRUE
+                            )
+                          ),
+    period_decade = as.factor(
+                            cut(
+                            year,
+                            breaks = c(1973, 1979, 1989, 1999, 2009, 2019, Inf),
+                            labels = c("1974-1979", "1980-1989", "1990-1999",
+                                       "2000-2009", "2010-2019", "2020-2024"),
+                            right = TRUE
+                            )
+                          ),
+    age_group = as.factor( 
+                            cut(
+                            age,
+                            breaks = c(17, 29, 39, 49, 59, 69, Inf),
+                            labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            right = TRUE
+                          )),
+    age_groups = as.factor( 
+                            cut(
+                            age,
+                            breaks = c(17, 29, 39, 49, 59, 69, Inf),
+                            labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            right = TRUE
+                          )),
+    age_group_small = as.factor( 
+                            cut(
+                              age,
+                              breaks = c(seq(15, 75, by = 5), Inf),  # Define breaks up to 75 and include Inf for the last group
+                              labels = c("16-20", "21-25", "26-30", "31-35", "36-40", "41-45", "46-50", "51-55", "56-60", "61-65", "66-70", "71-75", "76+"),
+                              right = FALSE  # Makes intervals left-closed, i.e., [x, y)
+                            )
+                          )
+                          ,
+    generation = factor(
+      case_when(
+        cohort >= 1901 & cohort <= 1927 ~ "Greatest (1901-1927)",
+        cohort >= 1928 & cohort <= 1945 ~ "Silent (1928-1945)",
+        cohort >= 1946 & cohort <= 1964 ~ "Boomers (1946-1964)",
+        cohort >= 1965 & cohort <= 1980 ~ "Gen X (1965-1980)",
+        cohort >= 1981 & cohort <= 1996 ~ "Millennials (1981-1996)",
+        cohort >= 1997 & cohort <= 2012 ~ "Gen Z (1997-2012)",
+        TRUE ~ "Other"
+      ),
+      levels = c(
+        "Greatest (1901-1927)",
+        "Silent (1928-1945)",
+        "Boomers (1946-1964)",
+        "Gen X (1965-1980)",
+        "Millennials (1981-1996)",
+        "Gen Z (1997-2012)"#,
+     #   "Other"
+      )
+    ),
+    generation_two_sections = factor(
+      case_when(
+        generation == "Greatest (1901-1927)" & cohort <= 1914 ~ "Greatest Early (1901-1914)",
+        generation == "Greatest (1901-1927)" & cohort > 1914 ~ "Greatest Late (1915-1927)",
+        generation == "Silent (1928-1945)" & cohort <= 1936 ~ "Silent Early (1928-1936)",
+        generation == "Silent (1928-1945)" & cohort > 1936 ~ "Silent Late (1937-1945)",
+        generation == "Boomers (1946-1964)" & cohort <= 1955 ~ "Boomers Early (1946-1955)",
+        generation == "Boomers (1946-1964)" & cohort > 1955 ~ "Boomers Late (1956-1964)",
+        generation == "Gen X (1965-1980)" & cohort <= 1972 ~ "Gen X Early (1965-1972)",
+        generation == "Gen X (1965-1980)" & cohort > 1972 ~ "Gen X Late (1973-1980)",
+        generation == "Millennials (1981-1996)" & cohort <= 1988 ~ "Millennials Early (1981-1988)",
+        generation == "Millennials (1981-1996)" & cohort > 1988 ~ "Millennials Late (1989-1996)",
+        generation == "Gen Z (1997-2012)" & cohort <= 2004 ~ "Gen Z Early (1997-2004)",
+        generation == "Gen Z (1997-2012)" & cohort > 2004 ~ "Gen Z Late (2005-2012)",
+        TRUE ~ "Other"
+      ),
+      levels = c(
+        "Greatest Early (1901-1914)", "Greatest Late (1915-1927)",
+        "Silent Early (1928-1936)", "Silent Late (1937-1945)",
+        "Boomers Early (1946-1955)", "Boomers Late (1956-1964)",
+        "Gen X Early (1965-1972)", "Gen X Late (1973-1980)",
+        "Millennials Early (1981-1988)", "Millennials Late (1989-1996)",
+        "Gen Z Early (1997-2004)", "Gen Z Late (2005-2012)"#,
+     #   "Other"
+      )
+    ),
+    generation_three_sections = factor(
+      case_when(
+        generation == "Greatest (1901-1927)" & cohort <= 1910 ~ "Greatest Early (1901-1910)",
+        generation == "Greatest (1901-1927)" & cohort > 1910 & cohort <= 1918 ~ "Greatest Mid (1911-1918)",
+        generation == "Greatest (1901-1927)" & cohort > 1918 ~ "Greatest Late (1919-1927)",
+        generation == "Silent (1928-1945)" & cohort <= 1934 ~ "Silent Early (1928-1934)",
+        generation == "Silent (1928-1945)" & cohort > 1934 & cohort <= 1940 ~ "Silent Mid (1935-1940)",
+        generation == "Silent (1928-1945)" & cohort > 1940 ~ "Silent Late (1941-1945)",
+        generation == "Boomers (1946-1964)" & cohort <= 1951 ~ "Boomers Early (1946-1951)",
+        generation == "Boomers (1946-1964)" & cohort > 1951 & cohort <= 1958 ~ "Boomers Mid (1952-1958)",
+        generation == "Boomers (1946-1964)" & cohort > 1958 ~ "Boomers Late (1959-1964)",
+        generation == "Gen X (1965-1980)" & cohort <= 1970 ~ "Gen X Early (1965-1970)",
+        generation == "Gen X (1965-1980)" & cohort > 1970 & cohort <= 1976 ~ "Gen X Mid (1971-1976)",
+        generation == "Gen X (1965-1980)" & cohort > 1976 ~ "Gen X Late (1977-1980)",
+        generation == "Millennials (1981-1996)" & cohort <= 1986 ~ "Millennials Early (1981-1986)",
+        generation == "Millennials (1981-1996)" & cohort > 1986 & cohort <= 1992 ~ "Millennials Mid (1987-1992)",
+        generation == "Millennials (1981-1996)" & cohort > 1992 ~ "Millennials Late / Gen Z (1993-2004)",
+    #    generation == "Gen Z (1997-2012)" & cohort <= 2002 ~ "Gen Z Early (1997-2002)",
+    #    generation == "Gen Z (1997-2012)" & cohort > 2002 & cohort <= 2008 ~ "Gen Z Mid (2003-2008)",
+    #    generation == "Gen Z (1997-2012)" & cohort > 2008 ~ "Gen Z Late (2009-2012)",
+        TRUE ~ "Other"
+      ),
+      levels = c(
+        "Greatest Early (1901-1910)", "Greatest Mid (1911-1918)", "Greatest Late (1919-1927)",
+        "Silent Early (1928-1934)", "Silent Mid (1935-1940)", "Silent Late (1941-1945)",
+        "Boomers Early (1946-1951)", "Boomers Mid (1952-1958)", "Boomers Late (1959-1964)",
+        "Gen X Early (1965-1970)", "Gen X Mid (1971-1976)", "Gen X Late (1977-1980)",
+        "Millennials Early (1981-1986)", "Millennials Mid (1987-1992)", 
+        "Millennials Late / Gen Z (1993-2004)"
+        #"Millennials Late (1993-1996)",
+      #  "Gen Z Early (1997-2002)", "Gen Z Mid (2003-2008)", "Gen Z Late (2009-2012)" #,
+      #  "Other"
+      )
+    ))
+  
+
+```
+
+
+# Dichotomize
+
+```{r}
+
+# Define the full set of categories
+all_levels <- c("Excellent", "Very Good", "Good", "Fair", "Poor")
+
+# Use the combinatorial 'combn' function to get all subsets
+all_subsets <- map(1:length(all_levels), ~combn(all_levels, m = .x, simplify = FALSE)) %>%
+  # Flatten the list of lists
+  flatten()
+
+# # Filter out the empty set (already not returned by combn) and the full set
+# # Keep everything else: these are the potential "Group 1"s
+# valid_subsets <- all_subsets %>%
+#   discard(~length(.x) == 5)  # remove subset with all 4 categories
+
+# delete the weird ones
+
+valid_subsets <- all_subsets[c(1:6, 16, 26)]
+
+# Create dichotomized variables
+
+# A helper function to turn a subset (S) into a meaningful column name
+make_dicho_name <- function(S) {
+  # Example name: "Ex_Go" vs "Fa_Po" for c("Excellent","Good"), etc.
+  # We'll join group names with underscores and separate them with "v".
+  group1_name <- str_c(S, collapse = "_")
+  # We find the complement
+  group2 <- setdiff(all_levels, S)
+  group2_name <- str_c(group2, collapse = "_")
+  # Combine them
+  out_name <- str_c("health_dicho_", group1_name, "_v_", group2_name)
+  # For cleanliness, ensure no weird characters/spaces:
+  out_name <- str_replace_all(out_name, "\\s+", "")
+  out_name
+}
+
+data_nhanes_dichotomized <- data_nhanes
+
+for (subset_i in valid_subsets) {
+  
+  new_col_name <- make_dicho_name(subset_i)
+  
+  # Dichotomize: if health_cat is in 'subset_i', call it "Group1", else "Group2"
+  data_nhanes_dichotomized <- data_nhanes_dichotomized %>%
+    mutate(
+      !!sym(new_col_name) := if_else(health_cat %in% subset_i, 
+                                     1, 0) #"Group1", 
+                                     #"Group2")
+    )
+}
+
+data_nhanes <- data_nhanes_dichotomized
+
+dichotomized_var <- colnames(data_nhanes[(length(data_nhanes) - length(valid_subsets)):(length(data_nhanes))])
+
+important_dichotomized_var_5levels <- c("health_dicho_Excellent_v_VeryGood_Good_Fair_Poor",
+            "health_dicho_Excellent_VeryGood_v_Good_Fair_Poor",
+            "health_dicho_Excellent_VeryGood_Good_v_Fair_Poor",
+            "health_dicho_Excellent_VeryGood_Good_Fair_v_Poor"
+                                        )
+
+```
+
+## Survey object
+
+```{r}
+
+library(survey)
+library(srvyr)
+
+
+svy_nhanes <- data_nhanes %>%
+  filter(!(is.na(SDMVPSU))) %>% 
+  as_survey_design(
+  #  ids = 1,
+    ids = SDMVPSU,           # PSU identifiers (use 1 if not available)
+  #  weights = WTINT2YR,  # original -- interview weights -- larger sample size but fewer covariates
+    weights = WTMEC2YR, # Gloria's -- enable more covariates
+    strata = SDMVSTRA,
+    nest = TRUE
+    )
+
+```
+
+# First figure
+
+```{r}
+
+
+#"health_dicho_Excellent_v_VeryGood_Good_Fair_Poor",
+#            "health_dicho_Excellent_VeryGood_v_Good_Fair_Poor",
+#            "health_dicho_Excellent_VeryGood_Good_v_Fair_Poor",
+#            "health_dicho_Excellent_VeryGood_Good_Fair_v_Poor"
+
+p_prop_nhanes_e_vs_vgfp <- plot_weighted_proportion(
+  data = svy_nhanes,
+  outcome = health_dicho_Excellent_v_VeryGood_Good_Fair_Poor,
+  group_var = age_group,
+  year_var = year,
+  title = "Excellent Health by Age Group Over Years",
+  subtitle = "NHANES Dataset with Survey Weights"
+)
+p_prop_nhanes_e_vs_vgfp
+
+p_prop_nhanes_ev_vs_gfp <- plot_weighted_proportion(
+  data = svy_nhanes,
+  outcome = health_dicho_Excellent_VeryGood_v_Good_Fair_Poor,
+  group_var = age_group,
+  year_var = year,
+  title = "Excellent or Very Good Health by Age Group Over Years",
+  subtitle = "NHANES Dataset with Survey Weights"
+)
+p_prop_nhanes_ev_vs_gfp
+
+p_prop_nhanes_evg_vs_fp <- plot_weighted_proportion(
+  data = svy_nhanes,
+  outcome = health_dicho_Excellent_VeryGood_Good_v_Fair_Poor,
+  group_var = age_group,
+  year_var = year,
+  title = "Excellent, Very Good, or Good Health by Age Group Over Years",
+  subtitle = "NHANES Dataset with Survey Weights"
+)
+p_prop_nhanes_evg_vs_fp
+
+
+p_prop_nhanes_evgf_vs_p <- plot_weighted_proportion(
+  data = svy_nhanes,
+  outcome = health_dicho_Excellent_VeryGood_Good_Fair_v_Poor,
+  group_var = age_group,
+  year_var = year,
+  title = "Excellent, Very Good, Good, or Fair Health by Age Group Over Years",
+  subtitle = "NHANES Dataset with Survey Weights")
+  
+  p_prop_nhanes_evgf_vs_p
+
+```
+
+# Age Coeff
+
+```{r}
+
+#"health_dicho_Excellent_v_VeryGood_Good_Fair_Poor",
+#            "health_dicho_Excellent_VeryGood_v_Good_Fair_Poor",
+#            "health_dicho_Excellent_VeryGood_Good_v_Fair_Poor",
+#            "health_dicho_Excellent_VeryGood_Good_Fair_v_Poor"
+
+# 1. Run Weighted Regressions by Year
+result_list <- weighted_regressions_by_year(
+  survey_data = svy_nhanes,   # your srvyr design object
+  outcome     = "health_dicho_Excellent_v_VeryGood_Good_Fair_Poor",  # outcome variable
+  predictor   = "age",     # main predictor
+  year_var    = "year"     # group by year
+)
+
+# 2. Check the extracted coefficient estimates
+knitr::kable(result_list$coefficient_df, title = "Excellent v VG/Good/Fair/Poor (NHANES)")
+
+# 3. View the summary of how the coefficient changes over time
+result_list$lm_over_time_summary
+
+# 4. Plot the coefficient estimates across years
+print(result_list$coef_plot + labs(subtitle = "Excellent v VG/Good/Fair/Poor (NHANES)"))
+
+# 5. Plot the coefficient estimates with a linear trend line
+print(result_list$coef_trend_plot + labs(subtitle = "Excellent v VG/Good/Fair/Poor (NHANES)"))
+
+p_coeff_nhanes_e_vs_vgfp <- result_list$coef_trend_plot + labs(subtitle = "Excellent v VG/Good/Fair/Poor (NHANES)")
+
+
+##########
+
+
+# 1. Run Weighted Regressions by Year
+result_list <- weighted_regressions_by_year(
+  survey_data = svy_nhanes,   # your srvyr design object
+  outcome     = "health_dicho_Excellent_VeryGood_v_Good_Fair_Poor",  # outcome variable
+  predictor   = "age",     # main predictor
+  year_var    = "year"     # group by year
+)
+
+# 2. Check the extracted coefficient estimates
+knitr::kable(result_list$coefficient_df, title = "Excellent/VG v Good/Fair/Poor (NHANES)")
+
+# 3. View the summary of how the coefficient changes over time
+result_list$lm_over_time_summary
+
+# 4. Plot the coefficient estimates across years
+print(result_list$coef_plot + labs(subtitle = "Excellent/VG v Good/Fair/Poor (NHANES)"))
+
+# 5. Plot the coefficient estimates with a linear trend line
+print(result_list$coef_trend_plot + labs(subtitle = "Excellent/VG v Good/Fair/Poor (NHANES)"))
+
+p_coeff_nhanes_ev_vs_gfp <- result_list$coef_trend_plot + labs(subtitle = "Excellent/VG v Good/Fair/Poor (NHANES)")
+
+#########
+
+
+# 1. Run Weighted Regressions by Year
+result_list <- weighted_regressions_by_year(
+  survey_data = svy_nhanes,   # your srvyr design object
+  outcome     = "health_dicho_Excellent_VeryGood_Good_v_Fair_Poor",  # outcome variable
+  predictor   = "age",     # main predictor
+  year_var    = "year"     # group by year
+)
+
+# 2. Check the extracted coefficient estimates
+knitr::kable(result_list$coefficient_df, title = "Excellent/VG/Good v Fair/Poor (NHANES)")
+
+# 3. View the summary of how the coefficient changes over time
+result_list$lm_over_time_summary
+
+# 4. Plot the coefficient estimates across years
+print(result_list$coef_plot + labs(subtitle = "Excellent/VG/Good v Fair/Poor (NHANES)"))
+
+# 5. Plot the coefficient estimates with a linear trend line
+print(result_list$coef_trend_plot + labs(subtitle = "Excellent/VG/Good v Fair/Poor (NHANES)"))
+
+p_coeff_nhanes_evg_vs_fp <- result_list$coef_trend_plot + labs(subtitle = "Excellent/VG/Good v Fair/Poor (NHANES)")
+
+#######
+
+
+# 1. Run Weighted Regressions by Year
+result_list <- weighted_regressions_by_year(
+  survey_data = svy_nhanes,   # your srvyr design object
+  outcome     = "health_dicho_Excellent_VeryGood_Good_Fair_v_Poor",  # outcome variable
+  predictor   = "age",     # main predictor
+  year_var    = "year"     # group by year
+)
+
+# 2. Check the extracted coefficient estimates
+knitr::kable(result_list$coefficient_df, title = "Excellent/VG/Good/Fair v Poor (NHANES)")
+
+# 3. View the summary of how the coefficient changes over time
+result_list$lm_over_time_summary
+
+# 4. Plot the coefficient estimates across years
+print(result_list$coef_plot + labs(subtitle = "Excellent/VG/Good/Fair v Poor (NHANES)"))
+
+# 5. Plot the coefficient estimates with a linear trend line
+print(result_list$coef_trend_plot + labs(subtitle = "Excellent/VG/Good/Fair v Poor (NHANES)"))
+
+p_coeff_nhanes_evgf_vs_p <- result_list$coef_trend_plot + labs(subtitle = "Excellent/VG/Good/Fair v Poor (NHANES)")
+
+
+```
+
+# View it all together
+
+## GSS
+
+```{r}
+
+p_prop_gss_e_vs_gfp
+p_prop_gss_eg_vs_fp
+p_prop_gss_egf_vs_p
+
+p_coeff_gss_e_vs_gfp
+p_coeff_gss_eg_vs_fp
+p_coeff_gss_egf_vs_p
+
+
+```
+
+# NHANES
+
+```{r}
+
+p_prop_nhanes_e_vs_vgfp
+p_prop_nhanes_ev_vs_gfp
+p_prop_nhanes_evg_vs_fp
+p_prop_nhanes_evgf_vs_p
+
+p_coeff_nhanes_e_vs_vgfp
+p_coeff_nhanes_ev_vs_gfp
+p_coeff_nhanes_evg_vs_fp
+p_coeff_nhanes_evgf_vs_p
+
+```
+
+# Combined figure
+
+```{r}
+
+library(patchwork)
+
+# Combine them into a 2x2 grid
+# combined_plot <- (p1 + p2) / (p3 + p4)
+
+# or equivalently:
+# combined_plot <- p1 + p2 + p3 + p4 +
+#                 plot_layout(ncol = 2, nrow = 2)
+
+# Print or save the final combined figure
+# combined_plot
+
+# GSS
+
+p_prop_gss_e_vs_gfp + theme(legend.position = "none") + labs(title = "Excellent SRH", subtitle = "GSS") + 
+  p_prop_gss_eg_vs_fp + theme(legend.position = "none") + labs(title = "Excellent/Good SRH", subtitle = "GSS") + 
+  p_prop_gss_egf_vs_p + labs(title = "Excellent/Good/Fair SRH", subtitle = "GSS") + 
+  plot_layout(nrow = 1) + plot_annotation("SRH Proportion Over Time (GSS)")
+
+p_coeff_gss_e_vs_gfp + theme(legend.position = "none") + labs(title = "Excellent SRH", subtitle = "GSS") + 
+  p_coeff_gss_eg_vs_fp + theme(legend.position = "none") + labs(title = "Excellent/Good SRH", subtitle = "GSS") + 
+  p_coeff_gss_egf_vs_p + labs(title = "Excellent/Good/Fair SRH", subtitle = "GSS") + 
+  plot_layout(nrow = 1) + plot_annotation("Age Coefficients Over Time (GSS)")
+
+```
+
+```{r}
+
+# NHANES
+
+p_prop_nhanes_e_vs_vgfp +  theme(legend.position = "none") +
+  p_prop_nhanes_ev_vs_gfp + theme(legend.position = "none") +
+  p_prop_nhanes_evg_vs_fp + theme(legend.position = "none") +
+  p_prop_nhanes_evgf_vs_p +  theme(legend.position = "bottom") +
+  plot_layout(nrow = 2) + plot_annotation("SRH Proportion Over Time (NHANES)")
+
+p_coeff_nhanes_e_vs_vgfp + theme(legend.position = "none") +
+p_coeff_nhanes_ev_vs_gfp + theme(legend.position = "none") +
+p_coeff_nhanes_evg_vs_fp + theme(legend.position = "none") +
+p_coeff_nhanes_evgf_vs_p + theme(legend.position = "bottom") +
+  plot_layout(nrow = 2) + plot_annotation("Age Coefficient Over Time (NHANES)")
+
+```
+
+# NHIS
+
+
+```{r}
+
+# data_nhis_save <- data_nhis
+
+data_nhis_raw <- read_csv(here("big_data/NHIS/nhis_00002.csv")) 
+
+data_nhis_raw %>%
+    group_by(YEAR) %>%
+    summarise(
+        across(
+            c(#MORTSTAT, ASTATFLG, 
+              HHWEIGHT, HEALTH, PSU, STRATA, SAMPWEIGHT, HHWEIGHT), 
+            ~ mean(!is.na(.), na.rm = TRUE)  # fraction of non-NA
+        )
+    ) %>%
+    View()
+
+data_nhis <- data_nhis_raw %>% 
+  filter(!(is.na(HEALTH))) %>% 
+  filter(!(is.na(AGE))) 
+
+#data_nhis_mort <- data_nhis %>% 
+#  filter(!(is.na(MORTSTAT)))
+
+data_nhis <- data_nhis_raw %>% 
+  filter(!(is.na(HEALTH))) %>% 
+  filter(AGE > 18) %>% 
+  filter(AGE < 85) %>% 
+  select(AGE, YEAR, HEALTH, PSU, STRATA, HHWEIGHT, SAMPWEIGHT) %>% 
+  filter(HEALTH %in% 1:5) %>% 
+  mutate(age = AGE, 
+         year = YEAR, 
+         cohort = year - age,
+         srh = 6 - HEALTH)
+
+data_nhis %>%
+    group_by(YEAR) %>%
+    summarise(
+        across(
+            c(#MORTSTAT, ASTATFLG, 
+              HHWEIGHT, HEALTH, PSU, STRATA, SAMPWEIGHT, HHWEIGHT), 
+            ~ mean(!is.na(.), na.rm = TRUE)  # fraction of non-NA
+        )
+    ) %>%
+    View()
+
+```
+
+```{r}
+
+data_nhis <- data_nhis %>% 
+  mutate(period_cut_6 = as.factor(cut(data_nhis$year, 6)),
+    period_cut_10 = as.factor(cut(data_nhis$year, 10)),
+    period_cut_12 = as.factor(cut(data_nhis$year, 12)),
+    period_groups = as.factor(cut(data_nhis$year, 12)),
+    period_10yr = as.factor(
+                            cut(
+                            year,
+                            breaks = c(1973, 1982, 1990, 1998, 2006, 2014, Inf),
+                            labels = c("1974-1982", "1982-1990", "1990-1998", 
+                                       "1998-2006", "2006-2014", "2014-2022"),
+                            right = TRUE
+                            )
+                          ),
+    period_decade = as.factor(
+                            cut(
+                            year,
+                            breaks = c(1973, 1979, 1989, 1999, 2009, 2019, Inf),
+                            labels = c("1974-1979", "1980-1989", "1990-1999",
+                                       "2000-2009", "2010-2019", "2020-2024"),
+                            right = TRUE
+                            )
+                          ),
+    age_group = as.factor( 
+                            cut(
+                            age,
+                            breaks = c(17, 29, 39, 49, 59, 69, Inf),
+                            labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            right = TRUE
+                          )),
+    age_groups = as.factor( 
+                            cut(
+                            age,
+                            breaks = c(17, 29, 39, 49, 59, 69, Inf),
+                            labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            right = TRUE
+                          )),
+    age_group_small = as.factor( 
+                            cut(
+                              age,
+                              breaks = c(seq(15, 75, by = 5), Inf),  # Define breaks up to 75 and include Inf for the last group
+                              labels = c("16-20", "21-25", "26-30", "31-35", "36-40", "41-45", "46-50", "51-55", "56-60", "61-65", "66-70", "71-75", "76+"),
+                              right = FALSE  # Makes intervals left-closed, i.e., [x, y)
+                            )
+                          )
+                          ,
+    generation = factor(
+      case_when(
+        cohort >= 1901 & cohort <= 1927 ~ "Greatest (1901-1927)",
+        cohort >= 1928 & cohort <= 1945 ~ "Silent (1928-1945)",
+        cohort >= 1946 & cohort <= 1964 ~ "Boomers (1946-1964)",
+        cohort >= 1965 & cohort <= 1980 ~ "Gen X (1965-1980)",
+        cohort >= 1981 & cohort <= 1996 ~ "Millennials (1981-1996)",
+        cohort >= 1997 & cohort <= 2012 ~ "Gen Z (1997-2012)",
+        TRUE ~ "Other"
+      ),
+      levels = c(
+        "Greatest (1901-1927)",
+        "Silent (1928-1945)",
+        "Boomers (1946-1964)",
+        "Gen X (1965-1980)",
+        "Millennials (1981-1996)",
+        "Gen Z (1997-2012)"#,
+     #   "Other"
+      )
+    ),
+    generation_two_sections = factor(
+      case_when(
+        generation == "Greatest (1901-1927)" & cohort <= 1914 ~ "Greatest Early (1901-1914)",
+        generation == "Greatest (1901-1927)" & cohort > 1914 ~ "Greatest Late (1915-1927)",
+        generation == "Silent (1928-1945)" & cohort <= 1936 ~ "Silent Early (1928-1936)",
+        generation == "Silent (1928-1945)" & cohort > 1936 ~ "Silent Late (1937-1945)",
+        generation == "Boomers (1946-1964)" & cohort <= 1955 ~ "Boomers Early (1946-1955)",
+        generation == "Boomers (1946-1964)" & cohort > 1955 ~ "Boomers Late (1956-1964)",
+        generation == "Gen X (1965-1980)" & cohort <= 1972 ~ "Gen X Early (1965-1972)",
+        generation == "Gen X (1965-1980)" & cohort > 1972 ~ "Gen X Late (1973-1980)",
+        generation == "Millennials (1981-1996)" & cohort <= 1988 ~ "Millennials Early (1981-1988)",
+        generation == "Millennials (1981-1996)" & cohort > 1988 ~ "Millennials Late (1989-1996)",
+        generation == "Gen Z (1997-2012)" & cohort <= 2004 ~ "Gen Z Early (1997-2004)",
+        generation == "Gen Z (1997-2012)" & cohort > 2004 ~ "Gen Z Late (2005-2012)",
+        TRUE ~ "Other"
+      ),
+      levels = c(
+        "Greatest Early (1901-1914)", "Greatest Late (1915-1927)",
+        "Silent Early (1928-1936)", "Silent Late (1937-1945)",
+        "Boomers Early (1946-1955)", "Boomers Late (1956-1964)",
+        "Gen X Early (1965-1972)", "Gen X Late (1973-1980)",
+        "Millennials Early (1981-1988)", "Millennials Late (1989-1996)",
+        "Gen Z Early (1997-2004)", "Gen Z Late (2005-2012)"#,
+     #   "Other"
+      )
+    ),
+    generation_three_sections = factor(
+      case_when(
+        generation == "Greatest (1901-1927)" & cohort <= 1910 ~ "Greatest Early (1901-1910)",
+        generation == "Greatest (1901-1927)" & cohort > 1910 & cohort <= 1918 ~ "Greatest Mid (1911-1918)",
+        generation == "Greatest (1901-1927)" & cohort > 1918 ~ "Greatest Late (1919-1927)",
+        generation == "Silent (1928-1945)" & cohort <= 1934 ~ "Silent Early (1928-1934)",
+        generation == "Silent (1928-1945)" & cohort > 1934 & cohort <= 1940 ~ "Silent Mid (1935-1940)",
+        generation == "Silent (1928-1945)" & cohort > 1940 ~ "Silent Late (1941-1945)",
+        generation == "Boomers (1946-1964)" & cohort <= 1951 ~ "Boomers Early (1946-1951)",
+        generation == "Boomers (1946-1964)" & cohort > 1951 & cohort <= 1958 ~ "Boomers Mid (1952-1958)",
+        generation == "Boomers (1946-1964)" & cohort > 1958 ~ "Boomers Late (1959-1964)",
+        generation == "Gen X (1965-1980)" & cohort <= 1970 ~ "Gen X Early (1965-1970)",
+        generation == "Gen X (1965-1980)" & cohort > 1970 & cohort <= 1976 ~ "Gen X Mid (1971-1976)",
+        generation == "Gen X (1965-1980)" & cohort > 1976 ~ "Gen X Late (1977-1980)",
+        generation == "Millennials (1981-1996)" & cohort <= 1986 ~ "Millennials Early (1981-1986)",
+        generation == "Millennials (1981-1996)" & cohort > 1986 & cohort <= 1992 ~ "Millennials Mid (1987-1992)",
+        generation == "Millennials (1981-1996)" & cohort > 1992 ~ "Millennials Late / Gen Z (1993-2004)",
+    #    generation == "Gen Z (1997-2012)" & cohort <= 2002 ~ "Gen Z Early (1997-2002)",
+    #    generation == "Gen Z (1997-2012)" & cohort > 2002 & cohort <= 2008 ~ "Gen Z Mid (2003-2008)",
+    #    generation == "Gen Z (1997-2012)" & cohort > 2008 ~ "Gen Z Late (2009-2012)",
+        TRUE ~ "Other"
+      ),
+      levels = c(
+        "Greatest Early (1901-1910)", "Greatest Mid (1911-1918)", "Greatest Late (1919-1927)",
+        "Silent Early (1928-1934)", "Silent Mid (1935-1940)", "Silent Late (1941-1945)",
+        "Boomers Early (1946-1951)", "Boomers Mid (1952-1958)", "Boomers Late (1959-1964)",
+        "Gen X Early (1965-1970)", "Gen X Mid (1971-1976)", "Gen X Late (1977-1980)",
+        "Millennials Early (1981-1986)", "Millennials Mid (1987-1992)", 
+        "Millennials Late / Gen Z (1993-2004)"
+        #"Millennials Late (1993-1996)",
+      #  "Gen Z Early (1997-2002)", "Gen Z Mid (2003-2008)", "Gen Z Late (2009-2012)" #,
+      #  "Other"
+      )
+    ))
+
+data_nhis <- data_nhis %>% 
+           mutate(health_cat = factor(srh, 
+                        levels = 1:5,
+                        labels = c("Poor", "Fair", "Good", "Very Good", "Excellent")))
+
+```
+
+
+## Dichotomize NHIS
+
+```{r}
+
+# Define the full set of categories
+all_levels <- c("Excellent", "Very Good", "Good", "Fair", "Poor")
+
+# Use the combinatorial 'combn' function to get all subsets
+all_subsets <- map(1:length(all_levels), ~combn(all_levels, m = .x, simplify = FALSE)) %>%
+  # Flatten the list of lists
+  flatten()
+
+# # Filter out the empty set (already not returned by combn) and the full set
+# # Keep everything else: these are the potential "Group 1"s
+# valid_subsets <- all_subsets %>%
+#   discard(~length(.x) == 5)  # remove subset with all 4 categories
+
+# delete the weird ones
+
+valid_subsets <- all_subsets[c(1:6, 16, 26)]
+
+# Create dichotomized variables
+
+# A helper function to turn a subset (S) into a meaningful column name
+make_dicho_name <- function(S) {
+  # Example name: "Ex_Go" vs "Fa_Po" for c("Excellent","Good"), etc.
+  # We'll join group names with underscores and separate them with "v".
+  group1_name <- str_c(S, collapse = "_")
+  # We find the complement
+  group2 <- setdiff(all_levels, S)
+  group2_name <- str_c(group2, collapse = "_")
+  # Combine them
+  out_name <- str_c("health_dicho_", group1_name, "_v_", group2_name)
+  # For cleanliness, ensure no weird characters/spaces:
+  out_name <- str_replace_all(out_name, "\\s+", "")
+  out_name
+}
+
+data_nhis_dichotomized <- data_nhis
+
+for (subset_i in valid_subsets) {
+  
+  new_col_name <- make_dicho_name(subset_i)
+  
+  # Dichotomize: if health_cat is in 'subset_i', call it "Group1", else "Group2"
+  data_nhis_dichotomized <- data_nhis_dichotomized %>%
+    mutate(
+      !!sym(new_col_name) := if_else(health_cat %in% subset_i, 
+                                     1, 0) #"Group1", 
+                                     #"Group2")
+    )
+}
+
+data_nhis <- data_nhis_dichotomized
+
+dichotomized_var <- colnames(data_nhis[(length(data_nhis) - length(valid_subsets)):(length(data_nhis))])
+
+important_dichotomized_var_5levels <- c("health_dicho_Excellent_v_VeryGood_Good_Fair_Poor",
+            "health_dicho_Excellent_VeryGood_v_Good_Fair_Poor",
+            "health_dicho_Excellent_VeryGood_Good_v_Fair_Poor",
+            "health_dicho_Excellent_VeryGood_Good_Fair_v_Poor"
+                                        )
+
+```
+
+## Survey object
+
+```{r}
+library(survey)
+library(srvyr)
+
+svy_nhis <- data_nhis %>%
+#  filter(!(is.na(HHWEIGHT))) %>% 
+ # filter(!(is.na(SAMPWEIGHT))) %>% ########## maybe keep
+  as_survey_design(
+    ids = PSU,           # PSU identifiers (use 1 if not available)
+  #  weights = SAMPWEIGHT,  # missing some every once in a while, maybe keeep
+  #  weights = HHWEIGHT, # missing 2019+
+    strata = STRATA, 
+    nest = TRUE
+    )
+
+```
+
+
+# First figure
+
+```{r}
+
+
+#"health_dicho_Excellent_v_VeryGood_Good_Fair_Poor",
+#            "health_dicho_Excellent_VeryGood_v_Good_Fair_Poor",
+#            "health_dicho_Excellent_VeryGood_Good_v_Fair_Poor",
+#            "health_dicho_Excellent_VeryGood_Good_Fair_v_Poor"
+
+p_prop_nhis_e_vs_vgfp <- plot_weighted_proportion(
+  data = svy_nhis,
+  outcome = health_dicho_Excellent_v_VeryGood_Good_Fair_Poor,
+  group_var = age_group,
+  year_var = year,
+  title = "Excellent Health by Age Group Over Years",
+  subtitle = "NHIS Dataset with Survey Weights"
+)
+p_prop_nhis_e_vs_vgfp
+
+p_prop_nhis_ev_vs_gfp <- plot_weighted_proportion(
+  data = svy_nhis,
+  outcome = health_dicho_Excellent_VeryGood_v_Good_Fair_Poor,
+  group_var = age_group,
+  year_var = year,
+  title = "Excellent or Very Good Health by Age Group Over Years",
+  subtitle = "NHIS Dataset with Survey Weights"
+)
+p_prop_nhis_ev_vs_gfp
+
+p_prop_nhis_evg_vs_fp <- plot_weighted_proportion(
+  data = svy_nhis,
+  outcome = health_dicho_Excellent_VeryGood_Good_v_Fair_Poor,
+  group_var = age_group,
+  year_var = year,
+  title = "Excellent, Very Good, or Good Health by Age Group Over Years",
+  subtitle = "NHIS Dataset with Survey Weights"
+)
+p_prop_nhis_evg_vs_fp
+
+
+p_prop_nhis_evgf_vs_p <- plot_weighted_proportion(
+  data = svy_nhis,
+  outcome = health_dicho_Excellent_VeryGood_Good_Fair_v_Poor,
+  group_var = age_group,
+  year_var = year,
+  title = "Excellent, Very Good, Good, or Fair Health by Age Group Over Years",
+  subtitle = "NHIS Dataset with Survey Weights")
+  
+  p_prop_nhis_evgf_vs_p
+
+```
+
+## Age Coeff
+
+```{r}
+
+#"health_dicho_Excellent_v_VeryGood_Good_Fair_Poor",
+#            "health_dicho_Excellent_VeryGood_v_Good_Fair_Poor",
+#            "health_dicho_Excellent_VeryGood_Good_v_Fair_Poor",
+#            "health_dicho_Excellent_VeryGood_Good_Fair_v_Poor"
+
+# 1. Run Weighted Regressions by Year
+result_list <- weighted_regressions_by_year(
+  survey_data = svy_nhis,   # your srvyr design object
+  outcome     = "health_dicho_Excellent_v_VeryGood_Good_Fair_Poor",  # outcome variable
+  predictor   = "age",     # main predictor
+  year_var    = "year"     # group by year
+)
+
+# 2. Check the extracted coefficient estimates
+knitr::kable(result_list$coefficient_df, title = "Excellent v VG/Good/Fair/Poor (nhis)")
+
+# 3. View the summary of how the coefficient changes over time
+result_list$lm_over_time_summary
+
+# 4. Plot the coefficient estimates across years
+print(result_list$coef_plot + labs(subtitle = "Excellent v VG/Good/Fair/Poor (nhis)"))
+
+# 5. Plot the coefficient estimates with a linear trend line
+print(result_list$coef_trend_plot + labs(subtitle = "Excellent v VG/Good/Fair/Poor (nhis)"))
+
+p_coeff_nhis_e_vs_vgfp <- result_list$coef_trend_plot + labs(subtitle = "Excellent v VG/Good/Fair/Poor (nhis)")
+
+
+##########
+
+
+# 1. Run Weighted Regressions by Year
+result_list <- weighted_regressions_by_year(
+  survey_data = svy_nhis,   # your srvyr design object
+  outcome     = "health_dicho_Excellent_VeryGood_v_Good_Fair_Poor",  # outcome variable
+  predictor   = "age",     # main predictor
+  year_var    = "year"     # group by year
+)
+
+# 2. Check the extracted coefficient estimates
+knitr::kable(result_list$coefficient_df, title = "Excellent/VG v Good/Fair/Poor (nhis)")
+
+# 3. View the summary of how the coefficient changes over time
+result_list$lm_over_time_summary
+
+# 4. Plot the coefficient estimates across years
+print(result_list$coef_plot + labs(subtitle = "Excellent/VG v Good/Fair/Poor (nhis)"))
+
+# 5. Plot the coefficient estimates with a linear trend line
+print(result_list$coef_trend_plot + labs(subtitle = "Excellent/VG v Good/Fair/Poor (nhis)"))
+
+p_coeff_nhis_ev_vs_gfp <- result_list$coef_trend_plot + labs(subtitle = "Excellent/VG v Good/Fair/Poor (nhis)")
+
+#########
+
+
+# 1. Run Weighted Regressions by Year
+result_list <- weighted_regressions_by_year(
+  survey_data = svy_nhis,   # your srvyr design object
+  outcome     = "health_dicho_Excellent_VeryGood_Good_v_Fair_Poor",  # outcome variable
+  predictor   = "age",     # main predictor
+  year_var    = "year"     # group by year
+)
+
+# 2. Check the extracted coefficient estimates
+knitr::kable(result_list$coefficient_df, title = "Excellent/VG/Good v Fair/Poor (NHIS)")
+
+# 3. View the summary of how the coefficient changes over time
+result_list$lm_over_time_summary
+
+# 4. Plot the coefficient estimates across years
+print(result_list$coef_plot + labs(subtitle = "Excellent/VG/Good v Fair/Poor (NHIS)"))
+
+# 5. Plot the coefficient estimates with a linear trend line
+print(result_list$coef_trend_plot + labs(subtitle = "Excellent/VG/Good v Fair/Poor (NHIS)"))
+
+p_coeff_nhis_evg_vs_fp <- result_list$coef_trend_plot + labs(subtitle = "Excellent/VG/Good v Fair/Poor (NHIS)")
+
+#######
+
+
+# 1. Run Weighted Regressions by Year
+result_list <- weighted_regressions_by_year(
+  survey_data = svy_nhis,   # your srvyr design object
+  outcome     = "health_dicho_Excellent_VeryGood_Good_Fair_v_Poor",  # outcome variable
+  predictor   = "age",     # main predictor
+  year_var    = "year"     # group by year
+)
+
+# 2. Check the extracted coefficient estimates
+knitr::kable(result_list$coefficient_df, title = "Excellent/VG/Good/Fair v Poor (NHIS)")
+
+# 3. View the summary of how the coefficient changes over time
+result_list$lm_over_time_summary
+
+# 4. Plot the coefficient estimates across years
+print(result_list$coef_plot + labs(subtitle = "Excellent/VG/Good/Fair v Poor (NHIS)"))
+
+# 5. Plot the coefficient estimates with a linear trend line
+print(result_list$coef_trend_plot + labs(subtitle = "Excellent/VG/Good/Fair v Poor (NHIS)"))
+
+p_coeff_nhis_evgf_vs_p <- result_list$coef_trend_plot + labs(subtitle = "Excellent/VG/Good/Fair v Poor (NHIS)")
+
+
+```
+

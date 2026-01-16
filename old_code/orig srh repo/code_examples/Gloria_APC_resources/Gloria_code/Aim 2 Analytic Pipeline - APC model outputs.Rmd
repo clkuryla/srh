@@ -1,0 +1,3110 @@
+---
+title: "Aim 2 Analytic Pipeline - APC model outputs"
+output: html_document
+date: "2023-06-30"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache = FALSE)
+library(dplyr)
+library(tidyverse)
+library(foreign)
+library(haven)
+library(survey)
+library(srvyr)
+library(kableExtra)
+library(patchwork)
+library(lme4)
+library(lmerTest)
+library(psych)
+```
+
+This document produces outputs for the primary results of formal APC analyses in Aim 2 of the Graf dissertation, as follows:
+
+1) "Table 1": demographic characteristics of the unweighted NHANES analysis sample
+
+2) Comparison of one-, two-, and three-factor models (three-factor model is based on HAPC model of phenoage elastic net variable)
+
+3) Results of Hierarchical APC Estimation with Cross-Classified Random Effects (HAPC-CCREM), Intrinsic Estimator (IE), and Median Polish Estimator models.
+
+## "Table 1": demographic characteristics of the unweighted NHANES analysis sample
+
+```{r loading-data, echo = FALSE}
+original_df = read.csv("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Core_Dataset_Aim2.csv")
+
+# Standardizing bioage variable
+original_df = 
+  original_df %>%
+  dplyr::mutate(phenoageadv_delta_levinenocrp_scale = scale(phenoageadv_delta_levinenocrp_nosexstrat),
+         phenoageadv_delta_elasticnet_scale = scale(phenoageadv_delta_elasticnet_nosexstrat),
+         kdmadv_delta_levinenocrp_scale = scale(kdmadv_delta_levinenocrp_nosexstrat),
+         kdmadv_delta_elasticnet_scale = scale(kdmadv_delta_elasticnet_nosexstrat),
+         hdlog_levinenocrp_scale = scale(hdlog_levinenocrp_nosexstrat),
+         hdlog_elasticnet_scale = scale(hdlog_elasticnet_nosexstrat))
+
+# Creating dataset for BHAPC models (non-survey object, restricting to NHANES4, Black or White race, age <=80, complete information, n=28991)
+bhapc_df =
+  original_df %>%
+  mutate(age_4yr = as.character(age_4yr),
+         cohort_4yr = as.character(cohort_4yr),
+         period_4yr = as.character(period_4yr),
+         race = factor(race, levels = c("White", "Black")),
+         gender = factor(gender, levels = c(1, 2), labels = c("Men", "Women")),
+         lnWTMEC4YR = ifelse(WTMEC4YR == 0, 0, log(WTMEC4YR))) %>%
+  filter(year != 1991 & race %in% c("Black", "White") & age_4yr <= 80 &
+          !is.na(phenoageadv_delta_elasticnet_nosexstrat) & !is.na(age) & !is.na(age_squared) & !is.na(race) & !is.na(gender) & !is.na(period_4yr) & !is.na(cohort_4yr)) %>%
+  droplevels()
+
+# Creating dataset for IE/MP models (survey object, n=55081, restricting to NHANES4)
+surveymatrix_df =
+  original_df %>%
+  mutate(age_4yr = as.character(age_4yr),
+         cohort_4yr = as.character(cohort_4yr),
+         period_4yr = as.character(period_4yr),
+         race = factor(race, levels = c("White", "Black", "Other")),
+         gender = factor(gender, levels = c(1, 2), labels = c("Men", "Women")),
+         lnWTMEC4YR = ifelse(WTMEC4YR == 0, 0, log(WTMEC4YR))) %>%
+  filter(year != 1991) %>%
+  droplevels()
+
+svydesign_all = 
+  surveymatrix_df %>% 
+  as_survey_design(ids=SDMVPSU, strata=SDMVSTRA, weights=WTMEC4YR, nest = TRUE)
+
+svydesign_core =
+  subset(svydesign_all, race %in% c("White", "Black") & age_4yr <= 80 & !is.na(phenoageadv_delta_elasticnet_nosexstrat) & !is.na(age) & !is.na(age_squared) & !is.na(race) & !is.na(gender) & !is.na(period_4yr) & !is.na(cohort_4yr))
+svydesign_wm =
+  subset(svydesign_all, race == "White" & gender == "Men" & age_4yr <= 80 &
+          !is.na(phenoageadv_delta_elasticnet_nosexstrat) & !is.na(age) & !is.na(age_squared) & !is.na(race) & !is.na(period_4yr) & !is.na(cohort_4yr))
+svydesign_ww =
+  subset(svydesign_all, race == "White" & gender == "Women" & age_4yr <= 80 &
+          !is.na(phenoageadv_delta_elasticnet_nosexstrat) & !is.na(age) & !is.na(age_squared) & !is.na(race) & !is.na(period_4yr) & !is.na(cohort_4yr))
+svydesign_bm =
+  subset(svydesign_all, race == "Black" & gender == "Men" & age_4yr <= 80 &
+          !is.na(phenoageadv_delta_elasticnet_nosexstrat) & !is.na(age) & !is.na(age_squared) & !is.na(race) & !is.na(period_4yr) & !is.na(cohort_4yr))
+svydesign_bw =
+  subset(svydesign_all, race == "Black" & gender == "Women" & age_4yr <= 80 &
+          !is.na(phenoageadv_delta_elasticnet_nosexstrat) & !is.na(age) & !is.na(age_squared) & !is.na(race) & !is.na(period_4yr) & !is.na(cohort_4yr))
+
+# Creation of subsets
+wm_df = 
+  bhapc_df %>% 
+  filter(race == "White" & gender == "Men")
+ww_df = 
+  bhapc_df %>% 
+  filter(race == "White" & gender == "Women")
+bm_df = 
+  bhapc_df %>% 
+  filter(race == "Black" & gender == "Men")
+bw_df = 
+  bhapc_df %>% 
+  filter(race == "Black" & gender == "Women")
+```
+
+```{r echo = FALSE, warnings = FALSE}
+age_summary = function(sample) {
+  
+    mean_age = mean(pull(sample, age), na.rm = T)
+    sd_age = sd(pull(sample, age), na.rm = T)
+    mean_phenoage = mean(pull(sample, phenoage_elasticnet_nosexstrat), na.rm = T)
+    sd_phenoage = sd(pull(sample, phenoage_elasticnet_nosexstrat), na.rm = T)
+    mean_paa = mean(pull(sample, phenoageadv_delta_elasticnet_nosexstrat), na.rm = T)
+    sd_paa = sd(pull(sample, phenoageadv_delta_elasticnet_nosexstrat), na.rm = T)
+    mean_kdm = mean(pull(sample, kdm_elasticnet_nosexstrat), na.rm = T)
+    sd_kdm = sd(pull(sample, kdm_elasticnet_nosexstrat), na.rm = T)
+    mean_kdma = mean(pull(sample, kdmadv_delta_elasticnet_nosexstrat), na.rm = T)
+    sd_kdma = sd(pull(sample, kdmadv_delta_elasticnet_nosexstrat), na.rm = T)
+    mean_hdlog = mean(pull(sample, hdlog_elasticnet_nosexstrat), na.rm = T)
+    sd_hdlog = sd(pull(sample, hdlog_elasticnet_nosexstrat), na.rm = T)
+  
+    tibble(
+      mean_age = mean_age, 
+      sd_age = sd_age,
+      mean_phenoage = mean_phenoage,
+      sd_phenoage = sd_phenoage,
+      mean_paa = mean_paa,
+      sd_paa = sd_paa,
+      mean_kdm = mean_kdm,
+      sd_kdm = sd_kdm,
+      mean_kdma = mean_kdma,
+      sd_kdma = sd_kdma,
+      mean_hdlog = mean_hdlog,
+      sd_hdlog = sd_hdlog
+    )
+}
+
+analysis_samples = 
+  list(bhapc_df = bhapc_df, wm_df = wm_df, ww_df = ww_df, bm_df = bm_df, bw_df = bw_df)
+
+output_agedesc = 
+  map_dfr(analysis_samples, age_summary, .id = "sample") %>%
+  pivot_longer(c(mean_age:sd_hdlog), names_to = "variable", values_to = "value") %>%
+  separate(variable, into = c("measure", "variable"), sep = "_") %>%
+  filter(variable != "kdm", variable != "kdma") %>%
+  pivot_wider(names_from = measure, values_from = value) %>%
+  mutate(
+    mean = round(mean, 1),
+    sd = round(sd, 1),
+    mean_sd = paste(mean," (", sd,")", sep = "")) %>%
+  dplyr::select(sample, variable, mean_sd) %>%
+  pivot_wider(names_from = sample, values_from = mean_sd) %>%
+  mutate(variable = ifelse(variable == "age", "Age",
+          ifelse(variable == "phenoage", "PhenoAge",
+          ifelse(variable == "paa", "PhenoAge Advancement",
+          ifelse(variable == "kdm", "KDM Biological Age",
+          ifelse(variable == "kdma", "KDM Biological-Age Advancement",
+          ifelse(variable == "hdlog", "Homeostatic Dysregulation (log)", NA)))))))
+
+# output_agedesc %>%
+#   knitr::kable(col.names = c("", "Full sample", "White Men", "White Women", "Black Men", "Black Women")) %>%
+#   kableExtra::kable_classic()
+
+## Descriptives- categorical
+descriptives_cat =
+  function(sample) {
+  n = sum(!is.na(sample$phenoage_elasticnet_nosexstrat)) %>%
+    as.data.frame()
+  colnames(n) = c("n")
+  sex_dist = prop.table(table(pull(sample, gender), useNA = "ifany")) %>% 
+    as.data.frame() %>%
+    pivot_wider(names_from = "Var1", values_from = "Freq")
+  race_dist = prop.table(table(pull(sample, race), useNA = "ifany")) %>% 
+    as.data.frame() %>%
+    pivot_wider(names_from = "Var1", values_from = "Freq")
+
+  bind_cols(n, sex_dist, race_dist) 
+  
+  }
+
+output_catdesc = 
+  map_dfr(analysis_samples, descriptives_cat, .id = "variable") %>%
+  mutate_at(c("Men", "Women", "White", "Black"), ~100*(.)) %>%
+  mutate_if(is.numeric, ~round(.,0)) %>%
+  pivot_longer(c(n:Black), names_to = "group") %>%
+  pivot_wider(names_from = variable)
+colnames(output_catdesc) = c("variable", "bhapc_df", "wm_df", "ww_df", "bm_df", "bw_df")
+
+# output_catdesc %>%
+#   knitr::kable(col.names = c("", "Full sample", "White Men", "White Women", "Black Men", "Black Women")) %>%
+#   kableExtra::kable_classic()
+
+table1 =
+  rbind(output_catdesc, output_agedesc)
+table1[table1 == "100"| table1 == "0"] <- ""
+
+table1 %>%
+  knitr::kable(col.names = c("", "Full sample", "White Men", "White Women", "Black Men", "Black Women")) %>%
+  kableExtra::kable_classic() %>%
+  row_spec(0,bold=TRUE) %>%
+  pack_rows("Percent (%)", 2, 5) %>%
+  pack_rows("Mean (SD)", 6, 9)
+```
+
+## BA trends over time
+```{r echo = FALSE}
+BAtrends_df =
+  original_df %>%
+  mutate(age_4yr = as.character(age_4yr),
+         cohort_4yr = as.character(cohort_4yr),
+         period_4yr = as.character(period_4yr),
+         race = factor(race, levels = c("White", "Black", "Other")),
+         gender = factor(gender, levels = c(1, 2), labels = c("Men", "Women"))) %>%
+  droplevels()
+
+svydesign_BAtrends_interim = 
+  BAtrends_df %>% 
+  filter(!is.na(SDMVPSU), !is.na(SDMVSTRA), !is.na(WTMEC2YR)) %>%
+  as_survey_design(ids=SDMVPSU, strata=SDMVSTRA, weights=WTMEC2YR, nest = TRUE)
+
+svydesign_BAtrends =
+  subset(svydesign_BAtrends_interim, race %in% c("White", "Black") & age_4yr <= 80 & !is.na(phenoageadv_delta_elasticnet_nosexstrat) & !is.na(age) & !is.na(age_squared) & !is.na(race) & !is.na(gender) & !is.na(period_4yr) & !is.na(cohort_4yr))
+
+weightedmeans_bysubgroup =
+  svydesign_BAtrends %>%
+  group_by(race, gender, period_4yr) %>%
+  summarise(paa_mean = survey_mean(phenoageadv_delta_elasticnet_nosexstrat, na.rm = T),
+            kdma_mean = survey_mean(kdmadv_delta_elasticnet_nosexstrat, na.rm = T),
+            hdlog_mean = survey_mean(hdlog_elasticnet_nosexstrat, na.rm = T))
+
+paa_timetrend =
+  weightedmeans_bysubgroup %>%
+  dplyr::select(race, gender, period_4yr, paa_mean, paa_mean_se) %>%
+  mutate(race_gender = paste(race, gender, sep = " "),
+         period_4yr = as.numeric(as.character(period_4yr))) %>%
+  ungroup() %>%
+  mutate(race_gender = factor(race_gender, levels = c("Black Men", "White Men", "Black Women", "White Women"))) %>%
+  ggplot(aes(x=period_4yr, y=paa_mean, color = race_gender, linetype = race_gender)) +
+  geom_point() +
+  geom_line() +
+  geom_errorbar(aes(ymin = paa_mean-(paa_mean_se*1.96), ymax = paa_mean+(paa_mean_se*1.96)), width = 0.4) +
+  theme_minimal() +
+  scale_color_manual(values = c("red", "red", "blue", "blue")) +
+  scale_linetype_manual(values = c("solid", "twodash", "solid", "twodash")) +
+  labs(color = "", linetype = "", x = "Year", y = "PhenoAge Advancement")
+
+hdlog_timetrend =
+  weightedmeans_bysubgroup %>%
+  dplyr::select(race, gender, period_4yr, hdlog_mean, hdlog_mean_se) %>%
+  mutate(race_gender = paste(race, gender, sep = " "),
+         period_4yr = as.numeric(as.character(period_4yr))) %>%
+  ungroup() %>%
+  mutate(race_gender = factor(race_gender, levels = c("Black Men", "White Men", "Black Women", "White Women"))) %>%
+  ggplot(aes(x=period_4yr, y=hdlog_mean, color = race_gender, linetype = race_gender)) +
+  geom_point() +
+  geom_line() +
+  geom_errorbar(aes(ymin = hdlog_mean-(hdlog_mean_se*1.96), ymax = hdlog_mean+(hdlog_mean_se*1.96)), width = 0.4) +
+  theme_minimal() +
+  scale_color_manual(values = c("red", "red", "blue", "blue")) +
+  scale_linetype_manual(values = c("solid", "twodash", "solid", "twodash")) +
+  labs(color = "", linetype = "", x = "Year", y = "Homeostatic Dysregulation (log)")
+
+paa_timetrend + hdlog_timetrend + plot_layout(guides = "collect")
+```
+
+```{r echo = FALSE}
+# # 2-year intervals
+# BAtrends_df =
+#   original_df %>%
+#   mutate(race = factor(race, levels = c("White", "Black", "Other")),
+#          gender = factor(gender, levels = c(1, 2), labels = c("Men", "Women"))) %>%
+#   droplevels()
+# 
+# svydesign_BAtrends_interim =
+#   BAtrends_df %>%
+#   filter(!is.na(SDMVPSU), !is.na(SDMVSTRA), !is.na(WTMEC2YR)) %>%
+#   as_survey_design(ids=SDMVPSU, strata=SDMVSTRA, weights=WTMEC2YR, nest = TRUE)
+# 
+# svydesign_BAtrends =
+#   subset(svydesign_BAtrends_interim, race %in% c("White", "Black") & age_4yr <= 80 & !is.na(phenoageadv_delta_elasticnet_nosexstrat) & !is.na(age) & !is.na(age_squared) & !is.na(race) & !is.na(gender) & !is.na(year) & !is.na(cohort_4yr))
+# 
+# weightedmeans_bysubgroup =
+#   svydesign_BAtrends %>%
+#   group_by(race, gender, year) %>%
+#   summarise(paa_mean = survey_mean(phenoageadv_delta_elasticnet_nosexstrat, na.rm = T),
+#             kdma_mean = survey_mean(kdmadv_delta_elasticnet_nosexstrat, na.rm = T),
+#             hdlog_mean = survey_mean(hdlog_elasticnet_nosexstrat, na.rm = T))
+# 
+# weightedmeans_bysubgroup %>%
+#   dplyr::select(race, gender, year, paa_mean, paa_mean_se) %>%
+#   mutate(race_gender = paste(race, gender, sep = " "),
+#          year = as.numeric(as.character(year))) %>%
+#   ungroup() %>%
+#   mutate(race_gender = factor(race_gender, levels = c("Black Men", "White Men", "Black Women", "White Women"))) %>%
+#   ggplot(aes(x=year, y=paa_mean, color = race_gender, linetype = race_gender)) +
+#   geom_point() +
+#   geom_line(linewidth = 2) +
+#   geom_errorbar(aes(ymin = paa_mean-(paa_mean_se*1.96), ymax = paa_mean+(paa_mean_se*1.96)), linewidth = 1.8, width = 0.8) +
+#   theme_minimal() +
+#   scale_color_manual(values = c("red", "red", "blue", "blue")) +
+#   scale_linetype_manual(values = c("solid", "twodash", "solid", "twodash")) +
+#   scale_x_continuous(breaks=c(1991, 1999, 2001, 2003,2005, 2007, 2009, 2011, 2013, 2015, 2017), labels=c("NHANES3 (1988-1994)", "1999", "2001", "2003", "2005", "2007", "2009", "2011", "2013", "2015", "2017")) +
+#   labs(color = "", linetype = "", x = "Year", y = "PhenoAge Advancement")
+```
+
+## Correlation matrix
+```{r echo = FALSE, warnings = FALSE}
+corrmatrixBA_df =
+  bhapc_df %>%
+  dplyr::select(age, phenoage_elasticnet_nosexstrat, phenoageadv_delta_elasticnet_nosexstrat, hdlog_elasticnet_nosexstrat) %>%
+  rename(Age = age, 
+        PhenoAge = phenoage_elasticnet_nosexstrat,
+        `PhenoAge advancement` = phenoageadv_delta_elasticnet_nosexstrat,
+        `Homeostatic Dysregulation (log)` = hdlog_elasticnet_nosexstrat)
+
+cor(corrmatrixBA_df, method = "pearson") %>%
+  as.data.frame() %>%
+  mutate(across(where(is.numeric), ~ round(., digits = 2))) %>%
+  knitr::kable(caption = "Pearson's correlation coefficients") %>%
+  kableExtra::kable_classic()
+
+cor(corrmatrixBA_df, method = "spearman") %>%
+  as.data.frame() %>%
+  mutate(across(where(is.numeric), ~ round(., digits = 2))) %>%
+  knitr::kable(caption = "Spearman's rank correlation") %>%
+  kableExtra::kable_classic()
+```
+
+## Base model comparisons
+
+## Comparison of one-, two-, and three-factor models (full sample)
+
+```{r echo = FALSE, warnings = FALSE, results='asis'}
+# A model
+onefactor_age_m =
+  svyglm(phenoageadv_delta_elasticnet_scale ~ age_4yr + race + gender, design = svydesign_core)
+#AP models
+twofactor_ageperiod_m =
+  svyglm(phenoageadv_delta_elasticnet_scale ~ age_4yr + period_4yr + race + gender, design = svydesign_core)
+#AC model
+twofactor_agecohort_m =
+  svyglm(phenoageadv_delta_elasticnet_scale ~ age_4yr + cohort_4yr + race + gender, design = svydesign_core)
+#APC model (CGLIM)
+threefactor_m =
+  lmer(phenoageadv_delta_elasticnet_scale ~ age_4yr + race + gender + lnWTMEC4YR + (1|period_4yr) + (1|cohort_4yr) + (1|SDMVSTRA/SDMVPSU), data = bhapc_df, REML = FALSE)
+
+# Model summaries
+onefactor_age_m_summary =
+  c(onefactor_age_m$df.residual, round(onefactor_age_m$deviance, digits = 2), round(onefactor_age_m$aic, digits = 2))
+twofactor_ageperiod_m_summary =
+  c(twofactor_ageperiod_m$df.residual, round(twofactor_ageperiod_m$deviance, digits = 2), round(twofactor_ageperiod_m$aic, digits = 2))
+twofactor_agecohort_m_summary =
+  c(twofactor_agecohort_m$df.residual, round(twofactor_agecohort_m$deviance, digits = 2), round(twofactor_agecohort_m$aic, digits = 2))
+threefactor_m_summary =
+  c("", "", round(AIC(threefactor_m), digits = 2))
+
+
+# Output
+APC_modelsummary =
+  cbind(onefactor_age_m_summary, twofactor_ageperiod_m_summary, twofactor_agecohort_m_summary, threefactor_m_summary)
+
+rownames(APC_modelsummary) = c("df", "Deviance", "AIC")
+
+APC_modelsummary %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  knitr::kable(col.names = c("", "A", "AP", "AC", "APC")) %>%
+  kableExtra::kable_classic(html_font = "Times New Roman") %>%
+  row_spec(0, bold=TRUE)
+```
+
+## Bayesian HAPC models
+
+```{r hapc-charts-functions, echo = FALSE, warnings = FALSE}
+bhapc_agechart_f = function(unstrat_m, wm_m, ww_m, bm_m, bw_m, ylim_min, ylim_max){
+
+  # All 
+      coef_all =
+        summary(unstrat_m) %>%
+        as.data.frame() %>%
+        rownames_to_column() %>%
+        dplyr::rename(variable = rowname) %>%
+        filter(variable %in% c("raceWhite", "gender2") | (str_detect(variable, c("age|cohort|period|intercept|Intercept")))) %>%
+        filter(!str_detect(variable, "SDMVSTRA")) %>%
+        dplyr::select(variable, mean, `10%`, `90%`) %>%
+        mutate(across('variable', str_replace, '\\[|\\]', '')) %>%
+        mutate(across('variable', str_replace, '\\]|\\]', '')) %>%
+        separate(variable, into = c("variable", "value"), sep = " ") %>%
+        mutate(variable = ifelse(!is.na(value), value, variable)) %>%
+        dplyr::select(-value) %>%
+        dplyr::rename(bayes_coef = mean)
+    
+      age_coef_all = sum(subset(coef_all %>% filter(variable == "age"))$bayes_coef)
+      agesquared_coef_all = (sum(subset(coef_all %>% filter(variable == "scale(age_squared)"))$bayes_coef))/(sd(bhapc_df$age_squared))
+      
+     age_lowerCI_all = sum(subset(coef_all %>% filter(variable == "age"))$`10%`)
+      agesquared_lowerCI_all = (sum(subset(coef_all %>% filter(variable == "scale(age_squared)"))$`10%`))/(sd(bhapc_df$age_squared))
+      
+     age_upperCI_all = sum(subset(coef_all %>% filter(variable == "age"))$`90%`)
+      agesquared_upperCI_all = (sum(subset(coef_all %>% filter(variable == "scale(age_squared)"))$`90%`))/(sd(bhapc_df$age_squared))
+    
+      age_g_all =
+        ggplot() +
+        geom_function(fun = function(x){(age_coef_all*x) + (agesquared_coef_all*(x^2))}, linewidth = 1.25) +
+        geom_function(fun = function(x){(age_lowerCI_all*x) + (agesquared_lowerCI_all*(x^2))}, linetype = "dashed", linewidth = 1.25) +
+        geom_function(fun = function(x){(age_upperCI_all*x) + (agesquared_upperCI_all*(x^2))}, linetype = "dashed", linewidth = 1.25) +
+        xlim(20,80) +
+        ylab(element_blank()) +
+        xlab("Age") +
+        theme_minimal() +
+        labs(title = "All") +
+        ylim(ylim_min, ylim_max)
+      
+  # White men 
+      coef_wm =
+        summary(wm_m) %>%
+        as.data.frame() %>%
+        rownames_to_column() %>%
+        dplyr::rename(variable = rowname) %>%
+        filter(variable %in% c("raceWhite", "gender2") | (str_detect(variable, c("age|cohort|period|intercept|Intercept")))) %>%
+        filter(!str_detect(variable, "SDMVSTRA")) %>%
+        dplyr::select(variable, mean, `10%`, `90%`) %>%
+        mutate(across('variable', str_replace, '\\[|\\]', '')) %>%
+        mutate(across('variable', str_replace, '\\]|\\]', '')) %>%
+        separate(variable, into = c("variable", "value"), sep = " ") %>%
+        mutate(variable = ifelse(!is.na(value), value, variable)) %>%
+        dplyr::select(-value) %>%
+        dplyr::rename(bayes_coef = mean)
+    
+      age_coef_wm = sum(subset(coef_wm %>% filter(variable == "age"))$bayes_coef)
+      agesquared_coef_wm = (sum(subset(coef_wm %>% filter(variable == "scale(age_squared)"))$bayes_coef))/(sd(wm_df$age_squared))
+      
+     age_lowerCI_wm = sum(subset(coef_wm %>% filter(variable == "age"))$`10%`)
+      agesquared_lowerCI_wm = (sum(subset(coef_wm %>% filter(variable == "scale(age_squared)"))$`10%`))/(sd(bhapc_df$age_squared))
+      
+     age_upperCI_wm = sum(subset(coef_wm %>% filter(variable == "age"))$`90%`)
+      agesquared_upperCI_wm = (sum(subset(coef_wm %>% filter(variable == "scale(age_squared)"))$`90%`))/(sd(bhapc_df$age_squared))
+    
+      age_g_wm =
+        ggplot() +
+        geom_function(fun = function(x){(age_coef_wm*x) + (agesquared_coef_wm*(x^2))}, linewidth = 1.25) +
+        geom_function(fun = function(x){(age_lowerCI_wm*x) + (agesquared_lowerCI_wm*(x^2))}, linetype = "dashed", linewidth = 1.25) +
+        geom_function(fun = function(x){(age_upperCI_wm*x) + (agesquared_upperCI_wm*(x^2))}, linetype = "dashed", linewidth = 1.25) +
+        xlim(20,80) +
+        ylab(element_blank()) +
+        xlab("Age") +
+        theme_minimal() +
+        labs(title = "White Men") +
+        ylim(ylim_min, ylim_max)
+      
+   # White women 
+      coef_ww =
+        summary(ww_m) %>%
+        as.data.frame() %>%
+        rownames_to_column() %>%
+        dplyr::rename(variable = rowname) %>%
+        filter(variable %in% c("raceWhite", "gender2") | (str_detect(variable, c("age|cohort|period|intercept|Intercept")))) %>%
+        filter(!str_detect(variable, "SDMVSTRA")) %>%
+        dplyr::select(variable, mean, `10%`, `90%`) %>%
+        mutate(across('variable', str_replace, '\\[|\\]', '')) %>%
+        mutate(across('variable', str_replace, '\\]|\\]', '')) %>%
+        separate(variable, into = c("variable", "value"), sep = " ") %>%
+        mutate(variable = ifelse(!is.na(value), value, variable)) %>%
+        dplyr::select(-value) %>%
+        dplyr::rename(bayes_coef = mean)
+    
+      age_coef_ww = sum(subset(coef_ww %>% filter(variable == "age"))$bayes_coef)
+      agesquared_coef_ww = (sum(subset(coef_ww %>% filter(variable == "scale(age_squared)"))$bayes_coef))/(sd(ww_df$age_squared))
+      
+     age_lowerCI_ww = sum(subset(coef_ww %>% filter(variable == "age"))$`10%`)
+      agesquared_lowerCI_ww = (sum(subset(coef_ww %>% filter(variable == "scale(age_squared)"))$`10%`))/(sd(bhapc_df$age_squared))
+      
+     age_upperCI_ww = sum(subset(coef_ww %>% filter(variable == "age"))$`90%`)
+      agesquared_upperCI_ww = (sum(subset(coef_ww %>% filter(variable == "scale(age_squared)"))$`90%`))/(sd(bhapc_df$age_squared))
+    
+      age_g_ww =
+        ggplot() +
+        geom_function(fun = function(x){(age_coef_ww*x) + (agesquared_coef_ww*(x^2))}, linewidth = 1.25) +
+        geom_function(fun = function(x){(age_lowerCI_ww*x) + (agesquared_lowerCI_ww*(x^2))}, linetype = "dashed", linewidth = 1.25) +
+        geom_function(fun = function(x){(age_upperCI_ww*x) + (agesquared_upperCI_ww*(x^2))}, linetype = "dashed", linewidth = 1.25) +
+        xlim(20,80) +
+        ylab(element_blank()) +
+        xlab("Age") +
+        theme_minimal() +
+        labs(title = "White Women") +
+        ylim(ylim_min, ylim_max)     
+      
+   # Black Men 
+      coef_bm =
+        summary(bm_m) %>%
+        as.data.frame() %>%
+        rownames_to_column() %>%
+        dplyr::rename(variable = rowname) %>%
+        filter(variable %in% c("raceWhite", "gender2") | (str_detect(variable, c("age|cohort|period|intercept|Intercept")))) %>%
+        filter(!str_detect(variable, "SDMVSTRA")) %>%
+        dplyr::select(variable, mean, `10%`, `90%`) %>%
+        mutate(across('variable', str_replace, '\\[|\\]', '')) %>%
+        mutate(across('variable', str_replace, '\\]|\\]', '')) %>%
+        separate(variable, into = c("variable", "value"), sep = " ") %>%
+        mutate(variable = ifelse(!is.na(value), value, variable)) %>%
+        dplyr::select(-value) %>%
+        dplyr::rename(bayes_coef = mean)
+    
+      age_coef_bm = sum(subset(coef_bm %>% filter(variable == "age"))$bayes_coef)
+      agesquared_coef_bm = (sum(subset(coef_bm %>% filter(variable == "scale(age_squared)"))$bayes_coef))/(sd(bm_df$age_squared))
+      
+     age_lowerCI_bm = sum(subset(coef_bm %>% filter(variable == "age"))$`10%`)
+      agesquared_lowerCI_bm = (sum(subset(coef_bm %>% filter(variable == "scale(age_squared)"))$`10%`))/(sd(bhapc_df$age_squared))
+      
+     age_upperCI_bm = sum(subset(coef_bm %>% filter(variable == "age"))$`90%`)
+      agesquared_upperCI_bm = (sum(subset(coef_bm %>% filter(variable == "scale(age_squared)"))$`90%`))/(sd(bhapc_df$age_squared))
+    
+      age_g_bm =
+        ggplot() +
+        geom_function(fun = function(x){(age_coef_bm*x) + (agesquared_coef_bm*(x^2))}, linewidth = 1.25) +
+        geom_function(fun = function(x){(age_lowerCI_bm*x) + (agesquared_lowerCI_bm*(x^2))}, linetype = "dashed", linewidth = 1.25) +
+        geom_function(fun = function(x){(age_upperCI_bm*x) + (agesquared_upperCI_bm*(x^2))}, linetype = "dashed", linewidth = 1.25) +
+        xlim(20,80) +
+        ylab(element_blank()) +
+        xlab("Age") +
+        theme_minimal() +
+        labs(title = "Black Men") +
+        ylim(ylim_min, ylim_max)  
+      
+   # Black Women 
+      coef_bw =
+        summary(bw_m) %>%
+        as.data.frame() %>%
+        rownames_to_column() %>%
+        dplyr::rename(variable = rowname) %>%
+        filter(variable %in% c("raceWhite", "gender2") | (str_detect(variable, c("age|cohort|period|intercept|Intercept")))) %>%
+        filter(!str_detect(variable, "SDMVSTRA")) %>%
+        dplyr::select(variable, mean, `10%`, `90%`) %>%
+        mutate(across('variable', str_replace, '\\[|\\]', '')) %>%
+        mutate(across('variable', str_replace, '\\]|\\]', '')) %>%
+        separate(variable, into = c("variable", "value"), sep = " ") %>%
+        mutate(variable = ifelse(!is.na(value), value, variable)) %>%
+        dplyr::select(-value) %>%
+        dplyr::rename(bayes_coef = mean)
+    
+      age_coef_bw = sum(subset(coef_bw %>% filter(variable == "age"))$bayes_coef)
+      agesquared_coef_bw = (sum(subset(coef_bw %>% filter(variable == "scale(age_squared)"))$bayes_coef))/(sd(bw_df$age_squared))
+      
+     age_lowerCI_bw = sum(subset(coef_bw %>% filter(variable == "age"))$`10%`)
+      agesquared_lowerCI_bw = (sum(subset(coef_bw %>% filter(variable == "scale(age_squared)"))$`10%`))/(sd(bhapc_df$age_squared))
+      
+     age_upperCI_bw = sum(subset(coef_bw %>% filter(variable == "age"))$`90%`)
+      agesquared_upperCI_bw = (sum(subset(coef_bw %>% filter(variable == "scale(age_squared)"))$`90%`))/(sd(bhapc_df$age_squared))
+    
+      age_g_bw =
+        ggplot() +
+        geom_function(fun = function(x){(age_coef_bw*x) + (agesquared_coef_bw*(x^2))}, linewidth = 1.25) +
+        geom_function(fun = function(x){(age_lowerCI_bw*x) + (agesquared_lowerCI_bw*(x^2))}, linetype = "dashed", linewidth = 1.25) +
+        geom_function(fun = function(x){(age_upperCI_bw*x) + (agesquared_upperCI_bw*(x^2))}, linetype = "dashed", linewidth = 1.25) +
+        xlim(20,80) +
+        ylab(element_blank()) +
+        xlab("Age") +
+        theme_minimal() +
+        labs(title = "Black Women") +
+        ylim(ylim_min, ylim_max)  
+
+  age_g_all + age_g_wm + age_g_ww + age_g_bm + age_g_bw + plot_layout(nrow = 1)
+
+}
+
+bhapc_periodchart_f = function(unstrat_m, wm_m, ww_m, bm_m, bw_m, ylim_min, ylim_max){
+
+  # All 
+      coef_all =
+        summary(unstrat_m) %>%
+        as.data.frame() %>%
+        rownames_to_column() %>%
+        dplyr::rename(variable = rowname) %>%
+        filter(variable %in% c("raceWhite", "gender2") | (str_detect(variable, c("age|cohort|period|intercept|Intercept")))) %>%
+        filter(!str_detect(variable, "SDMVSTRA")) %>%
+        dplyr::select(variable, mean, `10%`, `90%`) %>%
+        dplyr::mutate(across('variable', str_replace, '\\[|\\]', '')) %>%
+        dplyr::mutate(across('variable', str_replace, '\\]|\\]', '')) %>%
+        separate(variable, into = c("variable", "value"), sep = " ") %>%
+        dplyr::mutate(variable = ifelse(!is.na(value), value, variable)) %>%
+        dplyr::select(-value) %>%
+        dplyr::rename(bayes_coef = mean)
+      
+      period_g_all =
+        coef_all %>%
+        filter(str_detect(variable, "period")) %>%
+        filter(!str_detect(variable, "Sigma")) %>%
+        separate(variable, into = c("period", "year"), sep = ":") %>%
+        dplyr::mutate(year = as.numeric(year)) %>%
+        ggplot(aes(x = year)) +
+        geom_point(aes(y = bayes_coef), size = 3) +
+        geom_line(aes(y = bayes_coef), linewidth = 1.25) +
+        geom_errorbar(aes(ymin = `10%`, ymax = `90%`), width=0.8, linewidth = 1.25) +
+        scale_x_continuous(breaks=c(1999,2003,2007,2011,2015)) +
+        theme_minimal() +
+        labs(title = "All") +
+        ylab(element_blank()) +
+        ylim(ylim_min, ylim_max)
+      
+  # White men
+      coef_wm =
+        summary(wm_m) %>%
+        as.data.frame() %>%
+        rownames_to_column() %>%
+        dplyr::rename(variable = rowname) %>%
+        filter(variable %in% c("raceWhite", "gender2") | (str_detect(variable, c("age|cohort|period|intercept|Intercept")))) %>%
+        filter(!str_detect(variable, "SDMVSTRA")) %>%
+        dplyr::select(variable, mean, `10%`, `90%`) %>%
+        dplyr::mutate(across('variable', str_replace, '\\[|\\]', '')) %>%
+        dplyr::mutate(across('variable', str_replace, '\\]|\\]', '')) %>%
+        separate(variable, into = c("variable", "value"), sep = " ") %>%
+        dplyr::mutate(variable = ifelse(!is.na(value), value, variable)) %>%
+        dplyr::select(-value) %>%
+        dplyr::rename(bayes_coef = mean)
+
+      period_g_wm =
+        coef_wm %>%
+        filter(str_detect(variable, "period")) %>%
+        filter(!str_detect(variable, "Sigma")) %>%
+        separate(variable, into = c("period", "year"), sep = ":") %>%
+        dplyr::mutate(year = as.numeric(year)) %>%
+        ggplot(aes(x = year)) +
+        geom_point(aes(y = bayes_coef), size = 3) +
+        geom_line(aes(y = bayes_coef), linewidth = 1.25) +
+        geom_errorbar(aes(ymin = `10%`, ymax = `90%`), width=0.8, linewidth = 1.25) +
+        scale_x_continuous(breaks=c(1999,2003,2007,2011,2015)) +
+        theme_minimal() +
+        labs(title = "White Men") +
+        ylab(element_blank()) +
+        ylim(ylim_min, ylim_max)
+
+   # White women
+      coef_ww =
+        summary(ww_m) %>%
+        as.data.frame() %>%
+        rownames_to_column() %>%
+        dplyr::rename(variable = rowname) %>%
+        filter(variable %in% c("raceWhite", "gender2") | (str_detect(variable, c("age|cohort|period|intercept|Intercept")))) %>%
+        filter(!str_detect(variable, "SDMVSTRA")) %>%
+        dplyr::select(variable, mean, `10%`, `90%`) %>%
+        dplyr::mutate(across('variable', str_replace, '\\[|\\]', '')) %>%
+        dplyr::mutate(across('variable', str_replace, '\\]|\\]', '')) %>%
+        separate(variable, into = c("variable", "value"), sep = " ") %>%
+        dplyr::mutate(variable = ifelse(!is.na(value), value, variable)) %>%
+        dplyr::select(-value) %>%
+        dplyr::rename(bayes_coef = mean)
+
+      period_g_ww =
+        coef_ww %>%
+        filter(str_detect(variable, "period")) %>%
+        filter(!str_detect(variable, "Sigma")) %>%
+        separate(variable, into = c("period", "year"), sep = ":") %>%
+        dplyr::mutate(year = as.numeric(year)) %>%
+        ggplot(aes(x = year)) +
+        geom_point(aes(y = bayes_coef), size = 3) +
+        geom_line(aes(y = bayes_coef), linewidth = 1.25) +
+        geom_errorbar(aes(ymin = `10%`, ymax = `90%`), width=0.8, linewidth = 1.25) +
+        scale_x_continuous(breaks=c(1999,2003,2007,2011,2015)) +
+        theme_minimal() +
+        labs(title = "White Women") +
+        ylab(element_blank()) +
+        ylim(ylim_min, ylim_max)
+
+   # Black Men
+      coef_bm =
+        summary(bm_m) %>%
+        as.data.frame() %>%
+        rownames_to_column() %>%
+        dplyr::rename(variable = rowname) %>%
+        filter(variable %in% c("raceWhite", "gender2") | (str_detect(variable, c("age|cohort|period|intercept|Intercept")))) %>%
+        filter(!str_detect(variable, "SDMVSTRA")) %>%
+        dplyr::select(variable, mean, `10%`, `90%`) %>%
+        dplyr::mutate(across('variable', str_replace, '\\[|\\]', '')) %>%
+        dplyr::mutate(across('variable', str_replace, '\\]|\\]', '')) %>%
+        separate(variable, into = c("variable", "value"), sep = " ") %>%
+        dplyr::mutate(variable = ifelse(!is.na(value), value, variable)) %>%
+        dplyr::select(-value) %>%
+        dplyr::rename(bayes_coef = mean)
+
+      period_g_bm =
+        coef_bm %>%
+        filter(str_detect(variable, "period")) %>%
+        filter(!str_detect(variable, "Sigma")) %>%
+        separate(variable, into = c("period", "year"), sep = ":") %>%
+        dplyr::mutate(year = as.numeric(year)) %>%
+        ggplot(aes(x = year)) +
+        geom_point(aes(y = bayes_coef), size = 3) +
+        geom_line(aes(y = bayes_coef), linewidth = 1.25) +
+        geom_errorbar(aes(ymin = `10%`, ymax = `90%`), width=0.8, linewidth = 1.25) +
+        scale_x_continuous(breaks=c(1999,2003,2007,2011,2015)) +
+        theme_minimal() +
+        labs(title = "Black Men") +
+        ylab(element_blank()) +
+        ylim(ylim_min, ylim_max)
+
+   # Black Women
+      coef_bw =
+        summary(bw_m) %>%
+        as.data.frame() %>%
+        rownames_to_column() %>%
+        dplyr::rename(variable = rowname) %>%
+        filter(variable %in% c("raceWhite", "gender2") | (str_detect(variable, c("age|cohort|period|intercept|Intercept")))) %>%
+        filter(!str_detect(variable, "SDMVSTRA")) %>%
+        dplyr::select(variable, mean, `10%`, `90%`) %>%
+        dplyr::mutate(across('variable', str_replace, '\\[|\\]', '')) %>%
+        dplyr::mutate(across('variable', str_replace, '\\]|\\]', '')) %>%
+        separate(variable, into = c("variable", "value"), sep = " ") %>%
+        dplyr::mutate(variable = ifelse(!is.na(value), value, variable)) %>%
+        dplyr::select(-value) %>%
+        dplyr::rename(bayes_coef = mean)
+
+      period_g_bw =
+        coef_bw %>%
+        filter(str_detect(variable, "period")) %>%
+        filter(!str_detect(variable, "Sigma")) %>%
+        separate(variable, into = c("period", "year"), sep = ":") %>%
+        dplyr::mutate(year = as.numeric(year)) %>%
+        ggplot(aes(x = year)) +
+        geom_point(aes(y = bayes_coef), size = 3) +
+        geom_line(aes(y = bayes_coef), linewidth = 1.25) +
+        geom_errorbar(aes(ymin = `10%`, ymax = `90%`), width=0.8, linewidth = 1.25) +
+        scale_x_continuous(breaks=c(1999,2003,2007,2011,2015)) +
+        theme_minimal() +
+        labs(title = "Black Women") +
+        ylab(element_blank()) +
+        ylim(ylim_min, ylim_max)
+
+
+  period_g_all + period_g_wm + period_g_ww + period_g_bm + period_g_bw + plot_layout(nrow = 1)
+
+}
+
+bhapc_cohortchart_f = function(unstrat_m, wm_m, ww_m, bm_m, bw_m, ylim_min, ylim_max){
+
+  # All 
+      coef_all =
+        summary(unstrat_m) %>%
+        as.data.frame() %>%
+        rownames_to_column() %>%
+        dplyr::rename(variable = rowname) %>%
+        filter(variable %in% c("raceWhite", "gender2") | (str_detect(variable, c("age|cohort|period|intercept|Intercept")))) %>%
+        filter(!str_detect(variable, "SDMVSTRA")) %>%
+        dplyr::select(variable, mean, `10%`, `90%`) %>%
+        dplyr::mutate(across('variable', str_replace, '\\[|\\]', '')) %>%
+        dplyr::mutate(across('variable', str_replace, '\\]|\\]', '')) %>%
+        separate(variable, into = c("variable", "value"), sep = " ") %>%
+        dplyr::mutate(variable = ifelse(!is.na(value), value, variable)) %>%
+        dplyr::select(-value) %>%
+        dplyr::rename(bayes_coef = mean)
+      
+      cohort_g_all =
+        coef_all %>%
+        filter(str_detect(variable, "cohort")) %>%
+        filter(!str_detect(variable, "Sigma")) %>%
+        separate(variable, into = c("period", "year"), sep = ":") %>%
+        dplyr::mutate(year = as.numeric(year)) %>%
+        ggplot(aes(x = year)) +
+        geom_point(aes(y = bayes_coef)) +
+        geom_line(aes(y = bayes_coef), linewidth = 1.25) +
+        geom_errorbar(aes(ymin = `10%`, ymax = `90%`), width = 2, linewidth = 1.25) +
+        theme_minimal() +
+        labs(title = "All") +
+        ylab(element_blank()) +
+        ylim(ylim_min, ylim_max)
+      
+  # White men
+      coef_wm =
+        summary(wm_m) %>%
+        as.data.frame() %>%
+        rownames_to_column() %>%
+        dplyr::rename(variable = rowname) %>%
+        filter(variable %in% c("raceWhite", "gender2") | (str_detect(variable, c("age|cohort|period|intercept|Intercept")))) %>%
+        filter(!str_detect(variable, "SDMVSTRA")) %>%
+        dplyr::select(variable, mean, `10%`, `90%`) %>%
+        dplyr::mutate(across('variable', str_replace, '\\[|\\]', '')) %>%
+        dplyr::mutate(across('variable', str_replace, '\\]|\\]', '')) %>%
+        separate(variable, into = c("variable", "value"), sep = " ") %>%
+        dplyr::mutate(variable = ifelse(!is.na(value), value, variable)) %>%
+        dplyr::select(-value) %>%
+        dplyr::rename(bayes_coef = mean)
+
+      cohort_g_wm =
+        coef_wm %>%
+        filter(str_detect(variable, "cohort")) %>%
+        filter(!str_detect(variable, "Sigma")) %>%
+        separate(variable, into = c("period", "year"), sep = ":") %>%
+        dplyr::mutate(year = as.numeric(year)) %>%
+        ggplot(aes(x = year)) +
+        geom_point(aes(y = bayes_coef)) +
+        geom_line(aes(y = bayes_coef), linewidth = 1.25) +
+        geom_errorbar(aes(ymin = `10%`, ymax = `90%`), width = 2, linewidth = 1.25) +
+        theme_minimal() +
+        labs(title = "White Men") +
+        ylab(element_blank()) +
+        ylim(ylim_min, ylim_max) 
+
+   # White women
+      coef_ww =
+        summary(ww_m) %>%
+        as.data.frame() %>%
+        rownames_to_column() %>%
+        dplyr::rename(variable = rowname) %>%
+        filter(variable %in% c("raceWhite", "gender2") | (str_detect(variable, c("age|cohort|period|intercept|Intercept")))) %>%
+        filter(!str_detect(variable, "SDMVSTRA")) %>%
+        dplyr::select(variable, mean, `10%`, `90%`) %>%
+        dplyr::mutate(across('variable', str_replace, '\\[|\\]', '')) %>%
+        dplyr::mutate(across('variable', str_replace, '\\]|\\]', '')) %>%
+        separate(variable, into = c("variable", "value"), sep = " ") %>%
+        dplyr::mutate(variable = ifelse(!is.na(value), value, variable)) %>%
+        dplyr::select(-value) %>%
+        dplyr::rename(bayes_coef = mean)
+
+      cohort_g_ww =
+        coef_ww %>%
+        filter(str_detect(variable, "cohort")) %>%
+        filter(!str_detect(variable, "Sigma")) %>%
+        separate(variable, into = c("period", "year"), sep = ":") %>%
+        dplyr::mutate(year = as.numeric(year)) %>%
+        ggplot(aes(x = year)) +
+        geom_point(aes(y = bayes_coef)) +
+        geom_line(aes(y = bayes_coef), linewidth = 1.25) +
+        geom_errorbar(aes(ymin = `10%`, ymax = `90%`), width = 2, linewidth = 1.25) +
+        theme_minimal() +
+        labs(title = "White Women") +
+        ylab(element_blank()) +
+        ylim(ylim_min, ylim_max)
+
+   # Black Men
+      coef_bm =
+        summary(bm_m) %>%
+        as.data.frame() %>%
+        rownames_to_column() %>%
+        dplyr::rename(variable = rowname) %>%
+        filter(variable %in% c("raceWhite", "gender2") | (str_detect(variable, c("age|cohort|period|intercept|Intercept")))) %>%
+        filter(!str_detect(variable, "SDMVSTRA")) %>%
+        dplyr::select(variable, mean, `10%`, `90%`) %>%
+        dplyr::mutate(across('variable', str_replace, '\\[|\\]', '')) %>%
+        dplyr::mutate(across('variable', str_replace, '\\]|\\]', '')) %>%
+        separate(variable, into = c("variable", "value"), sep = " ") %>%
+        dplyr::mutate(variable = ifelse(!is.na(value), value, variable)) %>%
+        dplyr::select(-value) %>%
+        dplyr::rename(bayes_coef = mean)
+
+      cohort_g_bm =
+        coef_bm %>%
+        filter(str_detect(variable, "cohort")) %>%
+        filter(!str_detect(variable, "Sigma")) %>%
+        separate(variable, into = c("period", "year"), sep = ":") %>%
+        dplyr::mutate(year = as.numeric(year)) %>%
+        ggplot(aes(x = year)) +
+        geom_point(aes(y = bayes_coef)) +
+        geom_line(aes(y = bayes_coef), linewidth = 1.25) +
+        geom_errorbar(aes(ymin = `10%`, ymax = `90%`), width = 2, linewidth = 1.25) +
+        theme_minimal() +
+        labs(title = "Black Men") +
+        ylab(element_blank()) +
+        ylim(ylim_min, ylim_max)
+
+   # Black Women
+      coef_bw =
+        summary(bw_m) %>%
+        as.data.frame() %>%
+        rownames_to_column() %>%
+        dplyr::rename(variable = rowname) %>%
+        filter(variable %in% c("raceWhite", "gender2") | (str_detect(variable, c("age|cohort|period|intercept|Intercept")))) %>%
+        filter(!str_detect(variable, "SDMVSTRA")) %>%
+        dplyr::select(variable, mean, `10%`, `90%`) %>%
+        dplyr::mutate(across('variable', str_replace, '\\[|\\]', '')) %>%
+        dplyr::mutate(across('variable', str_replace, '\\]|\\]', '')) %>%
+        separate(variable, into = c("variable", "value"), sep = " ") %>%
+        dplyr::mutate(variable = ifelse(!is.na(value), value, variable)) %>%
+        dplyr::select(-value) %>%
+        dplyr::rename(bayes_coef = mean)
+
+      cohort_g_bw =
+        coef_bw %>%
+        filter(str_detect(variable, "cohort")) %>%
+        filter(!str_detect(variable, "Sigma")) %>%
+        separate(variable, into = c("period", "year"), sep = ":") %>%
+        dplyr::mutate(year = as.numeric(year)) %>%
+        ggplot(aes(x = year)) +
+        geom_point(aes(y = bayes_coef)) +
+        geom_line(aes(y = bayes_coef), linewidth = 1.25) +
+        geom_errorbar(aes(ymin = `10%`, ymax = `90%`), width = 2, linewidth = 1.25) +
+        theme_minimal() +
+        labs(title = "Black Women") +
+        ylab(element_blank()) +
+        ylim(ylim_min, ylim_max)
+
+
+  cohort_g_all + cohort_g_wm + cohort_g_ww + cohort_g_bm + cohort_g_bw + plot_layout(nrow = 1)
+
+}
+```
+
+### Bayesian HAPC model charts: PhenoAge
+
+```{r echo = FALSE, warnings = FALSE}
+paa_unstrat_bayes_m =
+  readRDS("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_unstrat_paaelasticnet.rds")
+
+paa_wm_bayes_m =
+  readRDS("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_wm_paaelasticnet.rds")
+
+paa_ww_bayes_m =
+  readRDS("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_ww_paaelasticnet.rds")
+
+paa_bm_bayes_m =
+  readRDS("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_bm_paaelasticnet.rds")
+
+paa_bw_bayes_m =
+  readRDS("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_bw_paaelasticnet.rds")
+
+(bhapc_agechart_f(paa_unstrat_bayes_m, paa_wm_bayes_m, paa_ww_bayes_m, paa_bm_bayes_m, paa_bw_bayes_m, -2, 2.5) /
+bhapc_periodchart_f(paa_unstrat_bayes_m, paa_wm_bayes_m, paa_ww_bayes_m, paa_bm_bayes_m, paa_bw_bayes_m, -0.3, 0.35) / 
+bhapc_cohortchart_f(paa_unstrat_bayes_m, paa_wm_bayes_m, paa_ww_bayes_m, paa_bm_bayes_m, paa_bw_bayes_m, -0.5, 1))
+```
+
+### Bayesian HAPC model charts: Klemera-Doubal Biological Age
+
+```{r echo = FALSE, warnings = FALSE}
+kdma_unstrat_bayes_m =
+  readRDS("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_unstrat_kdmaelasticnet.rds")
+
+kdma_wm_bayes_m =
+  readRDS("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_wm_kdmaelasticnet.rds")
+
+kdma_ww_bayes_m =
+  readRDS("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_ww_kdmaelasticnet.rds")
+
+kdma_bm_bayes_m =
+  readRDS("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_bm_kdmaelasticnet.rds")
+
+kdma_bw_bayes_m =
+  readRDS("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_bw_kdmaelasticnet.rds")
+
+(bhapc_agechart_f(kdma_unstrat_bayes_m, kdma_wm_bayes_m, kdma_ww_bayes_m, kdma_bm_bayes_m, kdma_bw_bayes_m, -3, 2.5) /
+bhapc_periodchart_f(kdma_unstrat_bayes_m, kdma_wm_bayes_m, kdma_ww_bayes_m, kdma_bm_bayes_m, kdma_bw_bayes_m, -0.3, 0.35) / 
+bhapc_cohortchart_f(kdma_unstrat_bayes_m, kdma_wm_bayes_m, kdma_ww_bayes_m, kdma_bm_bayes_m, kdma_bw_bayes_m, -0.2, 0.2))
+```
+
+### Bayesian HAPC model charts: Homeostatic dysregulation
+
+```{r echo = FALSE, warnings = FALSE}
+hdlog_unstrat_bayes_m =
+  readRDS("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_unstrat_hdlogelasticnet.rds")
+
+hdlog_wm_bayes_m =
+  readRDS("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_wm_hdlogelasticnet.rds")
+
+hdlog_ww_bayes_m =
+  readRDS("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_ww_hdlogelasticnet.rds")
+
+hdlog_bm_bayes_m =
+  readRDS("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_bm_hdlogelasticnet.rds")
+
+hdlog_bw_bayes_m =
+  readRDS("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/HAPC model objects/bayesian_bw_hdlogelasticnet.rds")
+
+(bhapc_agechart_f(hdlog_unstrat_bayes_m, hdlog_wm_bayes_m, hdlog_ww_bayes_m, hdlog_bm_bayes_m, hdlog_bw_bayes_m, -2, 2.5) /
+bhapc_periodchart_f(hdlog_unstrat_bayes_m, hdlog_wm_bayes_m, hdlog_ww_bayes_m, hdlog_bm_bayes_m, hdlog_bw_bayes_m, -0.3, 0.35) / 
+bhapc_cohortchart_f(hdlog_unstrat_bayes_m, hdlog_wm_bayes_m, hdlog_ww_bayes_m, hdlog_bm_bayes_m, hdlog_bw_bayes_m, -0.5, 1))
+```
+
+### Bayesian HAPC model coefficients: PhenoAge
+
+```{r hapc-table-function, echo = FALSE, warnings = FALSE}
+coef_bayes_f = function(model, subgroup_name){
+  
+  summary(model) %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  rename(variable = rowname) %>%
+  filter(variable %in% c("raceWhite", "gender2") | (str_detect(variable, c("age|cohort|period")))) %>%
+  filter(!str_detect(variable, c("SDMVSTRA|Sigma"))) %>%
+  dplyr::select(variable, mean, `10%`, `90%`) %>%
+  mutate(across('variable', str_replace, '\\[|\\]', '')) %>%
+  mutate(across('variable', str_replace, '\\]|\\]', '')) %>%
+  separate(variable, into = c("variable", "value"), sep = " ") %>%
+  mutate(variable = ifelse(!is.na(value), value, variable)) %>%
+  dplyr::select(-value) %>%
+  rename(bayes_coef = mean) %>%
+  mutate(credint_sig = ifelse((`10%` < 0 & `90%` < 0) | (`10%` > 0 & `90%` > 0), "\\*", "")) %>%
+  mutate(pop = subgroup_name)
+  
+}
+
+```  
+
+```{r bayes_coef_paa, echo = FALSE, warnings = FALSE}
+coef_bayes_paa_all = coef_bayes_f(paa_unstrat_bayes_m, "All")
+coef_bayes_paa_wm = coef_bayes_f(paa_wm_bayes_m, "WM")
+coef_bayes_paa_ww = coef_bayes_f(paa_ww_bayes_m, "WW")
+coef_bayes_paa_bm = coef_bayes_f(paa_bm_bayes_m, "BM")
+coef_bayes_paa_bw = coef_bayes_f(paa_bw_bayes_m, "BW")
+
+bayes_coef_paa_combined =
+  rbind(coef_bayes_paa_all, coef_bayes_paa_wm) %>%
+  rbind(coef_bayes_paa_ww) %>%
+  rbind(coef_bayes_paa_bm) %>%
+  rbind(coef_bayes_paa_bw)
+
+bayes_coef_paa_t = 
+  bayes_coef_paa_combined %>%
+  rename(term = variable,
+         estimate = bayes_coef,
+         sig = credint_sig) %>%
+  mutate(estimate = round(estimate, 2),
+         `10%` = round(`10%`, 2),
+         `90%` = round(`90%`, 2)) %>%
+  pivot_wider(names_from = pop, values_from = c(estimate, `10%`, `90%`, sig), names_glue = "{pop}_{.value}") %>%
+  mutate(term = factor(term, levels = c("age", "scale(age_squared)", "period_4yr:1999", "period_4yr:2003", "period_4yr:2007", "period_4yr:2011", "period_4yr:2015", "cohort_4yr:1919", "cohort_4yr:1923", "cohort_4yr:1927", "cohort_4yr:1931", "cohort_4yr:1935", "cohort_4yr:1939", "cohort_4yr:1943", "cohort_4yr:1947", "cohort_4yr:1951", "cohort_4yr:1955", "cohort_4yr:1959", "cohort_4yr:1963", "cohort_4yr:1967", "cohort_4yr:1971", "cohort_4yr:1975", "cohort_4yr:1979", "cohort_4yr:1983", "cohort_4yr:1987", "cohort_4yr:1991", "cohort_4yr:1995"))) %>%
+  arrange(term) %>%
+  dplyr::select(term, 
+         All_estimate, `All_10%`, `All_90%`, All_sig, 
+         WM_estimate, `WM_10%`, `WM_90%`, WM_sig, 
+         WW_estimate, `WW_10%`, `WW_90%`, WW_sig, 
+         BM_estimate, `BM_10%`, `BM_90%`, BM_sig, 
+         BW_estimate, `BW_10%`, `BW_90%`, BW_sig)
+
+bayes_coef_paa_t %>%
+  knitr::kable(col.names = c("Term", "Estimate", "CredInt_10", "CredInt_90", "Sig", "Estimate", "CredInt_10", "CredInt_90", "Sig", "Estimate", "CredInt_10", "CredInt_90", "Sig", "Estimate", "CredInt_10", "CredInt_90", "Sig", "Estimate", "CredInt_10", "CredInt_90", "Sig")) %>%
+  kableExtra::kable_classic() %>%
+  add_header_above(c(" " = 1, "All" = 4, "White Men" = 4, "White Women" = 4, "Black Men" = 4, "Black Women" = 4))
+```
+
+### Bayesian HAPC model coefficients: Klemera-Doubal Biological Age
+```{r bayes_coef_kdma, echo = FALSE, warnings = FALSE}
+coef_bayes_kdma_all = coef_bayes_f(kdma_unstrat_bayes_m, "All")
+coef_bayes_kdma_wm = coef_bayes_f(kdma_wm_bayes_m, "WM")
+coef_bayes_kdma_ww = coef_bayes_f(kdma_ww_bayes_m, "WW")
+coef_bayes_kdma_bm = coef_bayes_f(kdma_bm_bayes_m, "BM")
+coef_bayes_kdma_bw = coef_bayes_f(kdma_bw_bayes_m, "BW")
+
+bayes_coef_kdma_combined =
+  rbind(coef_bayes_kdma_all, coef_bayes_kdma_wm) %>%
+  rbind(coef_bayes_kdma_ww) %>%
+  rbind(coef_bayes_kdma_bm) %>%
+  rbind(coef_bayes_kdma_bw)
+
+bayes_coef_kdma_t = 
+  bayes_coef_kdma_combined %>%
+  rename(term = variable,
+         estimate = bayes_coef,
+         sig = credint_sig) %>%
+  mutate(estimate = round(estimate, 2),
+         `10%` = round(`10%`, 2),
+         `90%` = round(`90%`, 2)) %>%
+  pivot_wider(names_from = pop, values_from = c(estimate, `10%`, `90%`, sig), names_glue = "{pop}_{.value}") %>%
+  mutate(term = factor(term, levels = c("age", "scale(age_squared)", "period_4yr:1999", "period_4yr:2003", "period_4yr:2007", "period_4yr:2011", "period_4yr:2015", "cohort_4yr:1919", "cohort_4yr:1923", "cohort_4yr:1927", "cohort_4yr:1931", "cohort_4yr:1935", "cohort_4yr:1939", "cohort_4yr:1943", "cohort_4yr:1947", "cohort_4yr:1951", "cohort_4yr:1955", "cohort_4yr:1959", "cohort_4yr:1963", "cohort_4yr:1967", "cohort_4yr:1971", "cohort_4yr:1975", "cohort_4yr:1979", "cohort_4yr:1983", "cohort_4yr:1987", "cohort_4yr:1991", "cohort_4yr:1995"))) %>%
+  arrange(term) %>%  
+  dplyr::select(term, 
+         All_estimate, `All_10%`, `All_90%`, All_sig, 
+         WM_estimate, `WM_10%`, `WM_90%`, WM_sig, 
+         WW_estimate, `WW_10%`, `WW_90%`, WW_sig, 
+         BM_estimate, `BM_10%`, `BM_90%`, BM_sig, 
+         BW_estimate, `BW_10%`, `BW_90%`, BW_sig)
+
+bayes_coef_kdma_t %>%
+  knitr::kable(col.names = c("Term", "Estimate", "CredInt_10", "CredInt_90", "Sig", "Estimate", "CredInt_10", "CredInt_90", "Sig", "Estimate", "CredInt_10", "CredInt_90", "Sig", "Estimate", "CredInt_10", "CredInt_90", "Sig", "Estimate", "CredInt_10", "CredInt_90", "Sig")) %>%
+  kableExtra::kable_classic() %>%
+  add_header_above(c(" " = 1, "All" = 4, "White Men" = 4, "White Women" = 4, "Black Men" = 4, "Black Women" = 4))
+
+```
+
+### Bayesian HAPC model coefficients: Homeostatic Dysregulation
+```{r bayes_coef_hdlog, echo = FALSE, warnings = FALSE}
+coef_bayes_hdlog_all = coef_bayes_f(hdlog_unstrat_bayes_m, "All")
+coef_bayes_hdlog_wm = coef_bayes_f(hdlog_wm_bayes_m, "WM")
+coef_bayes_hdlog_ww = coef_bayes_f(hdlog_ww_bayes_m, "WW")
+coef_bayes_hdlog_bm = coef_bayes_f(hdlog_bm_bayes_m, "BM")
+coef_bayes_hdlog_bw = coef_bayes_f(hdlog_bw_bayes_m, "BW")
+
+bayes_coef_hdlog_combined =
+  rbind(coef_bayes_hdlog_all, coef_bayes_hdlog_wm) %>%
+  rbind(coef_bayes_hdlog_ww) %>%
+  rbind(coef_bayes_hdlog_bm) %>%
+  rbind(coef_bayes_hdlog_bw)
+
+bayes_coef_hdlog_t = 
+  bayes_coef_hdlog_combined %>%
+  rename(term = variable,
+         estimate = bayes_coef,
+         sig = credint_sig) %>%
+  mutate(estimate = round(estimate, 2),
+         `10%` = round(`10%`, 2),
+         `90%` = round(`90%`, 2)) %>%
+  pivot_wider(names_from = pop, values_from = c(estimate, `10%`, `90%`, sig), names_glue = "{pop}_{.value}") %>%
+  mutate(term = factor(term, levels = c("age", "scale(age_squared)", "period_4yr:1999", "period_4yr:2003", "period_4yr:2007", "period_4yr:2011", "period_4yr:2015", "cohort_4yr:1919", "cohort_4yr:1923", "cohort_4yr:1927", "cohort_4yr:1931", "cohort_4yr:1935", "cohort_4yr:1939", "cohort_4yr:1943", "cohort_4yr:1947", "cohort_4yr:1951", "cohort_4yr:1955", "cohort_4yr:1959", "cohort_4yr:1963", "cohort_4yr:1967", "cohort_4yr:1971", "cohort_4yr:1975", "cohort_4yr:1979", "cohort_4yr:1983", "cohort_4yr:1987", "cohort_4yr:1991", "cohort_4yr:1995"))) %>%
+  arrange(term) %>%
+  dplyr::select(term, 
+         All_estimate, `All_10%`, `All_90%`, All_sig, 
+         WM_estimate, `WM_10%`, `WM_90%`, WM_sig, 
+         WW_estimate, `WW_10%`, `WW_90%`, WW_sig, 
+         BM_estimate, `BM_10%`, `BM_90%`, BM_sig, 
+         BW_estimate, `BW_10%`, `BW_90%`, BW_sig)
+
+bayes_coef_hdlog_t %>%
+  knitr::kable(col.names = c("Term", "Estimate", "CredInt_10", "CredInt_90", "Sig", "Estimate", "CredInt_10", "CredInt_90", "Sig", "Estimate", "CredInt_10", "CredInt_90", "Sig", "Estimate", "CredInt_10", "CredInt_90", "Sig", "Estimate", "CredInt_10", "CredInt_90", "Sig")) %>%
+  kableExtra::kable_classic() %>%
+  add_header_above(c(" " = 1, "All" = 4, "White Men" = 4, "White Women" = 4, "Black Men" = 4, "Black Women" = 4))
+
+```
+  
+## IE models
+
+```{r IE-output-fns, echo = FALSE, warnings = FALSE}
+ie_agechart_f = function(variable, unstrat_coef, wm_coef, ww_coef, bm_coef, bw_coef, ylim_min, ylim_max){
+
+  # All 
+    IE_ageeff_all =
+      unstrat_coef %>%
+      separate(Effect, into = c("effect", "id"), sep = "_") %>%
+      filter(effect == "age", var_id == variable) %>%
+      dplyr::select(-effect) %>%
+      dplyr::rename(Age = id) %>%
+      mutate(Age = as.numeric(Age))
+    
+    IE_ageeff_all_p =
+      IE_ageeff_all %>%
+      ggplot() +
+      geom_point(aes(x=Age, y=coef)) +
+      geom_line(aes(x=Age, y=coef)) +
+      geom_errorbar(aes(x=Age, ymin = coef-(1.96*stderr), ymax = coef+(1.96*stderr)), width = 0.75) +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      labs(title = "All") +
+      ylim(ylim_min, ylim_max)
+      
+  # White men
+    IE_ageeff_wm =
+      wm_coef %>%
+      separate(Effect, into = c("effect", "id"), sep = "_") %>%
+      filter(effect == "age", var_id == variable) %>%
+      dplyr::select(-effect) %>%
+      dplyr::rename(Age = id) %>%
+      mutate(Age = as.numeric(Age))
+    
+    IE_ageeff_wm_p =
+      IE_ageeff_wm %>%
+      ggplot() +
+      geom_point(aes(x=Age, y=coef)) +
+      geom_line(aes(x=Age, y=coef)) +
+      geom_errorbar(aes(x=Age, ymin = coef-(1.96*stderr), ymax = coef+(1.96*stderr)), width = 0.75) +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      labs(title = "White Men") +
+      ylim(ylim_min, ylim_max)
+
+   # White women
+    IE_ageeff_ww =
+      ww_coef %>%
+      separate(Effect, into = c("effect", "id"), sep = "_") %>%
+      filter(effect == "age", var_id == variable) %>%
+      dplyr::select(-effect) %>%
+      dplyr::rename(Age = id) %>%
+      mutate(Age = as.numeric(Age))
+    
+    IE_ageeff_ww_p =
+      IE_ageeff_ww %>%
+      ggplot() +
+      geom_point(aes(x=Age, y=coef)) +
+      geom_line(aes(x=Age, y=coef)) +
+      geom_errorbar(aes(x=Age, ymin = coef-(1.96*stderr), ymax = coef+(1.96*stderr)), width = 0.75) +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      labs(title = "White Women") +
+      ylim(ylim_min, ylim_max)
+
+
+   # Black Men
+    IE_ageeff_bm =
+      bm_coef %>%
+      separate(Effect, into = c("effect", "id"), sep = "_") %>%
+      filter(effect == "age", var_id == variable) %>%
+      dplyr::select(-effect) %>%
+      dplyr::rename(Age = id) %>%
+      mutate(Age = as.numeric(Age))
+    
+    IE_ageeff_bm_p =
+      IE_ageeff_bm %>%
+      ggplot() +
+      geom_point(aes(x=Age, y=coef)) +
+      geom_line(aes(x=Age, y=coef)) +
+      geom_errorbar(aes(x=Age, ymin = coef-(1.96*stderr), ymax = coef+(1.96*stderr)), width = 0.75) +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      labs(title = "Black Men") +
+      ylim(ylim_min, ylim_max)
+
+   # Black Women
+    IE_ageeff_bw =
+      bw_coef %>%
+      separate(Effect, into = c("effect", "id"), sep = "_") %>%
+      filter(effect == "age", var_id == variable) %>%
+      dplyr::select(-effect) %>%
+      dplyr::rename(Age = id) %>%
+      mutate(Age = as.numeric(Age))
+    
+    IE_ageeff_bw_p =
+      IE_ageeff_bw %>%
+      ggplot() +
+      geom_point(aes(x=Age, y=coef)) +
+      geom_line(aes(x=Age, y=coef)) +
+      geom_errorbar(aes(x=Age, ymin = coef-(1.96*stderr), ymax = coef+(1.96*stderr)), width = 0.75) +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      labs(title = "Black Women") +
+      ylim(ylim_min, ylim_max)
+
+  IE_ageeff_all_p + IE_ageeff_wm_p + IE_ageeff_ww_p + IE_ageeff_bm_p + IE_ageeff_bw_p + plot_layout(nrow = 1, guides = "collect")
+
+}
+
+
+ie_periodchart_f = function(variable, unstrat_coef, wm_coef, ww_coef, bm_coef, bw_coef, ylim_min, ylim_max){
+
+  # All 
+    IE_periodeff_all =
+      unstrat_coef %>%
+      separate(Effect, into = c("effect", "id"), sep = "_") %>%
+      filter(effect == "period", var_id == variable) %>%
+      dplyr::select(-effect) %>%
+      dplyr::rename(Period = id) %>%
+      mutate(Period = as.numeric(Period))
+    
+    IE_periodeff_all_p =
+      IE_periodeff_all %>%
+      ggplot() +
+      geom_point(aes(x=Period, y=coef)) +
+      geom_line(aes(x=Period, y=coef)) +
+      geom_errorbar(aes(x=Period, ymin = coef-(1.96*stderr), ymax = coef+(1.96*stderr)), width = 0.75) +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      scale_x_continuous(breaks=c(1999, 2003, 2007, 2011, 2015)) +
+      labs(title = "All") +
+      ylim(ylim_min, ylim_max)
+      
+  # White men
+    IE_periodeff_wm =
+      wm_coef %>%
+      separate(Effect, into = c("effect", "id"), sep = "_") %>%
+      filter(effect == "period", var_id == variable) %>%
+      dplyr::select(-effect) %>%
+      dplyr::rename(Period = id) %>%
+      mutate(Period = as.numeric(Period))
+    
+    IE_periodeff_wm_p =
+      IE_periodeff_wm %>%
+      ggplot() +
+      geom_point(aes(x=Period, y=coef)) +
+      geom_line(aes(x=Period, y=coef)) +
+      geom_errorbar(aes(x=Period, ymin = coef-(1.96*stderr), ymax = coef+(1.96*stderr)), width = 0.75) +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      scale_x_continuous(breaks=c(1999, 2003, 2007, 2011, 2015)) +
+      labs(title = "White Men") +
+      ylim(ylim_min, ylim_max)
+
+   # White women
+    IE_periodeff_ww =
+      ww_coef %>%
+      separate(Effect, into = c("effect", "id"), sep = "_") %>%
+      filter(effect == "period", var_id == variable) %>%
+      dplyr::select(-effect) %>%
+      dplyr::rename(Period = id) %>%
+      mutate(Period = as.numeric(Period))
+    
+    IE_periodeff_ww_p =
+      IE_periodeff_ww %>%
+      ggplot() +
+      geom_point(aes(x=Period, y=coef)) +
+      geom_line(aes(x=Period, y=coef)) +
+      geom_errorbar(aes(x=Period, ymin = coef-(1.96*stderr), ymax = coef+(1.96*stderr)), width = 0.75) +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      scale_x_continuous(breaks=c(1999, 2003, 2007, 2011, 2015)) +
+      labs(title = "White Women") +
+      ylim(ylim_min, ylim_max)
+
+
+   # Black Men
+    IE_periodeff_bm =
+      bm_coef %>%
+      separate(Effect, into = c("effect", "id"), sep = "_") %>%
+      filter(effect == "period", var_id == variable) %>%
+      dplyr::select(-effect) %>%
+      dplyr::rename(Period = id) %>%
+      mutate(Period = as.numeric(Period))
+    
+    IE_periodeff_bm_p =
+      IE_periodeff_bm %>%
+      ggplot() +
+      geom_point(aes(x=Period, y=coef)) +
+      geom_line(aes(x=Period, y=coef)) +
+      geom_errorbar(aes(x=Period, ymin = coef-(1.96*stderr), ymax = coef+(1.96*stderr)), width = 0.75) +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      scale_x_continuous(breaks=c(1999, 2003, 2007, 2011, 2015)) +
+      labs(title = "Black Men") +
+      ylim(ylim_min, ylim_max)
+
+   # Black Women
+    IE_periodeff_bw =
+      bw_coef %>%
+      separate(Effect, into = c("effect", "id"), sep = "_") %>%
+      filter(effect == "period", var_id == variable) %>%
+      dplyr::select(-effect) %>%
+      dplyr::rename(Period = id) %>%
+      mutate(Period = as.numeric(Period))
+    
+    IE_periodeff_bw_p =
+      IE_periodeff_bw %>%
+      ggplot() +
+      geom_point(aes(x=Period, y=coef)) +
+      geom_line(aes(x=Period, y=coef)) +
+      geom_errorbar(aes(x=Period, ymin = coef-(1.96*stderr), ymax = coef+(1.96*stderr)), width = 0.75) +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      scale_x_continuous(breaks=c(1999, 2003, 2007, 2011, 2015)) +
+      labs(title = "Black Women") +
+      ylim(ylim_min, ylim_max)
+
+  IE_periodeff_all_p + IE_periodeff_wm_p + IE_periodeff_ww_p + IE_periodeff_bm_p + IE_periodeff_bw_p + plot_layout(nrow = 1, guides = "collect")
+
+}
+
+
+ie_cohortchart_f = function(variable, unstrat_coef, wm_coef, ww_coef, bm_coef, bw_coef, ylim_min, ylim_max){
+
+  # All 
+    IE_cohorteff_all =
+      unstrat_coef %>%
+      separate(Effect, into = c("effect", "id"), sep = "_") %>%
+      filter(effect == "cohort", var_id == variable) %>%
+      dplyr::select(-effect) %>%
+      dplyr::rename(Cohort = id) %>%
+      mutate(Cohort = as.numeric(Cohort))
+    
+    IE_cohorteff_all_p =
+      IE_cohorteff_all %>%
+      ggplot() +
+      geom_point(aes(x=Cohort, y=coef)) +
+      geom_line(aes(x=Cohort, y=coef)) +
+      geom_errorbar(aes(x=Cohort, ymin = coef-(1.96*stderr), ymax = coef+(1.96*stderr)), width = 0.75) +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      labs(title = "All") +
+      ylim(ylim_min, ylim_max)
+      
+  # White men
+    IE_cohorteff_wm =
+      wm_coef %>%
+      separate(Effect, into = c("effect", "id"), sep = "_") %>%
+      filter(effect == "cohort", var_id == variable) %>%
+      dplyr::select(-effect) %>%
+      dplyr::rename(Cohort = id) %>%
+      mutate(Cohort = as.numeric(Cohort))
+    
+    IE_cohorteff_wm_p =
+      IE_cohorteff_wm %>%
+      ggplot() +
+      geom_point(aes(x=Cohort, y=coef)) +
+      geom_line(aes(x=Cohort, y=coef)) +
+      geom_errorbar(aes(x=Cohort, ymin = coef-(1.96*stderr), ymax = coef+(1.96*stderr)), width = 0.75) +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      labs(title = "White Men") +
+      ylim(ylim_min, ylim_max)
+
+   # White women
+    IE_cohorteff_ww =
+      ww_coef %>%
+      separate(Effect, into = c("effect", "id"), sep = "_") %>%
+      filter(effect == "cohort", var_id == variable) %>%
+      dplyr::select(-effect) %>%
+      dplyr::rename(Cohort = id) %>%
+      mutate(Cohort = as.numeric(Cohort))
+    
+    IE_cohorteff_ww_p =
+      IE_cohorteff_ww %>%
+      ggplot() +
+      geom_point(aes(x=Cohort, y=coef)) +
+      geom_line(aes(x=Cohort, y=coef)) +
+      geom_errorbar(aes(x=Cohort, ymin = coef-(1.96*stderr), ymax = coef+(1.96*stderr)), width = 0.75) +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      labs(title = "White Women") +
+      ylim(ylim_min, ylim_max)
+
+
+   # Black Men
+    IE_cohorteff_bm =
+      bm_coef %>%
+      separate(Effect, into = c("effect", "id"), sep = "_") %>%
+      filter(effect == "cohort", var_id == variable) %>%
+      dplyr::select(-effect) %>%
+      dplyr::rename(Cohort = id) %>%
+      mutate(Cohort = as.numeric(Cohort))
+    
+    IE_cohorteff_bm_p =
+      IE_cohorteff_bm %>%
+      ggplot() +
+      geom_point(aes(x=Cohort, y=coef)) +
+      geom_line(aes(x=Cohort, y=coef)) +
+      geom_errorbar(aes(x=Cohort, ymin = coef-(1.96*stderr), ymax = coef+(1.96*stderr)), width = 0.75) +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      labs(title = "Black Men") +
+      ylim(ylim_min, ylim_max)
+
+   # Black Women
+    IE_cohorteff_bw =
+      bw_coef %>%
+      separate(Effect, into = c("effect", "id"), sep = "_") %>%
+      filter(effect == "cohort", var_id == variable) %>%
+      dplyr::select(-effect) %>%
+      dplyr::rename(Cohort = id) %>%
+      mutate(Cohort = as.numeric(Cohort))
+    
+    IE_cohorteff_bw_p =
+      IE_cohorteff_bw %>%
+      ggplot() +
+      geom_point(aes(x=Cohort, y=coef)) +
+      geom_line(aes(x=Cohort, y=coef)) +
+      geom_errorbar(aes(x=Cohort, ymin = coef-(1.96*stderr), ymax = coef+(1.96*stderr)), width = 0.75) +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      labs(title = "Black Women") +
+      ylim(ylim_min, ylim_max)
+
+  IE_cohorteff_all_p + IE_cohorteff_wm_p + IE_cohorteff_ww_p + IE_cohorteff_bm_p + IE_cohorteff_bw_p + plot_layout(nrow = 1, guides = "collect")
+
+}
+```
+
+```{r IE-output-data-loading, echo = FALSE, warnings = FALSE}
+#Loading in data
+IE_coef_unstrat = 
+  read_dta("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/IE_combined_unstrat.dta") %>%
+  dplyr::rename (Effect = var) %>%
+  dplyr::select(-N)
+
+IE_coef_wm = 
+  read_dta("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/IE_combined_wm.dta") %>%
+  dplyr::rename (Effect = var) %>%
+  dplyr::select(-N)
+IE_coef_ww = 
+  read_dta("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/IE_combined_ww.dta") %>%
+  dplyr::rename (Effect = var) %>%
+  dplyr::select(-N)
+IE_coef_bm = 
+  read_dta("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/IE_combined_bm.dta") %>%
+  dplyr::rename (Effect = var) %>%
+  dplyr::select(-N)
+IE_coef_bw = 
+  read_dta("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/Aim 2 outputs/IE_combined_bw.dta") %>%
+  dplyr::rename (Effect = var) %>%
+  dplyr::select(-N)
+```
+
+### IE model charts: PhenoAge
+
+```{r IE-output-paa, echo = FALSE, warnings = FALSE}
+(ie_agechart_f("phenoageadv_delta_elasticnet", IE_coef_unstrat, IE_coef_wm, IE_coef_ww, IE_coef_bm, IE_coef_bw, -2, 2.5) /
+ie_periodchart_f("phenoageadv_delta_elasticnet", IE_coef_unstrat, IE_coef_wm, IE_coef_ww, IE_coef_bm, IE_coef_bw, -0.3, 0.35) /
+ie_cohortchart_f("phenoageadv_delta_elasticnet", IE_coef_unstrat, IE_coef_wm, IE_coef_ww, IE_coef_bm, IE_coef_bw, -0.5, 1))
+```
+
+### IE model charts: Klemera-Doubal Biological Age
+
+```{r IE-output-kdma, echo = FALSE, warnings = FALSE}
+(ie_agechart_f("kdmadv_delta_elasticnet", IE_coef_unstrat, IE_coef_wm, IE_coef_ww, IE_coef_bm, IE_coef_bw, -1, 1) /
+ie_periodchart_f("kdmadv_delta_elasticnet", IE_coef_unstrat, IE_coef_wm, IE_coef_ww, IE_coef_bm, IE_coef_bw, -0.5, 0.5) /
+ie_cohortchart_f("kdmadv_delta_elasticnet", IE_coef_unstrat, IE_coef_wm, IE_coef_ww, IE_coef_bm, IE_coef_bw, -1, 1.5))
+```
+
+### IE model charts: Homeostatic Dysregulation
+
+```{r IE-output-hdlog, echo = FALSE, warnings = FALSE}
+(ie_agechart_f("hdlog_elasticnet", IE_coef_unstrat, IE_coef_wm, IE_coef_ww, IE_coef_bm, IE_coef_bw, -2, 2.5) /
+ie_periodchart_f("hdlog_elasticnet", IE_coef_unstrat, IE_coef_wm, IE_coef_ww, IE_coef_bm, IE_coef_bw, -0.3, 0.35) /
+ie_cohortchart_f("hdlog_elasticnet", IE_coef_unstrat, IE_coef_wm, IE_coef_ww, IE_coef_bm, IE_coef_bw, -0.5, 1))
+```
+
+### Coefficients & 95% confidence intervals
+
+### IE coefficient tables: PhenoAge
+
+```{r echo = FALSE}
+IE_coef_f = function(coef_df, variable, samplename){
+  
+  coef_df %>%
+  dplyr::rename(term = Effect,
+                estimate = coef,
+                std.error = stderr,
+                p.value = pval) %>%
+  filter(var_id == variable) %>%
+  dplyr::select(-var_id) %>%
+  mutate(pop = samplename)
+
+}
+```
+
+```{r echo = FALSE}
+coef_ie_paa_all = IE_coef_f(IE_coef_unstrat, "phenoageadv_delta_elasticnet", "All") 
+coef_ie_paa_wm = IE_coef_f(IE_coef_wm, "phenoageadv_delta_elasticnet", "WM") 
+coef_ie_paa_ww = IE_coef_f(IE_coef_ww, "phenoageadv_delta_elasticnet", "WW") 
+coef_ie_paa_bm = IE_coef_f(IE_coef_bm, "phenoageadv_delta_elasticnet", "BM") 
+coef_ie_paa_bw = IE_coef_f(IE_coef_bw, "phenoageadv_delta_elasticnet", "BW")
+
+ie_coef_paa_combined =
+  rbind(coef_ie_paa_all, coef_ie_paa_wm) %>%
+  rbind(coef_ie_paa_ww) %>%
+  rbind(coef_ie_paa_bm) %>%
+  rbind(coef_ie_paa_bw)
+
+ie_coef_paa_t = 
+  ie_coef_paa_combined %>%
+  mutate(estimate = round(estimate, 2),
+         std.error = round(std.error, 2),
+         p.value = round(p.value, 4)) %>%
+  mutate(sig = ifelse(p.value<0.001, "***", ifelse(p.value<0.01, "**", ifelse(p.value<0.05, "\\*", "")))) %>%
+  pivot_wider(names_from = pop, values_from = c(estimate, std.error, p.value, sig), names_glue = "{pop}_{.value}") %>%
+  dplyr::select(term, 
+         All_estimate, All_std.error, All_p.value, All_sig, 
+         WM_estimate, WM_std.error, WM_p.value, WM_sig, 
+         WW_estimate, WW_std.error, WW_p.value, WW_sig, 
+         BM_estimate, BM_std.error, BM_p.value, BM_sig, 
+         BW_estimate, BW_std.error, BW_p.value, BW_sig)
+
+ie_coef_paa_t %>%
+  knitr::kable(col.names = c("Term", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig")) %>%
+  kableExtra::kable_classic() %>%
+  add_header_above(c("Term" = 1, "All" = 4, "White Men" = 4, "White Women" = 4, "Black Men" = 4, "Black Women" = 4))
+```
+
+### IE coefficient tables: Klemera-Doubal Biological Age
+
+```{r echo = FALSE}
+coef_ie_kdma_all = IE_coef_f(IE_coef_unstrat, "kdmadv_delta_elasticnet", "All") 
+coef_ie_kdma_wm = IE_coef_f(IE_coef_wm, "kdmadv_delta_elasticnet", "WM") 
+coef_ie_kdma_ww = IE_coef_f(IE_coef_ww, "kdmadv_delta_elasticnet", "WW") 
+coef_ie_kdma_bm = IE_coef_f(IE_coef_bm, "kdmadv_delta_elasticnet", "BM") 
+coef_ie_kdma_bw = IE_coef_f(IE_coef_bw, "kdmadv_delta_elasticnet", "BW")
+
+ie_coef_kdma_combined =
+  rbind(coef_ie_kdma_all, coef_ie_kdma_wm) %>%
+  rbind(coef_ie_kdma_ww) %>%
+  rbind(coef_ie_kdma_bm) %>%
+  rbind(coef_ie_kdma_bw)
+
+ie_coef_kdma_t = 
+  ie_coef_kdma_combined %>%
+  mutate(estimate = round(estimate, 2),
+         std.error = round(std.error, 2),
+         p.value = round(p.value, 4)) %>%
+  mutate(sig = ifelse(p.value<0.001, "***", ifelse(p.value<0.01, "**", ifelse(p.value<0.05, "\\*", "")))) %>%
+  pivot_wider(names_from = pop, values_from = c(estimate, std.error, p.value, sig), names_glue = "{pop}_{.value}") %>%
+  dplyr::select(term, 
+         All_estimate, All_std.error, All_p.value, All_sig, 
+         WM_estimate, WM_std.error, WM_p.value, WM_sig, 
+         WW_estimate, WW_std.error, WW_p.value, WW_sig, 
+         BM_estimate, BM_std.error, BM_p.value, BM_sig, 
+         BW_estimate, BW_std.error, BW_p.value, BW_sig)
+
+ie_coef_kdma_t %>%
+  knitr::kable(col.names = c("Term", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig")) %>%
+  kableExtra::kable_classic() %>%
+  add_header_above(c("Term" = 1, "All" = 4, "White Men" = 4, "White Women" = 4, "Black Men" = 4, "Black Women" = 4))
+```
+
+### IE coefficient tables: Homeostatic dysregulation
+
+```{r echo = FALSE}
+coef_ie_hdlog_all = IE_coef_f(IE_coef_unstrat, "hdlog_elasticnet", "All") 
+coef_ie_hdlog_wm = IE_coef_f(IE_coef_wm, "hdlog_elasticnet", "WM") 
+coef_ie_hdlog_ww = IE_coef_f(IE_coef_ww, "hdlog_elasticnet", "WW") 
+coef_ie_hdlog_bm = IE_coef_f(IE_coef_bm, "hdlog_elasticnet", "BM") 
+coef_ie_hdlog_bw = IE_coef_f(IE_coef_bw, "hdlog_elasticnet", "BW")
+
+ie_coef_hdlog_combined =
+  rbind(coef_ie_hdlog_all, coef_ie_hdlog_wm) %>%
+  rbind(coef_ie_hdlog_ww) %>%
+  rbind(coef_ie_hdlog_bm) %>%
+  rbind(coef_ie_hdlog_bw)
+
+ie_coef_hdlog_t = 
+  ie_coef_hdlog_combined %>%
+  mutate(estimate = round(estimate, 2),
+         std.error = round(std.error, 2),
+         p.value = round(p.value, 4)) %>%
+  mutate(sig = ifelse(p.value<0.001, "***", ifelse(p.value<0.01, "**", ifelse(p.value<0.05, "\\*", "")))) %>%
+  pivot_wider(names_from = pop, values_from = c(estimate, std.error, p.value, sig), names_glue = "{pop}_{.value}") %>%
+  dplyr::select(term, 
+         All_estimate, All_std.error, All_p.value, All_sig, 
+         WM_estimate, WM_std.error, WM_p.value, WM_sig, 
+         WW_estimate, WW_std.error, WW_p.value, WW_sig, 
+         BM_estimate, BM_std.error, BM_p.value, BM_sig, 
+         BW_estimate, BW_std.error, BW_p.value, BW_sig)
+
+ie_coef_hdlog_t %>%
+  knitr::kable(col.names = c("Term", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig")) %>%
+  kableExtra::kable_classic() %>%
+  add_header_above(c("Term" = 1, "All" = 4, "White Men" = 4, "White Women" = 4, "Black Men" = 4, "Black Women" = 4))
+```
+
+
+## Median Polish models
+
+```{r MP-raw-data-loading, echo = FALSE, warnings = FALSE}
+MP_unstrat = 
+  read_dta("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/apcmatrix_all.dta")
+
+MP_strat = 
+  read_dta("C:/Users/glory/OneDrive - cumc.columbia.edu/Dissertation/Data/apcmatrix_strat.dta")
+MP_strat_wm =
+  MP_strat %>%
+  filter(race =="White" & gender == "Men")
+MP_strat_ww =
+  MP_strat %>%
+  filter(race =="White" & gender == "Women")
+MP_strat_bm =
+  MP_strat %>%
+  filter(race =="Black" & gender == "Men")
+MP_strat_bw =
+  MP_strat %>%
+  filter(race =="Black" & gender == "Women")
+
+```
+
+```{r mp-residual-charts, echo = FALSE, warnings = FALSE}
+# medpolish_ageresidualplot_f = function(variable, unstrat_matrix, wm_matrix, ww_matrix, bm_matrix, bw_matrix, ylim_min, ylim_max){
+# 
+#     #All
+#     pc_matrix_all = 
+#       unstrat_matrix %>%
+#       dplyr::select(period_4yr, cohort_4yr, variable) %>%
+#       pivot_wider(names_from = "cohort_4yr", values_from = variable)
+#     
+#     periodgroups_all = pc_matrix_all$period_4yr
+#     
+#     pc_matrix_all = pc_matrix_all %>% dplyr::select(-period_4yr)
+#     
+#     medpolish_ageeff_all =
+#       medpolish(pc_matrix_all, na.rm = TRUE)
+#     
+#     medpolish_age_output_all =
+#       medpolish_ageeff_all$residuals %>%
+#       as.data.frame() %>%
+#       mutate(period_4yr = periodgroups_all) %>%
+#       pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+#       mutate(cohort_4yr = as.numeric(cohort_4yr),
+#              period_4yr = as.numeric(period_4yr)) %>%
+#       mutate(age_4yr = period_4yr - cohort_4yr) %>%
+#       dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+#       filter(!is.na(residuals))
+#     
+#     medpolish_age_p_all =
+#       medpolish_age_output_all %>%
+#       ggplot(aes(x=age_4yr, y=residuals)) +
+#       geom_point(alpha = 0.3) +
+#       stat_summary(geom = "line", fun = "mean") +
+#       theme_minimal() + 
+#       labs(title = "All") +
+#       ylim(ylim_min, ylim_max)
+#     
+#     #White Men
+#     pc_matrix_wm = 
+#       wm_matrix %>%
+#       dplyr::select(period_4yr, cohort_4yr, variable) %>%
+#       pivot_wider(names_from = "cohort_4yr", values_from = variable)
+#     
+#     periodgroups_wm = pc_matrix_wm$period_4yr
+#     
+#     pc_matrix_wm = pc_matrix_wm %>% dplyr::select(-period_4yr)
+#     
+#     medpolish_ageeff_wm =
+#       medpolish(pc_matrix_wm, na.rm = TRUE)
+#     
+#     medpolish_age_output_wm =
+#       medpolish_ageeff_wm$residuals %>%
+#       as.data.frame() %>%
+#       mutate(period_4yr = periodgroups_wm) %>%
+#       pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+#       mutate(cohort_4yr = as.numeric(cohort_4yr),
+#              period_4yr = as.numeric(period_4yr)) %>%
+#       mutate(age_4yr = period_4yr - cohort_4yr) %>%
+#       dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+#       filter(!is.na(residuals))
+#     
+#     medpolish_age_p_wm =
+#       medpolish_age_output_wm %>%
+#       ggplot(aes(x=age_4yr, y=residuals)) +
+#       geom_point(alpha = 0.3) +
+#       stat_summary(geom = "line", fun = "mean") +
+#       theme_minimal() + 
+#       labs(title = "White Men") +
+#       ylim(ylim_min, ylim_max)
+#     
+#     #White Women
+#     pc_matrix_ww = 
+#       ww_matrix %>%
+#       dplyr::select(period_4yr, cohort_4yr, variable) %>%
+#       pivot_wider(names_from = "cohort_4yr", values_from = variable)
+#     
+#     periodgroups_ww = pc_matrix_ww$period_4yr
+#     
+#     pc_matrix_ww = pc_matrix_ww %>% dplyr::select(-period_4yr)
+#     
+#     medpolish_ageeff_ww =
+#       medpolish(pc_matrix_ww, na.rm = TRUE)
+#     
+#     medpolish_age_output_ww =
+#       medpolish_ageeff_ww$residuals %>%
+#       as.data.frame() %>%
+#       mutate(period_4yr = periodgroups_ww) %>%
+#       pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+#       mutate(cohort_4yr = as.numeric(cohort_4yr),
+#              period_4yr = as.numeric(period_4yr)) %>%
+#       mutate(age_4yr = period_4yr - cohort_4yr) %>%
+#       dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+#       filter(!is.na(residuals))
+#     
+#     medpolish_age_p_ww =
+#       medpolish_age_output_ww %>%
+#       ggplot(aes(x=age_4yr, y=residuals)) +
+#       geom_point(alpha = 0.3) +
+#       stat_summary(geom = "line", fun = "mean") +
+#       theme_minimal() + 
+#       labs(title = "White Women") +
+#       ylim(ylim_min, ylim_max)
+#     
+#     #Black Men
+#     pc_matrix_bm = 
+#       bm_matrix %>%
+#       dplyr::select(period_4yr, cohort_4yr, variable) %>%
+#       pivot_wider(names_from = "cohort_4yr", values_from = variable)
+#     
+#     periodgroups_bm = pc_matrix_bm$period_4yr
+#     
+#     pc_matrix_bm = pc_matrix_bm %>% dplyr::select(-period_4yr)
+#     
+#     medpolish_ageeff_bm =
+#       medpolish(pc_matrix_bm, na.rm = TRUE)
+#     
+#     medpolish_age_output_bm =
+#       medpolish_ageeff_bm$residuals %>%
+#       as.data.frame() %>%
+#       mutate(period_4yr = periodgroups_bm) %>%
+#       pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+#       mutate(cohort_4yr = as.numeric(cohort_4yr),
+#              period_4yr = as.numeric(period_4yr)) %>%
+#       mutate(age_4yr = period_4yr - cohort_4yr) %>%
+#       dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+#       filter(!is.na(residuals))
+#     
+#     medpolish_age_p_bm =
+#       medpolish_age_output_bm %>%
+#       ggplot(aes(x=age_4yr, y=residuals)) +
+#       geom_point(alpha = 0.3) +
+#       stat_summary(geom = "line", fun = "mean") +
+#       theme_minimal() + 
+#       labs(title = "Black Men") +
+#       ylim(ylim_min, ylim_max)   
+#     
+#     #Black Women
+#     pc_matrix_bw = 
+#       bw_matrix %>%
+#       dplyr::select(period_4yr, cohort_4yr, variable) %>%
+#       pivot_wider(names_from = "cohort_4yr", values_from = variable)
+#     
+#     periodgroups_bw = pc_matrix_bw$period_4yr
+#     
+#     pc_matrix_bw = pc_matrix_bw %>% dplyr::select(-period_4yr)
+#     
+#     medpolish_ageeff_bw =
+#       medpolish(pc_matrix_bw, na.rm = TRUE)
+#     
+#     medpolish_age_output_bw =
+#       medpolish_ageeff_bw$residuals %>%
+#       as.data.frame() %>%
+#       mutate(period_4yr = periodgroups_bw) %>%
+#       pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+#       mutate(cohort_4yr = as.numeric(cohort_4yr),
+#              period_4yr = as.numeric(period_4yr)) %>%
+#       mutate(age_4yr = period_4yr - cohort_4yr) %>%
+#       dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+#       filter(!is.na(residuals))
+#     
+#     medpolish_age_p_bw =
+#       medpolish_age_output_bw %>%
+#       ggplot(aes(x=age_4yr, y=residuals)) +
+#       geom_point(alpha = 0.3) +
+#       stat_summary(geom = "line", fun = "mean") +
+#       theme_minimal() + 
+#       labs(title = "Black Women") +
+#       ylim(ylim_min, ylim_max)   
+#     
+#     
+#     (medpolish_age_p_all | medpolish_age_p_wm | medpolish_age_p_ww | medpolish_age_p_bm | medpolish_age_p_bw)
+#     
+# }
+# 
+# 
+# medpolish_periodresidualplot_f = function(variable, unstrat_matrix, wm_matrix, ww_matrix, bm_matrix, bw_matrix, ylim_min, ylim_max){
+# 
+#     #All
+#     ac_matrix_all = 
+#       unstrat_matrix %>%
+#       dplyr::select(cohort_4yr, age_4yr, variable) %>%
+#       pivot_wider(names_from = "cohort_4yr", values_from = variable) 
+#     
+#     agegroups_ac_all = ac_matrix_all$age_4yr
+#     
+#     ac_matrix_all = ac_matrix_all %>% dplyr::select(-age_4yr)
+#     
+#     medpolish_periodeff_all =
+#       medpolish(ac_matrix_all, na.rm = TRUE)
+#     
+#     medpolish_period_output_all =
+#       medpolish_periodeff_all$residuals %>%
+#       as.data.frame() %>%
+#       mutate(age_4yr = agegroups_ac_all) %>%
+#       pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+#       mutate(cohort_4yr = as.numeric(cohort_4yr),
+#              age_4yr = as.numeric(age_4yr)) %>%
+#       mutate(period_4yr = cohort_4yr + age_4yr) %>%
+#       dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+#       filter(!is.na(residuals))
+#     
+#     medpolish_period_p_all =
+#       medpolish_period_output_all %>%
+#       ggplot(aes(x=period_4yr, y=residuals)) +
+#       geom_point(alpha = 0.3) +
+#       stat_summary(geom = "line", fun = "mean") +
+#       theme_minimal() +
+#       labs(title = "All") +
+#       ylim(ylim_min, ylim_max)
+#     
+#     #White Men
+#     ac_matrix_wm = 
+#       wm_matrix %>%
+#       dplyr::select(cohort_4yr, age_4yr, variable) %>%
+#       pivot_wider(names_from = "cohort_4yr", values_from = variable) 
+#     
+#     agegroups_ac_wm = ac_matrix_wm$age_4yr
+#     
+#     ac_matrix_wm = ac_matrix_wm %>% dplyr::select(-age_4yr)
+#     
+#     medpolish_periodeff_wm =
+#       medpolish(ac_matrix_wm, na.rm = TRUE)
+#     
+#     medpolish_period_output_wm =
+#       medpolish_periodeff_wm$residuals %>%
+#       as.data.frame() %>%
+#       mutate(age_4yr = agegroups_ac_wm) %>%
+#       pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+#       mutate(cohort_4yr = as.numeric(cohort_4yr),
+#              age_4yr = as.numeric(age_4yr)) %>%
+#       mutate(period_4yr = cohort_4yr + age_4yr) %>%
+#       dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+#       filter(!is.na(residuals))
+#     
+#     medpolish_period_p_wm =
+#       medpolish_period_output_wm %>%
+#       ggplot(aes(x=period_4yr, y=residuals)) +
+#       geom_point(alpha = 0.3) +
+#       stat_summary(geom = "line", fun = "mean") +
+#       theme_minimal() +
+#       labs(title = "White Men") +
+#       ylim(ylim_min, ylim_max)
+#     
+#     #White Women
+#     ac_matrix_ww = 
+#       ww_matrix %>%
+#       dplyr::select(cohort_4yr, age_4yr, variable) %>%
+#       pivot_wider(names_from = "cohort_4yr", values_from = variable) 
+#     
+#     agegroups_ac_ww = ac_matrix_ww$age_4yr
+#     
+#     ac_matrix_ww = ac_matrix_ww %>% dplyr::select(-age_4yr)
+#     
+#     medpolish_periodeff_ww =
+#       medpolish(ac_matrix_ww, na.rm = TRUE)
+#     
+#     medpolish_period_output_ww =
+#       medpolish_periodeff_ww$residuals %>%
+#       as.data.frame() %>%
+#       mutate(age_4yr = agegroups_ac_ww) %>%
+#       pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+#       mutate(cohort_4yr = as.numeric(cohort_4yr),
+#              age_4yr = as.numeric(age_4yr)) %>%
+#       mutate(period_4yr = cohort_4yr + age_4yr) %>%
+#       dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+#       filter(!is.na(residuals))
+#     
+#     medpolish_period_p_ww =
+#       medpolish_period_output_ww %>%
+#       ggplot(aes(x=period_4yr, y=residuals)) +
+#       geom_point(alpha = 0.3) +
+#       stat_summary(geom = "line", fun = "mean") +
+#       theme_minimal() +
+#       labs(title = "White Women") +
+#       ylim(ylim_min, ylim_max)
+#     
+#     #Black Men
+#     ac_matrix_bm = 
+#       bm_matrix %>%
+#       dplyr::select(cohort_4yr, age_4yr, variable) %>%
+#       pivot_wider(names_from = "cohort_4yr", values_from = variable) 
+#     
+#     agegroups_ac_bm = ac_matrix_bm$age_4yr
+#     
+#     ac_matrix_bm = ac_matrix_bm %>% dplyr::select(-age_4yr)
+#     
+#     medpolish_periodeff_bm =
+#       medpolish(ac_matrix_bm, na.rm = TRUE)
+#     
+#     medpolish_period_output_bm =
+#       medpolish_periodeff_bm$residuals %>%
+#       as.data.frame() %>%
+#       mutate(age_4yr = agegroups_ac_bm) %>%
+#       pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+#       mutate(cohort_4yr = as.numeric(cohort_4yr),
+#              age_4yr = as.numeric(age_4yr)) %>%
+#       mutate(period_4yr = cohort_4yr + age_4yr) %>%
+#       dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+#       filter(!is.na(residuals))
+#     
+#     medpolish_period_p_bm =
+#       medpolish_period_output_bm %>%
+#       ggplot(aes(x=period_4yr, y=residuals)) +
+#       geom_point(alpha = 0.3) +
+#       stat_summary(geom = "line", fun = "mean") +
+#       theme_minimal() +
+#       labs(title = "Black Men") +
+#       ylim(ylim_min, ylim_max)
+#     
+#     #Black Women
+#     ac_matrix_bw = 
+#       bw_matrix %>%
+#       dplyr::select(cohort_4yr, age_4yr, variable) %>%
+#       pivot_wider(names_from = "cohort_4yr", values_from = variable) 
+#     
+#     agegroups_ac_bw = ac_matrix_bw$age_4yr
+#     
+#     ac_matrix_bw = ac_matrix_bw %>% dplyr::select(-age_4yr)
+#     
+#     medpolish_periodeff_bw =
+#       medpolish(ac_matrix_bw, na.rm = TRUE)
+#     
+#     medpolish_period_output_bw =
+#       medpolish_periodeff_bw$residuals %>%
+#       as.data.frame() %>%
+#       mutate(age_4yr = agegroups_ac_bw) %>%
+#       pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+#       mutate(cohort_4yr = as.numeric(cohort_4yr),
+#              age_4yr = as.numeric(age_4yr)) %>%
+#       mutate(period_4yr = cohort_4yr + age_4yr) %>%
+#       dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+#       filter(!is.na(residuals))
+#     
+#     medpolish_period_p_bw =
+#       medpolish_period_output_bw %>%
+#       ggplot(aes(x=period_4yr, y=residuals)) +
+#       geom_point(alpha = 0.3) +
+#       stat_summary(geom = "line", fun = "mean") +
+#       theme_minimal() +
+#       labs(title = "Black Women") +
+#       ylim(ylim_min, ylim_max)
+#     
+#     (medpolish_period_p_all | medpolish_period_p_wm | medpolish_period_p_ww | medpolish_period_p_bm | medpolish_period_p_bw)
+# 
+#   
+# }
+# 
+# 
+# medpolish_cohortresidualplot_f = function(variable, unstrat_matrix, wm_matrix, ww_matrix, bm_matrix, bw_matrix, ylim_min, ylim_max){
+#   
+#   #All
+#     ap_matrix_all = 
+#       unstrat_matrix %>%
+#       dplyr::select(period_4yr, age_4yr, variable) %>%
+#       filter(age_4yr != 84) %>%
+#       pivot_wider(names_from = "period_4yr", values_from = variable)
+#     
+#     agegroups_ap_all = ap_matrix_all$age_4yr
+#     
+#     ap_matrix_all = ap_matrix_all %>% dplyr::select(-age_4yr)
+#     
+#     medpolish_cohorteff_all =
+#       medpolish(ap_matrix_all, na.rm = TRUE)
+#     
+#     medpolish_cohort_output_all = 
+#       medpolish_cohorteff_all$residuals %>%
+#       as.data.frame() %>%
+#       mutate(age_4yr = agegroups_ap_all) %>%
+#       pivot_longer(c(`1999`:`2015`), names_to = "period_4yr", values_to = "residuals") %>%
+#       mutate(period_4yr = as.numeric(period_4yr),
+#              age_4yr = as.numeric(age_4yr)) %>%
+#       mutate(cohort_4yr = period_4yr - age_4yr) %>%
+#       dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+#       filter(!is.na(residuals))
+#     
+#     medpolish_cohort_p_all =
+#       medpolish_cohort_output_all %>%
+#       ggplot(aes(x=cohort_4yr, y=residuals)) +
+#       geom_point(alpha = 0.3) +  
+#       stat_summary(geom = "line", fun = "mean") +
+#       labs(title = "All") +
+#       theme_minimal() +
+#       ylim(ylim_min, ylim_max)
+#     
+#   #White Men
+#     ap_matrix_wm = 
+#       wm_matrix %>%
+#       dplyr::select(period_4yr, age_4yr, variable) %>%
+#       filter(age_4yr != 84) %>%
+#       pivot_wider(names_from = "period_4yr", values_from = variable)
+#     
+#     agegroups_ap_wm = ap_matrix_wm$age_4yr
+#     
+#     ap_matrix_wm = ap_matrix_wm %>% dplyr::select(-age_4yr)
+#     
+#     medpolish_cohorteff_wm =
+#       medpolish(ap_matrix_wm, na.rm = TRUE)
+#     
+#     medpolish_cohort_output_wm = 
+#       medpolish_cohorteff_wm$residuals %>%
+#       as.data.frame() %>%
+#       mutate(age_4yr = agegroups_ap_wm) %>%
+#       pivot_longer(c(`1999`:`2015`), names_to = "period_4yr", values_to = "residuals") %>%
+#       mutate(period_4yr = as.numeric(period_4yr),
+#              age_4yr = as.numeric(age_4yr)) %>%
+#       mutate(cohort_4yr = period_4yr - age_4yr) %>%
+#       dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+#       filter(!is.na(residuals))
+#     
+#     medpolish_cohort_p_wm =
+#       medpolish_cohort_output_wm %>%
+#       ggplot(aes(x=cohort_4yr, y=residuals)) +
+#       geom_point(alpha = 0.3) +  
+#       stat_summary(geom = "line", fun = "mean") +
+#       labs(title = "White Men") +
+#       theme_minimal() +
+#       ylim(ylim_min, ylim_max)
+#     
+#   #White Women
+#     ap_matrix_ww = 
+#       ww_matrix %>%
+#       dplyr::select(period_4yr, age_4yr, variable) %>%
+#       filter(age_4yr != 84) %>%
+#       pivot_wider(names_from = "period_4yr", values_from = variable)
+#     
+#     agegroups_ap_ww = ap_matrix_ww$age_4yr
+#     
+#     ap_matrix_ww = ap_matrix_ww %>% dplyr::select(-age_4yr)
+#     
+#     medpolish_cohorteff_ww =
+#       medpolish(ap_matrix_ww, na.rm = TRUE)
+#     
+#     medpolish_cohort_output_ww = 
+#       medpolish_cohorteff_ww$residuals %>%
+#       as.data.frame() %>%
+#       mutate(age_4yr = agegroups_ap_ww) %>%
+#       pivot_longer(c(`1999`:`2015`), names_to = "period_4yr", values_to = "residuals") %>%
+#       mutate(period_4yr = as.numeric(period_4yr),
+#              age_4yr = as.numeric(age_4yr)) %>%
+#       mutate(cohort_4yr = period_4yr - age_4yr) %>%
+#       dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+#       filter(!is.na(residuals))
+#     
+#     medpolish_cohort_p_ww =
+#       medpolish_cohort_output_ww %>%
+#       ggplot(aes(x=cohort_4yr, y=residuals)) +
+#       geom_point(alpha = 0.3) +  
+#       stat_summary(geom = "line", fun = "mean") +
+#       labs(title = "White Women") +
+#       theme_minimal() +
+#       ylim(ylim_min, ylim_max)
+#     
+#   #Black Men
+#     ap_matrix_bm = 
+#       bm_matrix %>%
+#       dplyr::select(period_4yr, age_4yr, variable) %>%
+#       filter(age_4yr != 84) %>%
+#       pivot_wider(names_from = "period_4yr", values_from = variable)
+#     
+#     agegroups_ap_bm = ap_matrix_bm$age_4yr
+#     
+#     ap_matrix_bm = ap_matrix_bm %>% dplyr::select(-age_4yr)
+#     
+#     medpolish_cohorteff_bm =
+#       medpolish(ap_matrix_bm, na.rm = TRUE)
+#     
+#     medpolish_cohort_output_bm = 
+#       medpolish_cohorteff_bm$residuals %>%
+#       as.data.frame() %>%
+#       mutate(age_4yr = agegroups_ap_bm) %>%
+#       pivot_longer(c(`1999`:`2015`), names_to = "period_4yr", values_to = "residuals") %>%
+#       mutate(period_4yr = as.numeric(period_4yr),
+#              age_4yr = as.numeric(age_4yr)) %>%
+#       mutate(cohort_4yr = period_4yr - age_4yr) %>%
+#       dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+#       filter(!is.na(residuals))
+#     
+#     medpolish_cohort_p_bm =
+#       medpolish_cohort_output_bm %>%
+#       ggplot(aes(x=cohort_4yr, y=residuals)) +
+#       geom_point(alpha = 0.3) +  
+#       stat_summary(geom = "line", fun = "mean") +
+#       labs(title = "Black Men") +
+#       theme_minimal() +
+#       ylim(ylim_min, ylim_max)
+#     
+#   #Black Women
+#     ap_matrix_bw = 
+#       bw_matrix %>%
+#       dplyr::select(period_4yr, age_4yr, variable) %>%
+#       filter(age_4yr != 84) %>%
+#       pivot_wider(names_from = "period_4yr", values_from = variable)
+#     
+#     agegroups_ap_bw = ap_matrix_bw$age_4yr
+#     
+#     ap_matrix_bw = ap_matrix_bw %>% dplyr::select(-age_4yr)
+#     
+#     medpolish_cohorteff_bw =
+#       medpolish(ap_matrix_bw, na.rm = TRUE)
+#     
+#     medpolish_cohort_output_bw = 
+#       medpolish_cohorteff_bw$residuals %>%
+#       as.data.frame() %>%
+#       mutate(age_4yr = agegroups_ap_bw) %>%
+#       pivot_longer(c(`1999`:`2015`), names_to = "period_4yr", values_to = "residuals") %>%
+#       mutate(period_4yr = as.numeric(period_4yr),
+#              age_4yr = as.numeric(age_4yr)) %>%
+#       mutate(cohort_4yr = period_4yr - age_4yr) %>%
+#       dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+#       filter(!is.na(residuals))
+#     
+#     medpolish_cohort_p_bw =
+#       medpolish_cohort_output_bw %>%
+#       ggplot(aes(x=cohort_4yr, y=residuals)) +
+#       geom_point(alpha = 0.3) +  
+#       stat_summary(geom = "line", fun = "mean") +
+#       labs(title = "Black Men") +
+#       theme_minimal() +
+#       ylim(ylim_min, ylim_max)
+#     
+#     (medpolish_cohort_p_all | medpolish_cohort_p_wm | medpolish_cohort_p_ww | medpolish_cohort_p_bm | medpolish_cohort_p_bw)
+#   
+# }
+
+```
+
+```{r mp_residplot_paa, echo = FALSE, warnings = FALSE}
+# (medpolish_ageresidualplot_f("phenoageadv_delta_elasticnet", MP_unstrat, MP_strat_wm, MP_strat_ww, MP_strat_bm, MP_strat_bw, -0.55, 0.5) / 
+# medpolish_periodresidualplot_f("phenoageadv_delta_elasticnet", MP_unstrat, MP_strat_wm, MP_strat_ww, MP_strat_bm, MP_strat_bw, -0.5, 0.5) /
+# medpolish_cohortresidualplot_f("phenoageadv_delta_elasticnet", MP_unstrat, MP_strat_wm, MP_strat_ww, MP_strat_bm, MP_strat_bw, -0.5, 0.75))
+```
+
+```{r mp_residplot_kdma, echo = FALSE, warnings = FALSE}
+# (medpolish_ageresidualplot_f("kdmadv_delta_elasticnet", MP_unstrat, MP_strat_wm, MP_strat_ww, MP_strat_bm, MP_strat_bw, -0.75, 0.75) /
+# medpolish_periodresidualplot_f("kdmadv_delta_elasticnet", MP_unstrat, MP_strat_wm, MP_strat_ww, MP_strat_bm, MP_strat_bw, -0.75, 0.75) /
+# medpolish_cohortresidualplot_f("kdmadv_delta_elasticnet", MP_unstrat, MP_strat_wm, MP_strat_ww, MP_strat_bm, MP_strat_bw, -0.75, 1))
+```
+
+```{r mp_residplot_hdlog, echo = FALSE, warnings = FALSE}
+# (medpolish_ageresidualplot_f("hdlog_elasticnet", MP_unstrat, MP_strat_wm, MP_strat_ww, MP_strat_bm, MP_strat_bw, -0.75, 0.75) / 
+# medpolish_periodresidualplot_f("hdlog_elasticnet", MP_unstrat, MP_strat_wm, MP_strat_ww, MP_strat_bm, MP_strat_bw, -0.75, 0.75) /
+# medpolish_cohortresidualplot_f("hdlog_elasticnet", MP_unstrat, MP_strat_wm, MP_strat_ww, MP_strat_bm, MP_strat_bw, -0.75, 0.75))
+```
+
+
+### Median polish model plots: PhenoAge
+
+```{r medpolish-reg-plot, echo = FALSE}
+medpolish_agechart_f = function(variable, unstrat_matrix, wm_matrix, ww_matrix, bm_matrix, bw_matrix, ylim_min, ylim_max){
+    
+  #All
+    pc_matrix_all = 
+      unstrat_matrix %>%
+      dplyr::select(period_4yr, cohort_4yr, variable) %>%
+      pivot_wider(names_from = "cohort_4yr", values_from = variable)
+    
+    periodgroups_all = pc_matrix_all$period_4yr
+    
+    pc_matrix_all = pc_matrix_all %>% dplyr::select(-period_4yr)
+    
+    medpolish_ageeff_all =
+      medpolish(pc_matrix_all, na.rm = TRUE)
+    
+    medpolish_age_output_all =
+      medpolish_ageeff_all$residuals %>%
+      as.data.frame() %>%
+      mutate(period_4yr = periodgroups_all) %>%
+      pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+      mutate(cohort_4yr = as.numeric(cohort_4yr),
+             period_4yr = as.numeric(period_4yr)) %>%
+      mutate(age_4yr = period_4yr - cohort_4yr) %>%
+      dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+      filter(!is.na(residuals)) %>%
+      mutate(age_4yr = as.character(age_4yr))
+    
+    age_eff_all =
+      lm(residuals ~ age_4yr, medpolish_age_output_all) %>%
+      broom::tidy() %>%
+      separate(term, into = c("term", "age"), sep = "_4yr") %>%
+      filter(!is.na(age)) %>%
+      mutate(term = ifelse(term == "(Intercept)", "age_intercept", term)) %>%
+      mutate(age = as.numeric(age))
+    
+    age_eff_all_p =
+      age_eff_all %>%
+      ggplot(aes(x=age, group = 1)) +
+      geom_point(aes(y=estimate)) +  
+      geom_line(aes(y=estimate)) +
+      geom_errorbar(aes(ymin=estimate-(1.96*std.error), ymax=estimate+(1.96*std.error)), width = 0.5) +
+      labs(title = "All") +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      xlim(20,80) +
+      ylim(ylim_min, ylim_max)
+
+  #White Men
+    pc_matrix_wm = 
+      wm_matrix %>%
+      dplyr::select(period_4yr, cohort_4yr, variable) %>%
+      pivot_wider(names_from = "cohort_4yr", values_from = variable)
+    
+    periodgroups_wm = pc_matrix_wm$period_4yr
+    
+    pc_matrix_wm = pc_matrix_wm %>% dplyr::select(-period_4yr)
+    
+    medpolish_ageeff_wm =
+      medpolish(pc_matrix_wm, na.rm = TRUE)
+    
+    medpolish_age_output_wm =
+      medpolish_ageeff_wm$residuals %>%
+      as.data.frame() %>%
+      mutate(period_4yr = periodgroups_wm) %>%
+      pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+      mutate(cohort_4yr = as.numeric(cohort_4yr),
+             period_4yr = as.numeric(period_4yr)) %>%
+      mutate(age_4yr = period_4yr - cohort_4yr) %>%
+      dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+      filter(!is.na(residuals)) %>%
+      mutate(age_4yr = as.character(age_4yr))
+    
+    age_eff_wm =
+      lm(residuals ~ age_4yr, medpolish_age_output_wm) %>%
+      broom::tidy() %>%
+      separate(term, into = c("term", "age"), sep = "_4yr") %>%
+      filter(!is.na(age)) %>%
+      mutate(term = ifelse(term == "(Intercept)", "age_intercept", term)) %>%
+      mutate(age = as.numeric(age))   
+    
+    age_eff_wm_p =
+      age_eff_wm %>%
+      ggplot(aes(x=age, group = 1)) +
+      geom_point(aes(y=estimate)) +  
+      geom_line(aes(y=estimate)) +
+      geom_errorbar(aes(ymin=estimate-(1.96*std.error), ymax=estimate+(1.96*std.error)), width = 0.5) +
+      labs(title = "White Men") +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      xlim(20,80) +
+      ylim(ylim_min, ylim_max) 
+
+  #White Women
+    pc_matrix_ww = 
+      ww_matrix %>%
+      dplyr::select(period_4yr, cohort_4yr, variable) %>%
+      pivot_wider(names_from = "cohort_4yr", values_from = variable)
+    
+    periodgroups_ww = pc_matrix_ww$period_4yr
+    
+    pc_matrix_ww = pc_matrix_ww %>% dplyr::select(-period_4yr)
+    
+    medpolish_ageeff_ww =
+      medpolish(pc_matrix_ww, na.rm = TRUE)
+    
+    medpolish_age_output_ww =
+      medpolish_ageeff_ww$residuals %>%
+      as.data.frame() %>%
+      mutate(period_4yr = periodgroups_ww) %>%
+      pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+      mutate(cohort_4yr = as.numeric(cohort_4yr),
+             period_4yr = as.numeric(period_4yr)) %>%
+      mutate(age_4yr = period_4yr - cohort_4yr) %>%
+      dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+      filter(!is.na(residuals)) %>%
+      mutate(age_4yr = as.character(age_4yr))
+    
+    age_eff_ww =
+      lm(residuals ~ age_4yr, medpolish_age_output_ww) %>%
+      broom::tidy() %>%
+      separate(term, into = c("term", "age"), sep = "_4yr") %>%
+      filter(!is.na(age)) %>%
+      mutate(term = ifelse(term == "(Intercept)", "age_intercept", term)) %>%
+      mutate(age = as.numeric(age))   
+    
+    age_eff_ww_p =
+      age_eff_ww %>%
+      ggplot(aes(x=age, group = 1)) +
+      geom_point(aes(y=estimate)) +  
+      geom_line(aes(y=estimate)) +
+      geom_errorbar(aes(ymin=estimate-(1.96*std.error), ymax=estimate+(1.96*std.error)), width = 0.5) +
+      labs(title = "White Women") +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      xlim(20,80) +
+      ylim(ylim_min, ylim_max)
+
+  #Black Men
+    pc_matrix_bm = 
+      bm_matrix %>%
+      dplyr::select(period_4yr, cohort_4yr, variable) %>%
+      pivot_wider(names_from = "cohort_4yr", values_from = variable)
+    
+    periodgroups_bm = pc_matrix_bm$period_4yr
+    
+    pc_matrix_bm = pc_matrix_bm %>% dplyr::select(-period_4yr)
+    
+    medpolish_ageeff_bm =
+      medpolish(pc_matrix_bm, na.rm = TRUE)
+    
+    medpolish_age_output_bm =
+      medpolish_ageeff_bm$residuals %>%
+      as.data.frame() %>%
+      mutate(period_4yr = periodgroups_bm) %>%
+      pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+      mutate(cohort_4yr = as.numeric(cohort_4yr),
+             period_4yr = as.numeric(period_4yr)) %>%
+      mutate(age_4yr = period_4yr - cohort_4yr) %>%
+      dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+      filter(!is.na(residuals)) %>%
+      mutate(age_4yr = as.character(age_4yr))
+    
+    age_eff_bm =
+      lm(residuals ~ age_4yr, medpolish_age_output_bm) %>%
+      broom::tidy() %>%
+      separate(term, into = c("term", "age"), sep = "_4yr") %>%
+      filter(!is.na(age)) %>%
+      mutate(term = ifelse(term == "(Intercept)", "age_intercept", term)) %>%
+      mutate(age = as.numeric(age))   
+    
+    age_eff_bm_p =
+      age_eff_bm %>%
+      ggplot(aes(x=age, group = 1)) +
+      geom_point(aes(y=estimate)) +  
+      geom_line(aes(y=estimate)) +
+      geom_errorbar(aes(ymin=estimate-(1.96*std.error), ymax=estimate+(1.96*std.error)), width = 0.5) +
+      labs(title = "Black Men") +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      xlim(20,80) +
+      ylim(ylim_min, ylim_max) 
+
+  #Black Women
+    pc_matrix_bw = 
+      bw_matrix %>%
+      dplyr::select(period_4yr, cohort_4yr, variable) %>%
+      pivot_wider(names_from = "cohort_4yr", values_from = variable)
+    
+    periodgroups_bw = pc_matrix_bw$period_4yr
+    
+    pc_matrix_bw = pc_matrix_bw %>% dplyr::select(-period_4yr)
+    
+    medpolish_ageeff_bw =
+      medpolish(pc_matrix_bw, na.rm = TRUE)
+    
+    medpolish_age_output_bw =
+      medpolish_ageeff_bw$residuals %>%
+      as.data.frame() %>%
+      mutate(period_4yr = periodgroups_bw) %>%
+      pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+      mutate(cohort_4yr = as.numeric(cohort_4yr),
+             period_4yr = as.numeric(period_4yr)) %>%
+      mutate(age_4yr = period_4yr - cohort_4yr) %>%
+      dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+      filter(!is.na(residuals)) %>%
+      mutate(age_4yr = as.character(age_4yr))
+    
+    age_eff_bw =
+      lm(residuals ~ age_4yr, medpolish_age_output_bw) %>%
+      broom::tidy() %>%
+      separate(term, into = c("term", "age"), sep = "_4yr") %>%
+      filter(!is.na(age)) %>%
+      mutate(term = ifelse(term == "(Intercept)", "age_intercept", term)) %>%
+      mutate(age = as.numeric(age))   
+    
+    age_eff_bw_p =
+      age_eff_bw %>%
+      ggplot(aes(x=age, group = 1)) +
+      geom_point(aes(y=estimate)) +  
+      geom_line(aes(y=estimate)) +
+      geom_errorbar(aes(ymin=estimate-(1.96*std.error), ymax=estimate+(1.96*std.error)), width = 0.5) +
+      labs(title = "Black Women") +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      xlim(20,80) +
+      ylim(ylim_min, ylim_max) 
+    
+    (age_eff_all_p | age_eff_wm_p | age_eff_ww_p | age_eff_bm_p | age_eff_bw_p)
+    
+}
+
+medpolish_periodchart_f = function(variable, unstrat_matrix, wm_matrix, ww_matrix, bm_matrix, bw_matrix, ylim_min, ylim_max){
+    
+  #All
+    ac_matrix_all = 
+      unstrat_matrix %>%
+      dplyr::select(cohort_4yr, age_4yr, variable) %>%
+      pivot_wider(names_from = "cohort_4yr", values_from = variable) 
+    
+    agegroups_ac_all = ac_matrix_all$age_4yr
+    
+    ac_matrix_all = ac_matrix_all %>% dplyr::select(-age_4yr)
+    
+    medpolish_periodeff_all =
+      medpolish(ac_matrix_all, na.rm = TRUE)
+    
+    medpolish_period_output_all =
+      medpolish_periodeff_all$residuals %>%
+      as.data.frame() %>%
+      mutate(age_4yr = agegroups_ac_all) %>%
+      pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+      mutate(cohort_4yr = as.numeric(cohort_4yr),
+             age_4yr = as.numeric(age_4yr)) %>%
+      mutate(period_4yr = cohort_4yr + age_4yr) %>%
+      dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+      filter(!is.na(residuals)) %>%
+      mutate(period_4yr = as.character(period_4yr))
+    
+    period_eff_all =
+      lm(residuals ~ period_4yr, medpolish_period_output_all) %>%
+      broom::tidy() %>%
+      separate(term, into = c("term", "period"), sep = "_4yr") %>%
+      filter(!is.na(period)) %>%
+      mutate(term = ifelse(term == "(Intercept)", "period_intercept", term),
+             period = as.numeric(period))    
+    
+    period_eff_all_p =
+      period_eff_all %>%
+      ggplot(aes(x=period, group = 1)) +
+      geom_point(aes(y=estimate)) +  
+      geom_line(aes(y=estimate)) +
+      geom_errorbar(aes(ymin=estimate-(1.96*std.error), ymax=estimate+(1.96*std.error)), width = 0.5) +
+      labs(title = "All") +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      xlim(1999,2015) +
+      scale_x_continuous(limits = c(1999, 2015), breaks=c(1999, 2003, 2007, 2011, 2015)) +
+      ylim(ylim_min, ylim_max)
+    
+  #White Men
+    ac_matrix_wm = 
+      wm_matrix %>%
+      dplyr::select(cohort_4yr, age_4yr, variable) %>%
+      pivot_wider(names_from = "cohort_4yr", values_from = variable) 
+    
+    agegroups_ac_wm = ac_matrix_wm$age_4yr
+    
+    ac_matrix_wm = ac_matrix_wm %>% dplyr::select(-age_4yr)
+    
+    medpolish_periodeff_wm =
+      medpolish(ac_matrix_wm, na.rm = TRUE)
+    
+    medpolish_period_output_wm =
+      medpolish_periodeff_wm$residuals %>%
+      as.data.frame() %>%
+      mutate(age_4yr = agegroups_ac_wm) %>%
+      pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+      mutate(cohort_4yr = as.numeric(cohort_4yr),
+             age_4yr = as.numeric(age_4yr)) %>%
+      mutate(period_4yr = cohort_4yr + age_4yr) %>%
+      dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+      filter(!is.na(residuals)) %>%
+      mutate(period_4yr = as.character(period_4yr))
+    
+    period_eff_wm =
+      lm(residuals ~ period_4yr, medpolish_period_output_wm) %>%
+      broom::tidy() %>%
+      separate(term, into = c("term", "period"), sep = "_4yr") %>%
+      filter(!is.na(period)) %>%
+      mutate(term = ifelse(term == "(Intercept)", "period_intercept", term),
+             period = as.numeric(period))    
+    
+    period_eff_wm_p =
+      period_eff_wm %>%
+      ggplot(aes(x=period, group = 1)) +
+      geom_point(aes(y=estimate)) +  
+      geom_line(aes(y=estimate)) +
+      geom_errorbar(aes(ymin=estimate-(1.96*std.error), ymax=estimate+(1.96*std.error)), width = 0.5) +
+      labs(title = "White Men") +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      xlim(1999,2015) +
+      scale_x_continuous(limits = c(1999, 2015), breaks=c(1999, 2003, 2007, 2011, 2015)) +
+      ylim(ylim_min, ylim_max)    
+
+  #White Women
+    ac_matrix_ww = 
+      ww_matrix %>%
+      dplyr::select(cohort_4yr, age_4yr, variable) %>%
+      pivot_wider(names_from = "cohort_4yr", values_from = variable) 
+    
+    agegroups_ac_ww = ac_matrix_ww$age_4yr
+    
+    ac_matrix_ww = ac_matrix_ww %>% dplyr::select(-age_4yr)
+    
+    medpolish_periodeff_ww =
+      medpolish(ac_matrix_ww, na.rm = TRUE)
+    
+    medpolish_period_output_ww =
+      medpolish_periodeff_ww$residuals %>%
+      as.data.frame() %>%
+      mutate(age_4yr = agegroups_ac_ww) %>%
+      pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+      mutate(cohort_4yr = as.numeric(cohort_4yr),
+             age_4yr = as.numeric(age_4yr)) %>%
+      mutate(period_4yr = cohort_4yr + age_4yr) %>%
+      dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+      filter(!is.na(residuals)) %>%
+      mutate(period_4yr = as.character(period_4yr))
+    
+    period_eff_ww =
+      lm(residuals ~ period_4yr, medpolish_period_output_ww) %>%
+      broom::tidy() %>%
+      separate(term, into = c("term", "period"), sep = "_4yr") %>%
+      filter(!is.na(period)) %>%
+      mutate(term = ifelse(term == "(Intercept)", "period_intercept", term),
+             period = as.numeric(period))    
+    
+    period_eff_ww_p =
+      period_eff_ww %>%
+      ggplot(aes(x=period, group = 1)) +
+      geom_point(aes(y=estimate)) +  
+      geom_line(aes(y=estimate)) +
+      geom_errorbar(aes(ymin=estimate-(1.96*std.error), ymax=estimate+(1.96*std.error)), width = 0.5) +
+      labs(title = "White Women") +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      xlim(1999,2015) +
+      scale_x_continuous(limits = c(1999, 2015), breaks=c(1999, 2003, 2007, 2011, 2015)) +
+      ylim(ylim_min, ylim_max)
+    
+  #Black Men
+    ac_matrix_bm = 
+      bm_matrix %>%
+      dplyr::select(cohort_4yr, age_4yr, variable) %>%
+      pivot_wider(names_from = "cohort_4yr", values_from = variable) 
+    
+    agegroups_ac_bm = ac_matrix_bm$age_4yr
+    
+    ac_matrix_bm = ac_matrix_bm %>% dplyr::select(-age_4yr)
+    
+    medpolish_periodeff_bm =
+      medpolish(ac_matrix_bm, na.rm = TRUE)
+    
+    medpolish_period_output_bm =
+      medpolish_periodeff_bm$residuals %>%
+      as.data.frame() %>%
+      mutate(age_4yr = agegroups_ac_bm) %>%
+      pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+      mutate(cohort_4yr = as.numeric(cohort_4yr),
+             age_4yr = as.numeric(age_4yr)) %>%
+      mutate(period_4yr = cohort_4yr + age_4yr) %>%
+      dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+      filter(!is.na(residuals)) %>%
+      mutate(period_4yr = as.character(period_4yr))
+    
+    period_eff_bm =
+      lm(residuals ~ period_4yr, medpolish_period_output_bm) %>%
+      broom::tidy() %>%
+      separate(term, into = c("term", "period"), sep = "_4yr") %>%
+      filter(!is.na(period)) %>%
+      mutate(term = ifelse(term == "(Intercept)", "period_intercept", term),
+             period = as.numeric(period))    
+    
+    period_eff_bm_p =
+      period_eff_bm %>%
+      ggplot(aes(x=period, group = 1)) +
+      geom_point(aes(y=estimate)) +  
+      geom_line(aes(y=estimate)) +
+      geom_errorbar(aes(ymin=estimate-(1.96*std.error), ymax=estimate+(1.96*std.error)), width = 0.5) +
+      labs(title = "Black Men") +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      xlim(1999,2015) +
+      scale_x_continuous(limits = c(1999, 2015), breaks=c(1999, 2003, 2007, 2011, 2015)) +
+      ylim(ylim_min, ylim_max)    
+
+  #Black Women
+    ac_matrix_bw = 
+      bw_matrix %>%
+      dplyr::select(cohort_4yr, age_4yr, variable) %>%
+      pivot_wider(names_from = "cohort_4yr", values_from = variable) 
+    
+    agegroups_ac_bw = ac_matrix_bw$age_4yr
+    
+    ac_matrix_bw = ac_matrix_bw %>% dplyr::select(-age_4yr)
+    
+    medpolish_periodeff_bw =
+      medpolish(ac_matrix_bw, na.rm = TRUE)
+    
+    medpolish_period_output_bw =
+      medpolish_periodeff_bw$residuals %>%
+      as.data.frame() %>%
+      mutate(age_4yr = agegroups_ac_bw) %>%
+      pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+      mutate(cohort_4yr = as.numeric(cohort_4yr),
+             age_4yr = as.numeric(age_4yr)) %>%
+      mutate(period_4yr = cohort_4yr + age_4yr) %>%
+      dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+      filter(!is.na(residuals)) %>%
+      mutate(period_4yr = as.character(period_4yr))
+    
+    period_eff_bw =
+      lm(residuals ~ period_4yr, medpolish_period_output_bw) %>%
+      broom::tidy() %>%
+      separate(term, into = c("term", "period"), sep = "_4yr") %>%
+      filter(!is.na(period)) %>%
+      mutate(term = ifelse(term == "(Intercept)", "period_intercept", term),
+             period = as.numeric(period))    
+    
+    period_eff_bw_p =
+      period_eff_bw %>%
+      ggplot(aes(x=period, group = 1)) +
+      geom_point(aes(y=estimate)) +  
+      geom_line(aes(y=estimate)) +
+      geom_errorbar(aes(ymin=estimate-(1.96*std.error), ymax=estimate+(1.96*std.error)), width = 0.5) +
+      labs(title = "Black Women") +
+      theme_minimal() +
+      theme(axis.title.y = element_blank()) +
+      xlim(1999,2015) +
+      scale_x_continuous(limits = c(1999, 2015), breaks=c(1999, 2003, 2007, 2011, 2015)) +
+      ylim(ylim_min, ylim_max)
+    
+    (period_eff_all_p | period_eff_wm_p | period_eff_ww_p | period_eff_bm_p | period_eff_bw_p)
+    
+}
+
+medpolish_cohortchart_f = function(variable, unstrat_matrix, wm_matrix, ww_matrix, bm_matrix, bw_matrix, ylim_min, ylim_max){
+    
+    #All
+      ap_matrix_all = 
+        unstrat_matrix %>%
+        dplyr::select(period_4yr, age_4yr, variable) %>%
+        filter(age_4yr != 84) %>%
+        pivot_wider(names_from = "period_4yr", values_from = variable)
+      
+      agegroups_ap_all = ap_matrix_all$age_4yr
+      
+      ap_matrix_all = ap_matrix_all %>% dplyr::select(-age_4yr)
+      
+      medpolish_cohorteff_all =
+        medpolish(ap_matrix_all, na.rm = TRUE)
+      
+      medpolish_cohort_output_all = 
+        medpolish_cohorteff_all$residuals %>%
+        as.data.frame() %>%
+        mutate(age_4yr = agegroups_ap_all) %>%
+        pivot_longer(c(`1999`:`2015`), names_to = "period_4yr", values_to = "residuals") %>%
+        mutate(period_4yr = as.numeric(period_4yr),
+               age_4yr = as.numeric(age_4yr)) %>%
+        mutate(cohort_4yr = period_4yr - age_4yr) %>%
+        dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+        filter(!is.na(residuals)) %>%
+        mutate(cohort_4yr = as.character(cohort_4yr))
+      
+      cohort_eff_all =
+        lm(residuals ~ cohort_4yr, medpolish_cohort_output_all) %>%
+        broom::tidy() %>%
+        separate(term, into = c("term", "cohort"), sep = "_4yr") %>%
+        filter(!is.na(cohort)) %>%
+        mutate(term = ifelse(term == "(Intercept)", "cohort_intercept", term)) %>%
+        mutate(cohort = as.numeric(cohort))   
+      
+      cohort_eff_all_p =
+        cohort_eff_all %>%
+        ggplot(aes(x=cohort, group = 1)) +
+        geom_point(aes(y=estimate)) +  
+        geom_line(aes(y=estimate)) +
+        geom_errorbar(aes(ymin=estimate-(1.96*std.error), ymax=estimate+(1.96*std.error)), width = 0.5) +
+        labs(title = "All") +
+        theme_minimal() +
+        theme(axis.title.y = element_blank()) +
+        xlim(1919,1995) +
+        ylim(ylim_min, ylim_max)
+
+    #White Men
+      ap_matrix_wm = 
+        wm_matrix %>%
+        dplyr::select(period_4yr, age_4yr, variable) %>%
+        filter(age_4yr != 84) %>%
+        pivot_wider(names_from = "period_4yr", values_from = variable)
+      
+      agegroups_ap_wm = ap_matrix_wm$age_4yr
+      
+      ap_matrix_wm = ap_matrix_wm %>% dplyr::select(-age_4yr)
+      
+      medpolish_cohorteff_wm =
+        medpolish(ap_matrix_wm, na.rm = TRUE)
+      
+      medpolish_cohort_output_wm = 
+        medpolish_cohorteff_wm$residuals %>%
+        as.data.frame() %>%
+        mutate(age_4yr = agegroups_ap_wm) %>%
+        pivot_longer(c(`1999`:`2015`), names_to = "period_4yr", values_to = "residuals") %>%
+        mutate(period_4yr = as.numeric(period_4yr),
+               age_4yr = as.numeric(age_4yr)) %>%
+        mutate(cohort_4yr = period_4yr - age_4yr) %>%
+        dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+        filter(!is.na(residuals)) %>%
+        mutate(cohort_4yr = as.character(cohort_4yr))
+      
+      cohort_eff_wm =
+        lm(residuals ~ cohort_4yr, medpolish_cohort_output_wm) %>%
+        broom::tidy() %>%
+        separate(term, into = c("term", "cohort"), sep = "_4yr") %>%
+        filter(!is.na(cohort)) %>%
+        mutate(term = ifelse(term == "(Intercept)", "cohort_intercept", term)) %>%
+        mutate(cohort = as.numeric(cohort))       
+      
+      cohort_eff_wm_p =
+        cohort_eff_wm %>%
+        ggplot(aes(x=cohort, group = 1)) +
+        geom_point(aes(y=estimate)) +  
+        geom_line(aes(y=estimate)) +
+        geom_errorbar(aes(ymin=estimate-(1.96*std.error), ymax=estimate+(1.96*std.error)), width = 0.5) +
+        labs(title = "White Men") +
+        theme_minimal() +
+        theme(axis.title.y = element_blank()) +
+        xlim(1919,1995) +
+        ylim(ylim_min, ylim_max)
+
+    #White Women
+      ap_matrix_ww = 
+        ww_matrix %>%
+        dplyr::select(period_4yr, age_4yr, variable) %>%
+        filter(age_4yr != 84) %>%
+        pivot_wider(names_from = "period_4yr", values_from = variable)
+      
+      agegroups_ap_ww = ap_matrix_ww$age_4yr
+      
+      ap_matrix_ww = ap_matrix_ww %>% dplyr::select(-age_4yr)
+      
+      medpolish_cohorteff_ww =
+        medpolish(ap_matrix_ww, na.rm = TRUE)
+      
+      medpolish_cohort_output_ww = 
+        medpolish_cohorteff_ww$residuals %>%
+        as.data.frame() %>%
+        mutate(age_4yr = agegroups_ap_ww) %>%
+        pivot_longer(c(`1999`:`2015`), names_to = "period_4yr", values_to = "residuals") %>%
+        mutate(period_4yr = as.numeric(period_4yr),
+               age_4yr = as.numeric(age_4yr)) %>%
+        mutate(cohort_4yr = period_4yr - age_4yr) %>%
+        dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+        filter(!is.na(residuals)) %>%
+        mutate(cohort_4yr = as.character(cohort_4yr))
+      
+      cohort_eff_ww =
+        lm(residuals ~ cohort_4yr, medpolish_cohort_output_ww) %>%
+        broom::tidy() %>%
+        separate(term, into = c("term", "cohort"), sep = "_4yr") %>%
+        filter(!is.na(cohort)) %>%
+        mutate(term = ifelse(term == "(Intercept)", "cohort_intercept", term)) %>%
+        mutate(cohort = as.numeric(cohort))      
+      
+      cohort_eff_ww_p =
+        cohort_eff_ww %>%
+        ggplot(aes(x=cohort, group = 1)) +
+        geom_point(aes(y=estimate)) +  
+        geom_line(aes(y=estimate)) +
+        geom_errorbar(aes(ymin=estimate-(1.96*std.error), ymax=estimate+(1.96*std.error)), width = 0.5) +
+        labs(title = "White Women") +
+        theme_minimal() +
+        theme(axis.title.y = element_blank()) +
+        xlim(1919,1995) +
+        ylim(ylim_min, ylim_max)
+
+    #Black Men
+      ap_matrix_bm = 
+        bm_matrix %>%
+        dplyr::select(period_4yr, age_4yr, variable) %>%
+        filter(age_4yr != 84) %>%
+        pivot_wider(names_from = "period_4yr", values_from = variable)
+      
+      agegroups_ap_bm = ap_matrix_bm$age_4yr
+      
+      ap_matrix_bm = ap_matrix_bm %>% dplyr::select(-age_4yr)
+      
+      medpolish_cohorteff_bm =
+        medpolish(ap_matrix_bm, na.rm = TRUE)
+      
+      medpolish_cohort_output_bm = 
+        medpolish_cohorteff_bm$residuals %>%
+        as.data.frame() %>%
+        mutate(age_4yr = agegroups_ap_bm) %>%
+        pivot_longer(c(`1999`:`2015`), names_to = "period_4yr", values_to = "residuals") %>%
+        mutate(period_4yr = as.numeric(period_4yr),
+               age_4yr = as.numeric(age_4yr)) %>%
+        mutate(cohort_4yr = period_4yr - age_4yr) %>%
+        dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+        filter(!is.na(residuals)) %>%
+        mutate(cohort_4yr = as.character(cohort_4yr))
+      
+      cohort_eff_bm =
+        lm(residuals ~ cohort_4yr, medpolish_cohort_output_bm) %>%
+        broom::tidy() %>%
+        separate(term, into = c("term", "cohort"), sep = "_4yr") %>%
+        filter(!is.na(cohort)) %>%
+        mutate(term = ifelse(term == "(Intercept)", "cohort_intercept", term)) %>%
+        mutate(cohort = as.numeric(cohort))      
+      
+      cohort_eff_bm_p =
+        cohort_eff_bm %>%
+        ggplot(aes(x=cohort, group = 1)) +
+        geom_point(aes(y=estimate)) +  
+        geom_line(aes(y=estimate)) +
+        geom_errorbar(aes(ymin=estimate-(1.96*std.error), ymax=estimate+(1.96*std.error)), width = 0.5) +
+        labs(title = "Black Men") +
+        theme_minimal() +
+        theme(axis.title.y = element_blank()) +
+        xlim(1919,1995) +
+        ylim(ylim_min, ylim_max)
+      
+    #Black Women
+      ap_matrix_bw = 
+        bw_matrix %>%
+        dplyr::select(period_4yr, age_4yr, variable) %>%
+        filter(age_4yr != 84) %>%
+        pivot_wider(names_from = "period_4yr", values_from = variable)
+      
+      agegroups_ap_bw = ap_matrix_bw$age_4yr
+      
+      ap_matrix_bw = ap_matrix_bw %>% dplyr::select(-age_4yr)
+      
+      medpolish_cohorteff_bw =
+        medpolish(ap_matrix_bw, na.rm = TRUE)
+      
+      medpolish_cohort_output_bw = 
+        medpolish_cohorteff_bw$residuals %>%
+        as.data.frame() %>%
+        mutate(age_4yr = agegroups_ap_bw) %>%
+        pivot_longer(c(`1999`:`2015`), names_to = "period_4yr", values_to = "residuals") %>%
+        mutate(period_4yr = as.numeric(period_4yr),
+               age_4yr = as.numeric(age_4yr)) %>%
+        mutate(cohort_4yr = period_4yr - age_4yr) %>%
+        dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+        filter(!is.na(residuals)) %>%
+        mutate(cohort_4yr = as.character(cohort_4yr))
+      
+      cohort_eff_bw =
+        lm(residuals ~ cohort_4yr, medpolish_cohort_output_bw) %>%
+        broom::tidy() %>%
+        separate(term, into = c("term", "cohort"), sep = "_4yr") %>%
+        filter(!is.na(cohort)) %>%
+        mutate(term = ifelse(term == "(Intercept)", "cohort_intercept", term)) %>%
+        mutate(cohort = as.numeric(cohort))      
+      
+      cohort_eff_bw_p =
+        cohort_eff_bw %>%
+        ggplot(aes(x=cohort, group = 1)) +
+        geom_point(aes(y=estimate)) +  
+        geom_line(aes(y=estimate)) +
+        geom_errorbar(aes(ymin=estimate-(1.96*std.error), ymax=estimate+(1.96*std.error)), width = 0.5) +
+        labs(title = "Black Women") +
+        theme_minimal() +
+        theme(axis.title.y = element_blank()) +
+        xlim(1919,1995) +
+        ylim(ylim_min, ylim_max)
+      
+      (cohort_eff_all_p | cohort_eff_wm_p | cohort_eff_ww_p | cohort_eff_bm_p | cohort_eff_bw_p)
+      
+      }
+```
+
+```{r mp_chart_paa, echo = FALSE, warnings = FALSE}
+(medpolish_agechart_f("phenoageadv_delta_elasticnet", MP_unstrat, MP_strat_wm, MP_strat_ww, MP_strat_bm, MP_strat_bw, -2, 2.5) / 
+medpolish_periodchart_f("phenoageadv_delta_elasticnet", MP_unstrat, MP_strat_wm, MP_strat_ww, MP_strat_bm, MP_strat_bw, -0.3, 0.35) /
+medpolish_cohortchart_f("phenoageadv_delta_elasticnet", MP_unstrat, MP_strat_wm, MP_strat_ww, MP_strat_bm, MP_strat_bw, -1, 1))
+```
+
+### Median polish model plots: Klemera-Doubal Biological Age
+
+```{r mp_chart_kdma, echo = FALSE, warnings = FALSE}
+(medpolish_agechart_f("kdmadv_delta_elasticnet", MP_unstrat, MP_strat_wm, MP_strat_ww, MP_strat_bm, MP_strat_bw, -0.5, 0.5) /
+medpolish_periodchart_f("kdmadv_delta_elasticnet", MP_unstrat, MP_strat_wm, MP_strat_ww, MP_strat_bm, MP_strat_bw, -0.5, 0.5) /
+medpolish_cohortchart_f("kdmadv_delta_elasticnet", MP_unstrat, MP_strat_wm, MP_strat_ww, MP_strat_bm, MP_strat_bw, -1, 0.5))
+```
+
+### Median polish model plots: Homeostatic dysregulation
+
+```{r mp_chart_hdlog, echo = FALSE, warnings = FALSE}
+(medpolish_agechart_f("hdlog_elasticnet", MP_unstrat, MP_strat_wm, MP_strat_ww, MP_strat_bm, MP_strat_bw, -0.5, 0.5) / 
+medpolish_periodchart_f("hdlog_elasticnet", MP_unstrat, MP_strat_wm, MP_strat_ww, MP_strat_bm, MP_strat_bw, -0.3, 0.35) /
+medpolish_cohortchart_f("hdlog_elasticnet", MP_unstrat, MP_strat_wm, MP_strat_ww, MP_strat_bm, MP_strat_bw, -0.5, 1))
+```
+
+### Median polish model coefficients: PhenoAge
+
+```{r medpolish-reg-coef, echo = FALSE}
+medpolish_coef_f = function(data, outcome, subgroup_name){
+
+    ap_matrix = 
+      data %>%
+      dplyr::select(period_4yr, age_4yr, outcome) %>%
+      filter(age_4yr != 84) %>%
+      pivot_wider(names_from = "period_4yr", values_from = outcome)
+    
+    agegroups_ap = ap_matrix$age_4yr
+    
+    ap_matrix = ap_matrix %>% dplyr::select(-age_4yr)
+    
+    ac_matrix = 
+      data %>%
+      dplyr::select(cohort_4yr, age_4yr, outcome) %>%
+      pivot_wider(names_from = "cohort_4yr", values_from = outcome) 
+    
+    agegroups_ac = ac_matrix$age_4yr
+    
+    ac_matrix = ac_matrix %>% dplyr::select(-age_4yr)
+    
+    pc_matrix = 
+      data %>%
+      dplyr::select(period_4yr, cohort_4yr, outcome) %>%
+      pivot_wider(names_from = "cohort_4yr", values_from = outcome)
+    
+    periodgroups = pc_matrix$period_4yr
+    
+    pc_matrix = pc_matrix %>% dplyr::select(-period_4yr)
+    
+    medpolish_cohorteff_all =
+      medpolish(ap_matrix, na.rm = TRUE)
+    
+    medpolish_periodeff_all =
+      medpolish(ac_matrix, na.rm = TRUE)
+    
+    medpolish_ageeff_all =
+      medpolish(pc_matrix, na.rm = TRUE)
+    
+    medpolish_cohort_output = 
+      medpolish_cohorteff_all$residuals %>%
+      as.data.frame() %>%
+      mutate(age_4yr = agegroups_ap) %>%
+      pivot_longer(c(`1999`:`2015`), names_to = "period_4yr", values_to = "residuals") %>%
+      mutate(period_4yr = as.numeric(period_4yr),
+             age_4yr = as.numeric(age_4yr)) %>%
+      mutate(cohort_4yr = period_4yr - age_4yr) %>%
+      dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+      filter(!is.na(residuals)) %>%
+      mutate(cohort_4yr = as.character(cohort_4yr))
+    
+    medpolish_period_output =
+      medpolish_periodeff_all$residuals %>%
+      as.data.frame() %>%
+      mutate(age_4yr = agegroups_ac) %>%
+      pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+      mutate(cohort_4yr = as.numeric(cohort_4yr),
+             age_4yr = as.numeric(age_4yr)) %>%
+      mutate(period_4yr = cohort_4yr + age_4yr) %>%
+      dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+      filter(!is.na(residuals)) %>%
+      mutate(period_4yr = as.character(period_4yr))
+    
+    medpolish_age_output =
+      medpolish_ageeff_all$residuals %>%
+      as.data.frame() %>%
+      mutate(period_4yr = periodgroups) %>%
+      pivot_longer(c(`1979`:`1995`), names_to = "cohort_4yr", values_to = "residuals") %>%
+      mutate(cohort_4yr = as.numeric(cohort_4yr),
+             period_4yr = as.numeric(period_4yr)) %>%
+      mutate(age_4yr = period_4yr - cohort_4yr) %>%
+      dplyr::select(age_4yr, period_4yr, cohort_4yr, residuals) %>%
+      filter(!is.na(residuals)) %>%
+      mutate(age_4yr = as.character(age_4yr))
+    
+    cohort_eff =
+      lm(residuals ~ cohort_4yr, medpolish_cohort_output) %>%
+      broom::tidy() %>%
+      mutate(term = ifelse(term == "(Intercept)", "cohort_intercept", term))
+    
+    period_eff =
+      lm(residuals ~ period_4yr, medpolish_period_output) %>%
+      broom::tidy() %>%
+      mutate(term = ifelse(term == "(Intercept)", "period_intercept", term))
+    
+    age_eff =
+      lm(residuals ~ age_4yr, medpolish_age_output) %>%
+      broom::tidy() %>%
+      mutate(term = ifelse(term == "(Intercept)", "age_intercept", term))
+    
+    apc_coef =
+      rbind(age_eff, period_eff) %>%
+      rbind(cohort_eff) %>%
+      dplyr::select(-statistic) %>%
+      mutate(pop = subgroup_name)
+    
+    apc_coef
+    
+}
+```
+
+```{r echo = FALSE}
+coef_mp_paa_all = medpolish_coef_f(MP_unstrat, "phenoageadv_delta_elasticnet", "All") 
+coef_mp_paa_wm = medpolish_coef_f(MP_strat_wm, "phenoageadv_delta_elasticnet", "WM") 
+coef_mp_paa_ww = medpolish_coef_f(MP_strat_ww, "phenoageadv_delta_elasticnet", "WW") 
+coef_mp_paa_bm = medpolish_coef_f(MP_strat_bm, "phenoageadv_delta_elasticnet", "BM") 
+coef_mp_paa_bw = medpolish_coef_f(MP_strat_bw, "phenoageadv_delta_elasticnet", "BW")
+
+mp_coef_paa_combined =
+  rbind(coef_mp_paa_all, coef_mp_paa_wm) %>%
+  rbind(coef_mp_paa_ww) %>%
+  rbind(coef_mp_paa_bm) %>%
+  rbind(coef_mp_paa_bw)
+
+mp_coef_paa_t = 
+  mp_coef_paa_combined %>%
+  mutate(estimate = round(estimate, 2),
+         std.error = round(std.error, 2),
+         p.value = round(p.value, 4)) %>%
+  mutate(sig = ifelse(p.value<0.001, "***", ifelse(p.value<0.01, "**", ifelse(p.value<0.05, "\\*", "")))) %>%
+  pivot_wider(names_from = pop, values_from = c(estimate, std.error, p.value, sig), names_glue = "{pop}_{.value}") %>%
+  dplyr::select(term, 
+         All_estimate, All_std.error, All_p.value, All_sig, 
+         WM_estimate, WM_std.error, WM_p.value, WM_sig, 
+         WW_estimate, WW_std.error, WW_p.value, WW_sig, 
+         BM_estimate, BM_std.error, BM_p.value, BM_sig, 
+         BW_estimate, BW_std.error, BW_p.value, BW_sig)
+
+mp_coef_paa_t %>%
+  knitr::kable(col.names = c("Term", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig")) %>%
+  kableExtra::kable_classic() %>%
+  add_header_above(c("Term" = 1, "All" = 4, "White Men" = 4, "White Women" = 4, "Black Men" = 4, "Black Women" = 4))
+```
+
+### Median polish model coefficients: Klemera-Doubal Biological Age
+```{r echo = FALSE}
+coef_mp_kdma_all = medpolish_coef_f(MP_unstrat, "kdmadv_delta_elasticnet", "All") 
+coef_mp_kdma_wm = medpolish_coef_f(MP_strat_wm, "kdmadv_delta_elasticnet", "WM") 
+coef_mp_kdma_ww = medpolish_coef_f(MP_strat_ww, "kdmadv_delta_elasticnet", "WW") 
+coef_mp_kdma_bm = medpolish_coef_f(MP_strat_bm, "kdmadv_delta_elasticnet", "BM") 
+coef_mp_kdma_bw = medpolish_coef_f(MP_strat_bw, "kdmadv_delta_elasticnet", "BW")
+
+mp_coef_kdma_combined =
+  rbind(coef_mp_kdma_all, coef_mp_kdma_wm) %>%
+  rbind(coef_mp_kdma_ww) %>%
+  rbind(coef_mp_kdma_bm) %>%
+  rbind(coef_mp_kdma_bw)
+
+mp_coef_kdma_t = 
+  mp_coef_kdma_combined %>%
+  mutate(estimate = round(estimate, 2),
+         std.error = round(std.error, 2),
+         p.value = round(p.value, 4)) %>%
+  mutate(sig = ifelse(p.value<0.001, "***", ifelse(p.value<0.01, "**", ifelse(p.value<0.05, "\\*", "")))) %>%
+  pivot_wider(names_from = pop, values_from = c(estimate, std.error, p.value, sig), names_glue = "{pop}_{.value}") %>%
+  select(term, 
+         All_estimate, All_std.error, All_p.value, All_sig, 
+         WM_estimate, WM_std.error, WM_p.value, WM_sig, 
+         WW_estimate, WW_std.error, WW_p.value, WW_sig, 
+         BM_estimate, BM_std.error, BM_p.value, BM_sig, 
+         BW_estimate, BW_std.error, BW_p.value, BW_sig)
+
+mp_coef_kdma_t %>%
+  knitr::kable(col.names = c("Term", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig")) %>%
+  kableExtra::kable_classic() %>%
+  add_header_above(c("Term" = 1, "All" = 4, "White Men" = 4, "White Women" = 4, "Black Men" = 4, "Black Women" = 4))
+```
+
+### Median polish model coefficients: Homeostatic Dysregulation
+```{r echo = FALSE}
+coef_mp_hdlog_all = medpolish_coef_f(MP_unstrat, "hdlog_elasticnet", "All") 
+coef_mp_hdlog_wm = medpolish_coef_f(MP_strat_wm, "hdlog_elasticnet", "WM") 
+coef_mp_hdlog_ww = medpolish_coef_f(MP_strat_ww, "hdlog_elasticnet", "WW") 
+coef_mp_hdlog_bm = medpolish_coef_f(MP_strat_bm, "hdlog_elasticnet", "BM") 
+coef_mp_hdlog_bw = medpolish_coef_f(MP_strat_bw, "hdlog_elasticnet", "BW")
+
+mp_coef_hdlog_combined =
+  rbind(coef_mp_hdlog_all, coef_mp_hdlog_wm) %>%
+  rbind(coef_mp_hdlog_ww) %>%
+  rbind(coef_mp_hdlog_bm) %>%
+  rbind(coef_mp_hdlog_bw)
+
+mp_coef_hdlog_t = 
+  mp_coef_hdlog_combined %>%
+  mutate(estimate = round(estimate, 2),
+         std.error = round(std.error, 2),
+         p.value = round(p.value, 4)) %>%
+  mutate(sig = ifelse(p.value<0.001, "***", ifelse(p.value<0.01, "**", ifelse(p.value<0.05, "\\*", "")))) %>%
+  pivot_wider(names_from = pop, values_from = c(estimate, std.error, p.value, sig), names_glue = "{pop}_{.value}") %>%
+  select(term, 
+         All_estimate, All_std.error, All_p.value, All_sig, 
+         WM_estimate, WM_std.error, WM_p.value, WM_sig, 
+         WW_estimate, WW_std.error, WW_p.value, WW_sig, 
+         BM_estimate, BM_std.error, BM_p.value, BM_sig, 
+         BW_estimate, BW_std.error, BW_p.value, BW_sig)
+
+mp_coef_hdlog_t %>%
+  knitr::kable(col.names = c("Term", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig", "Estimate", "SE", "p", "Sig")) %>%
+  kableExtra::kable_classic() %>%
+  add_header_above(c(" " = 1, "All" = 4, "White Men" = 4, "White Women" = 4, "Black Men" = 4, "Black Women" = 4))
+
+```
+

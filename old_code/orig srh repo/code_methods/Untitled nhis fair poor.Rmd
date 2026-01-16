@@ -1,0 +1,183 @@
+---
+title: "NHIS Poor/Fair"
+author: "Christine Lucille Kuryla"
+date: "2025-09-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+data_nhis_raw <- read_csv(here("big_data/NHIS/nhis_00002.csv")) 
+
+data_nhis <- data_nhis_raw %>% 
+  filter(!(is.na(HEALTH))) %>% 
+  filter(!(is.na(AGE))) %>% 
+  filter(YEAR > 1982) %>% 
+  filter(AGE > 18) %>% 
+  filter(AGE < 90) %>% 
+  select(AGE, YEAR, HEALTH, PSU, STRATA, SAMPWEIGHT, SEX) %>% 
+  filter(HEALTH %in% 1:5) %>% 
+  mutate(age = AGE, 
+         year = YEAR, 
+         cohort = year - age,
+         srh = 6 - HEALTH)
+
+data_nhis %>%
+    group_by(YEAR) %>%
+    summarise(
+        across(
+            c(#MORTSTAT, ASTATFLG, 
+              HEALTH, PSU, STRATA, SAMPWEIGHT), 
+            ~ mean(!is.na(.), na.rm = TRUE)  # fraction of non-NA
+        )
+    ) %>%
+    View()
+
+data_nhis <- data_nhis %>% 
+  mutate(srh_fairpoor = if_else(srh %in% c(1,2), 1, 0)) %>% 
+  mutate(
+    age_decade_cat_6 = as.factor( 
+                            cut(
+                            age,
+                            breaks = c(17, 29, 39, 49, 59, 69, Inf),
+                            labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70+"),
+                            right = TRUE
+                          )),
+    # age_decade_cat = as.factor( 
+    #                         cut(
+    #                         age,
+    #                         breaks = c(17, 29, 39, 49, 59, 69, , 79, Inf),
+    #                         labels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70-79", "80+"),
+    #                         right = TRUE
+    #                       )),
+    age_group_small = as.factor( 
+                            cut(
+                              age,
+                              breaks = c(seq(15, 75, by = 5), Inf),  # Define breaks up to 75 and include Inf for the last group
+                              labels = c("16-20", "21-25", "26-30", "31-35", "36-40", "41-45", "46-50", "51-55", "56-60", "61-65", "66-70", "71-75", "76+"),
+                              right = FALSE  # Makes intervals left-closed, i.e., [x, y)
+                            )
+                          )
+  ) %>% 
+  mutate(age_band = cut(age,
+                   breaks = c(18, 44, 55, 65, Inf),
+                   right  = FALSE,
+                   labels = c("18–44","45–54","55–64","65+")))
+
+```
+
+```{r}
+
+svy_nhis <- data_nhis %>%
+#  filter(!(is.na(HHWEIGHT))) %>% 
+  filter(!(is.na(SAMPWEIGHT))) %>% 
+  as_survey_design(
+    ids = PSU,           # PSU identifiers (use 1 if not available)
+    weights = SAMPWEIGHT,  # missing some every once in a while
+  #  weights = HHWEIGHT, # missing 2019+, also this is for households, not individuals
+    strata = STRATA, 
+    nest = TRUE
+    )
+
+```
+
+```{r}
+
+# SRH 1-5
+
+svy_nhis %>%
+  #mutate(age_group = cut(age, breaks = 6)) %>% 
+#  filter(year > 2008 & year < 2019) %>% 
+  group_by(age_decade_cat_6, year) %>%
+  summarise(
+    mean_health = survey_mean(srh, na.rm = TRUE)
+  ) %>% 
+  ggplot(aes(x = year, y = mean_health, color = age_decade_cat_6)) +
+  #  geom_smooth(alpha = 0.2) +
+  geom_line() +
+  geom_point() +
+  labs(
+    title = "Average SRH Per Year for Each Age Group",
+    subtitle = "NHIS (Weighted)",
+    x = "Year",
+    y = "Average Self-Rated Health",
+    color = "Age Group"
+  ) +
+  theme_minimal()
+
+# SRH Fair/Poor %
+
+svy_nhis %>%
+  filter(year > 1982) %>% 
+#  filter(year > 2008 & year < 2019) %>% 
+  #mutate(age_group = cut(age, breaks = 6)) %>% 
+  group_by(age_decade_cat_6, year) %>%
+  summarise(
+    mean_health = survey_mean(srh_fairpoor, na.rm = TRUE)
+  ) %>% 
+  ggplot(aes(x = year, y = mean_health, color = age_decade_cat_6)) +
+  #  geom_smooth(alpha = 0.2) +
+  geom_line() +
+  geom_point() +
+#  geom_vline(xintercept = 2009) +
+#  geom_vline(xintercept = 2018) + 
+  labs(
+    title = "% Fair/Poor Self-Rated Health Per Year",
+    subtitle = "NHIS (Weighted)",
+    x = "Year",
+    y = "% Fair/Poor Self-Rated Health",
+    color = "Age Group"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+
+data_nhis %>%
+  #mutate(age_group = cut(age, breaks = 6)) %>% 
+  group_by(age_band, year) %>%
+  summarise(
+    mean_health = mean(srh, na.rm = TRUE)
+  ) %>% 
+  ggplot(aes(x = year, y = mean_health, color = age_band)) +
+  #  geom_smooth(alpha = 0.2) +
+  geom_line() +
+  geom_point() +
+  labs(
+    title = "Average SRH Per Year for Each Age Group",
+    subtitle = "NHIS (Unweighted)",
+    x = "Year",
+    y = "Average Self-Rated Health",
+    color = "Age Group"
+  ) +
+  theme_minimal()
+
+data_nhis %>%
+  filter(year > 1982) %>% 
+  filter(year > 2008 & year < 2020) %>% 
+  #mutate(age_group = cut(age, breaks = 6)) %>% 
+  group_by(age_band, year) %>%
+  summarise(
+    mean_health = mean(srh_fairpoor, na.rm = TRUE)
+  ) %>% 
+  ggplot(aes(x = year, y = mean_health, color = age_band)) +
+  #  geom_smooth(alpha = 0.2) +
+  geom_line() +
+  geom_point() +
+  labs(
+    title = "% Fair/Poor Self-Rated Health Per Year for Each Age Group",
+    subtitle = "NHIS (Unweighted)",
+    x = "Year",
+    y = "% Fair/Poor Self-Rated Health",
+    color = "Age Group"
+  ) +
+  theme_minimal()
+
+```
+
+

@@ -1,0 +1,32 @@
+---
+title: "NHIS Poor/Fair"
+author: "Christine Lucille Kuryla"
+date: "2025-09-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+
+data_nhis_raw <- read_csv(here("big_data/NHIS/nhis_00002.csv")) 
+
+data_nhis_mort_filter <- data_nhis_raw %>% 
+  mutate(srh = 6 - HEALTH) %>% 
+  filter(srh %in% 1:5) %>% 
+  filter(AGE %in% 18:99) %>% 
+  mutate(age = AGE) %>% 
+  mutate(year = YEAR) %>% 
+#  filter(YEAR >= 1981) %>% 
+  mutate(srh_binary = case_when(srh %in% 3:5 ~ "Good-VG-Excellent",
+                                srh %in% 1:2 ~ "Fair-Poor"
+                                )) %>% 
+  mutate(srh_fairpoor = case_when(srh %in% 3:5 ~ 0,
+                                  srh %in% 1:2 ~ 1
+                                  )) 
+  
+```
+

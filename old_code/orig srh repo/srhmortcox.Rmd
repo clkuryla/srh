@@ -1,0 +1,170 @@
+---
+title: "trying to do a window"
+author: "Christine Lucille Kuryla"
+date: "2025-02-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load data
+
+```{r}
+data_nhis_raw <- read_csv(here("big_data/NHIS/nhis_00002.csv")) 
+
+data_nhis_mort_filter <- data_nhis_raw %>% 
+  mutate(srh = 6 - HEALTH) %>% 
+  filter(srh %in% 1:5) %>% 
+  filter(AGE %in% 18:99) %>% 
+#  filter(MORTELIG == 1) %>% 
+#  filter(MORTDODY > YEAR) %>% 
+ # filter(MORTDODY != 9999) %>% 
+  filter(YEAR >= 1981) %>% 
+  filter(MORTSTAT %in% 1:2) %>% 
+  mutate(mortstat_recoded = case_when(MORTSTAT == 1 ~ 1, #deceased
+                                      MORTSTAT == 2 ~ 0, #alive
+                                      .default = NA
+                                      )) %>% 
+  mutate(srh_binary = case_when(srh %in% 3:5 ~ "Good-VG-Excellent",
+                                srh %in% 1:2 ~ "Fair-Poor"
+                                )) %>% 
+  mutate(age_at_death = case_when(MORTSTAT == 1 ~ MORTDODY - YEAR + AGE, #deceased
+                                  MORTSTAT == 2 ~ NA, #alive
+                                  .default = NA
+                                      )) %>% 
+  mutate(age = AGE) %>% 
+  mutate(year = YEAR) %>% 
+  mutate(age_in_2018_or_death  = case_when(MORTSTAT == 1 ~ age_at_death, # died before 2018
+                                          MORTSTAT == 2 ~ 2018 - (year - age), # age in 2018
+                                          .default = NA
+                                )) %>% 
+  filter(age_in_2018_or_death > age)
+ # mutate(survtime = MORTDODY - YEAR)
+```
+
+# Weighted Cox Survival Analysis
+
+## All combined
+
+```{r}
+
+  # Create survey design object
+svy_nhis <- svydesign(
+    ids = ~1,
+    weights = ~MORTWT,
+    data = data_nhis_mort_filter %>% filter(!(is.na(MORTWT)))
+  )
+
+svycoxph(Surv(time = age,
+              time2 = age_in_2018_or_death,
+              event = mortstat_recoded) ~ srh,
+              design = svy_nhis)
+
+```
+
+## Rolling window
+
+```{r}
+# 
+# period1 = 1986:2001,
+#   period2 = 1991:2006,
+#   period3 = 1996:2011,
+#   period4 = 2001:2016,  # Updated to match actual data availability
+#   period5 = 2006:2018
+
+period 1 = 1986:
+
+  #by 10, miss 2 (1986, 1987)  
+period2 = 1988:1998,
+  period3 = 1993:2003,
+  period4 = 1998:2008,
+  period5 = 2003:2013,  # Updated to match actual data availability
+  period6 = 2008:2018
+)
+
+# by 5 no overlap
+#1988:1993
+
+# by 15
+
+# 
+
+data_nhis_mort_filter_more <- data_nhis_mort_filter %>% 
+  mutate(age_in_2001_or_death  = case_when(MORTDODY - year <= 15 ~ MORTDODY - YEAR + AGE,
+                                           default = 2001 - YEAR - AGE)) %>% 
+  mutate(vital_status_2001 = case_when(MORTDODY - year <= 15 ~ 1,# (deceased in 15 year window)
+                                   #    MORTDODY - year > 15 ~ 0, 
+                                       .default = 0 #everyone else is alive
+                                )) %>% 
+  mutate(age_in_2006_or_death  = case_when(MORTDODY - year <= 15 ~ MORTDODY - YEAR + AGE,
+                                           default = 2006 - YEAR - AGE)) %>% 
+  mutate(vital_status_2006 = case_when(MORTDODY - year <= 15 ~ 1,# (deceased in 15 year window)
+                                   #    MORTDODY - year > 15 ~ 0, 
+                                       .default = 0 #everyone else is alive
+                                )) %>% 
+  mutate(age_in_2011_or_death  = case_when(MORTDODY - year <= 15 ~ MORTDODY - YEAR + AGE,
+                                           default = 2011 - YEAR - AGE)) %>% 
+  mutate(vital_status_2011 = case_when(MORTDODY - year <= 15 ~ 1,# (deceased in 15 year window)
+                                   #    MORTDODY - year > 15 ~ 0, 
+                                       .default = 0 #everyone else is alive
+                                )) %>% 
+  mutate(age_in_2016_or_death  = case_when(MORTDODY - year <= 15 ~ MORTDODY - YEAR + AGE,
+                                           default = 2016 - YEAR - AGE)) %>% 
+  mutate(vital_status_2016 = case_when(MORTDODY - year <= 15 ~ 1,# (deceased in 15 year window)
+                                   #    MORTDODY - year > 15 ~ 0, 
+                                       .default = 0 #everyone else is alive
+                                )) %>% 
+  mutate(age_in_2018_or_death  = case_when(MORTDODY - year <= 15 ~ MORTDODY - YEAR + AGE,
+                                           default = 2018 - YEAR - AGE)) %>% 
+  mutate(vital_status_2018 = case_when(MORTDODY - year <= 15 ~ 1,# (deceased in 15 year window)
+                                   #    MORTDODY - year > 15 ~ 0, 
+                                       .default = 0 #everyone else is alive
+                                )) 
+  
+
+    
+    # period1 = 1986:2001,
+#   period2 = 1991:2006,
+#   period3 = 1996:2011,
+#   period4 = 2001:2016,  # Updated to match actual data availability
+#   period5 = 2006:2018
+svy_nhis <- svydesign(
+    ids = ~1,
+    weights = ~MORTWT,
+    data = data_nhis_mort_filter_more %>% filter(!(is.na(MORTWT)))
+  )
+
+svycoxph(Surv(time = age,
+              time2 = age_in_2005_or_death,
+              event = vital_status_2005) ~ srh,
+              design = subset(svy_nhis, year %in% 1990:2005))
+
+coxph_all_unweighted <- coxph(Surv(time = YEAR, #start
+                                   time2 = MORTDODY, # stop 
+                                   event = MORTSTAT) ~ srh,
+                                   data=data_nhis_mort_filter)
+
+coxph(Surv(time = age,
+              time2 = age_in_2005_or_death,
+              event = vital_status_2005) ~ srh,
+              data = data_nhis_mort_filter_more %>% filter(vital_status_1990 == 0) %>% filter(year %in% 1990:2005))
+
+
+
+data_nhis_mort_filter_more <- data_nhis_mort_filter_more %>% 
+  mutate(survey_year = year) %>% 
+  mutate(death_year = MORTDODY) %>% 
+  mutate(age_at_survey = age) %>% 
+  mutate(weight = MORTWT) %>% 
+  mutate(self_rated_health = srh)
+
+
+coxph(Surv(time = age,
+              time2 = age_in_2017_or_death,
+              event = vital_status_2017) ~ srh,
+              data = data_nhis_mort_filter_more )
+
+```
+
