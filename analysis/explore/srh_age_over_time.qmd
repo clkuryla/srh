@@ -66,6 +66,18 @@ data_gss <- readr::read_rds(derived_path("data_gss.rds")) |>
   drop_na(srh, age, year, wt) |>
   add_age_group(scheme = "B", new_var = age_group)
 
+data_cps <- readr::read_rds(derived_path("data_cps.rds")) |> 
+  select(srh, age, year, wt) |>
+  filter(wt != 0) |>
+  drop_na(srh, age, year, wt) |>
+  add_age_group(scheme = "B", new_var = age_group)
+
+data_nhanes <- readr::read_rds(derived_path("data_nhanes.rds")) |> 
+  select(srh, age, year, psu, wt, strata) |>
+  filter(wt != 0) |>
+  drop_na(srh, age, year, wt) |>
+  add_age_group(scheme = "B", new_var = age_group)
+
 ```
 
 
@@ -86,11 +98,18 @@ srh_means_nhis <- summarize_srh_over_time(data_nhis,
 srh_means_gss <- summarize_srh_over_time(data_gss, 
                                           survey_name = "GSS") 
 
+srh_means_cps <- summarize_srh_over_time(data_cps, 
+                                          survey_name = "CPS") 
+
+srh_means_nhanes <- summarize_srh_over_time(data_nhanes, 
+                                          survey_name = "NHANES") 
+
 
 srh_means_meps$plot                                          
 srh_means_nhis$plot
 srh_means_gss$plot
-
+srh_means_cps$plot
+srh_means_nhanes$plot
 
 table_render(
   srh_means_nhis$estimates,
