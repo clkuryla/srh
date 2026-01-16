@@ -18,8 +18,7 @@ data_nhis_raw <- readr::read_csv(
 data_nhis <- data_nhis_raw %>%
   filter(!(is.na(HEALTH))) %>% 
   filter(!(is.na(AGE))) %>% 
-  filter(AGE >= 18) %>% 
-  filter(AGE < 90) %>% 
+  filter(AGE >= 18) %>%
   filter(YEAR >= 1982) %>% # SRH has no "Very Good" in NHIS pre-1982
 #  select(AGE, YEAR, HEALTH, PSU, STRATA, SAMPWEIGHT, SEX) %>% 
   filter(HEALTH %in% 1:5) %>% 

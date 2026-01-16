@@ -145,7 +145,6 @@ data_meps <- data_meps %>%
   filter(!(is.na(AGE))) %>% 
   filter(!(is.na(SAQWEIGHT))) %>% 
   filter(AGE >= 18) %>% 
-  filter(AGE <= 89) %>% 
   filter(HEALTH %in% 1:5) %>% 
   rename(age = AGE, 
          year = YEAR) %>% 

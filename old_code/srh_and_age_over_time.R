@@ -81,11 +81,12 @@ summarize_srh_over_time <- function(
   )
 
   if (is.data.frame(data)) {
-    stopifnot(
-      params$psu_var %in% vars_present,
-      params$strata_var %in% vars_present,
-      params$wt_var %in% vars_present
-    )
+    # Check which design elements are available
+    has_psu <- !is.null(params$psu_var) && params$psu_var %in% vars_present
+    has_strata <- !is.null(params$strata_var) && params$strata_var %in% vars_present
+    has_wt <- params$wt_var %in% vars_present
+    
+    stopifnot(has_wt)  # Weights are required
 
     stopifnot(all(data[[params$year_var]][!is.na(data[[params$year_var]])] > 0))
     stopifnot(all(data[[params$wt_var]][!is.na(data[[params$wt_var]])] >= 0))
@@ -102,27 +103,48 @@ summarize_srh_over_time <- function(
       ))
     }
 
+    # Build rename list based on available design elements
+    rename_exprs <- list(
+      .age_group = rlang::sym(params$age_group_var),
+      .srh = rlang::sym(params$srh_var),
+      .year = rlang::sym(params$year_var),
+      .wt = rlang::sym(params$wt_var)
+    )
+    if (has_psu) rename_exprs$.psu <- rlang::sym(params$psu_var)
+    if (has_strata) rename_exprs$.strata <- rlang::sym(params$strata_var)
+
     df_std <- data %>%
-      rename(
-        .age_group = !!rlang::sym(params$age_group_var),
-        .srh = !!rlang::sym(params$srh_var),
-        .year = !!rlang::sym(params$year_var),
-        .psu = !!rlang::sym(params$psu_var),
-        .strata = !!rlang::sym(params$strata_var),
-        .wt = !!rlang::sym(params$wt_var)
-      ) %>%
+      rename(!!!rename_exprs) %>%
       filter(
         !is.na(.srh), is.finite(.srh),
         !is.na(.year), is.finite(.year),
         !is.na(.age_group),
-        !is.na(.psu), !is.na(.strata),
         !is.na(.wt), is.finite(.wt), .wt > 0
       )
+    
+    # Additional filters for PSU/strata if present
+    if (has_psu) df_std <- df_std %>% filter(!is.na(.psu))
+    if (has_strata) df_std <- df_std %>% filter(!is.na(.strata))
 
     stopifnot(nrow(df_std) > 0)
 
-    svy <- df_std %>%
-      srvyr::as_survey_design(ids = .psu, strata = .strata, weights = .wt, nest = TRUE)
+    # Create survey design based on available elements
+    if (has_psu && has_strata) {
+      svy <- df_std %>%
+        srvyr::as_survey_design(ids = .psu, strata = .strata, weights = .wt, nest = TRUE)
+    } else if (has_psu) {
+      message("Note: strata not available; using PSU + weights only design.")
+      svy <- df_std %>%
+        srvyr::as_survey_design(ids = .psu, weights = .wt)
+    } else if (has_strata) {
+      message("Note: PSU not available; using strata + weights only design.")
+      svy <- df_std %>%
+        srvyr::as_survey_design(ids = 1, strata = .strata, weights = .wt)
+    } else {
+      message("Note: PSU and strata not available; using weights-only design. SEs may be underestimated.")
+      svy <- df_std %>%
+        srvyr::as_survey_design(ids = 1, weights = .wt)
+    }
   } else if (inherits(data, c("survey.design", "svyrep.design"))) {
     w <- survey::weights(data)
     stopifnot(all(w[!is.na(w)] >= 0))
