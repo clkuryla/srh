@@ -1,0 +1,34 @@
+---
+title: "APC Report"
+author: "Christine Lucille Kuryla"
+date: "2026-01-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(here)
+library(tidyverse)
+source(here::here("R/paths.R")) # To access path for data as depot_path and derived _path
+ensure_dirs()
+
+library(srvyr)
+
+```
+
+
+```{r}
+
+data_nhis <- readr::read_rds(derived_path("data_nhis.rds")) %>% 
+  select(srh, age, year, psu, wt, strata)
+
+svy_nhis <- data_nhis %>% 
+  as_survey_design()
+
+```
+

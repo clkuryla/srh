@@ -97,7 +97,7 @@ std_colors <- c(
   "#D55E00" # vermillion
 )
 
-# Okabe-Ito colorblind-friendly palette in rainbow order
+# Okabe-Ito colorblind-friendly palette in rainbow order for age groups (youngest = vermillion, oldest = reddish purple)
 rainbow_order <- c(        
   "#D55E00", # vermillion
   "#E69F00", # orange

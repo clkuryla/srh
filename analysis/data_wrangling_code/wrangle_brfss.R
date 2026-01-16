@@ -1,5 +1,6 @@
 # BRFSS
 
+
 library(tidyverse)
 library(here)
 source(here::here("R/paths.R")) # To access path for data as depot_path
@@ -148,7 +149,7 @@ more_col <- c(
 )
 
 # file list
-brfss_year_to_file <- read_csv(here("big_data/BRFSS/BRFSS_year_file_key.csv"))
+brfss_year_to_file <- read_csv(depot_path("surveys/BRFSS/BRFSS_year_file_key.csv"))
 
 # data_brfss_1993 <- read_xpt(here("big_data/BRFSS/CDBRFS93.XPT"))
 
@@ -180,7 +181,7 @@ all_dfs <- vector("list", length = length(file_paths))
 # get data from files
 for (i in seq_along(file_paths)) {
   
-  tmp_df <- read_xpt(paste0(here("big_data/BRFSS/"), file_paths[i], ".XPT"))
+  tmp_df <- read_xpt(paste0(depot_path("surveys/BRFSS/"), file_paths[i], ".XPT"))
   
   # Safely select our columns of interest (any columns not in tmp_df will be NA)
   tmp_df_selected <- safe_select(tmp_df, col_list)
@@ -191,12 +192,15 @@ for (i in seq_along(file_paths)) {
 
 data_brfss_raw <- bind_rows(all_dfs)
 
-# write_csv(data_brfss_raw, here("big_data/BRFSS/brfss_selected_not_recoded_20230111.csv"))
-# write_csv(data_brfss_raw, here("big_data/BRFSS/brfss_selected_not_recoded_20250912.csv"))
+# write_csv(data_brfss_raw, derived_path("brfss_selected_not_recoded.csv"))
 
-# a <- read_csv(here("big_data/BRFSS/brfss_selected_not_recoded_20250912.csv"))
+
+# data_brfss_raw <- read_csv(derived_path("brfss_selected_not_recoded.csv"))
 
 ```
+
+################## Wrangle BRFSS data ##################
+########################################################
 
 ### Load from file, filter, add age groupings, recode IYEAR
 
@@ -631,7 +635,7 @@ df <- df %>% mutate(
     diab_raw_source %in% c("DIABETES") & year %in% c(1994:2003) & to_int(diab_raw) == 3 ~ 0L,
     
     diab_raw_source %in% c("DIABETE2","DIABETE3","DIABETE4") & to_int(diab_raw) == 1L ~ 1L,
-    diab_raw_source %in% c("DIABETE2","DIABETE3","DIABETE4") & to_int(diab_raw) == 3 ~ 0L,
+    diab_raw_source %in% c("DIABETE2","DIABETE3","DIABETE4") & to_int(diab_raw) == 3L ~ 0L,
     
     # pregnancy-only and prediabetes categories are handled as separate flags
     diab_raw_source %in% c("DIABETE2","DIABETE3","DIABETE4") & to_int(diab_raw) %in% c(2L,4L) ~ 0L,
@@ -985,17 +989,8 @@ df <- df %>% mutate(
 
 
 # ---------- Optional: drop original source columns once validated ----------
-# df <- df %>% select(-SEX, -SEX1, -BIRTHSEX, -ADDEPEV, -ADDEPEV2, -ADDEPEV3, ... etc.)
-
-# write_csv(df, here("big_data/BRFSS/brfss_selected_RECODED_AND_NOT_20250916.csv"))
-
-# df <- read_csv(here("big_data/BRFSS/brfss_selected_RECODED_AND_NOT_20250916.csv"))
-
-colnames(df)
-
-# ---------- Optional: drop original source columns once validated ----------
 df <- df %>% select(
-  -SEX, -SEX1, `_SEX`, -BIRTHSEX,
+  -SEX, -SEX1, -`_SEX`, -BIRTHSEX,
   -ADDEPEV, -ADDEPEV2, -ADDEPEV3,
   -ASTHMA, -ASTHMA2, -ASTHMA3, -ASTHNOW,
   -DIABETES, -DIABETE2, -DIABETE3, -DIABETE4,
@@ -1322,5 +1317,5 @@ data_brfss <- df
 # # copd	copd_dx	2011-2024	reasonable agreement
 # # ckd	ckd_dx	2011-2024	unclear
 # # any cancer	cancer_any	2011-2024	
-# # cancer not skin	cancer_other_dx	2011-2024	
+# # cancer not skin	cancer_other_dx	2011-2024
 
