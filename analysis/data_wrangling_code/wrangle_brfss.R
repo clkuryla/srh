@@ -224,7 +224,7 @@ data_brfss <- data_brfss %>%
   mutate(psu = `_PSU`)
 
 data_brfss <- data_brfss %>% 
-  filter(GENHLTH <= 5) %>% 
+  filter(GENHLTH %in% 1:5) %>% 
   mutate(srh = 6 - GENHLTH) %>% # recode for intuitive order
   mutate(srh_cat = factor(
     srh,
@@ -235,8 +235,11 @@ data_brfss <- data_brfss %>%
       "Good",
       "Very Good",
       "Excellent"
-    ))) %>% 
-  filter(`_AGEG5YR` != 14) %>%  # 14 = unknown
+    ))) 
+
+  
+data_brfss <- data_brfss %>% 
+    filter(`_AGEG5YR` != 14) %>%  # 14 = unknown
   mutate(
     # 1) age_5yr_cat: ordered factor with intuitive labels
     age_5yr_cat = factor(
@@ -299,47 +302,9 @@ data_brfss <- data_brfss %>%
                  "60-69", "70-79", "80+", "Unknown"),
       ordered = TRUE
     )
-  ) %>% 
+  )  
   
-  mutate(age_decade_cat_6 = case_when(
-    `_AGEG5YR` %in% c(1,2)   ~ "18-29",
-    `_AGEG5YR` %in% c(3,4)   ~ "30-39",
-    `_AGEG5YR` %in% c(5,6)   ~ "40-49",
-    `_AGEG5YR` %in% c(7,8)   ~ "50-59",
-    `_AGEG5YR` %in% c(9,10)  ~ "60-69",
-    `_AGEG5YR` %in% c(11,12, 13) ~ "70+",
-    `_AGEG5YR` == 14         ~ NA
-  )) %>% 
-  mutate(
-    # Convert the decade-level variable to an ordered factor
-    age_decade_cat_6 = factor(
-      age_decade_cat_6,
-      levels = c("18-29", "30-39", "40-49", "50-59", 
-                 "60-69", "70+", "Unknown"),
-      ordered = TRUE
-    )
-  ) %>% 
-  
-  mutate( age_decade_cat_2 = case_when(
-    `_AGEG5YR` %in% c(1)     ~ "18-24",
-    `_AGEG5YR` %in% c(2,3)   ~ "25-34",
-    `_AGEG5YR` %in% c(4,5)   ~ "35-44",
-    `_AGEG5YR` %in% c(6,7)   ~ "45-54",
-    `_AGEG5YR` %in% c(8,9)   ~ "55-64",
-    `_AGEG5YR` %in% c(10,11) ~ "65-74",
-    `_AGEG5YR` %in% c(12,13) ~ "75+",
-    `_AGEG5YR` == 14         ~ NA
-    
-  )) %>%
-  mutate(
-    # Convert the decade-level variable to an ordered factor
-    age_decade_cat_2 = factor(
-      age_decade_cat_2,
-      levels = c("18-24", "25-34", "35-44", "45-54", 
-                 "55-64", "65-74", "75+", "Unknown"),
-      ordered = TRUE
-    )
-  ) %>% 
+data_brfss <- data_brfss %>%
   mutate(IYEAR = as.integer(IYEAR)) %>% 
   mutate(year = case_when(
     IYEAR == 93 ~ 1993,
@@ -1023,9 +988,11 @@ df <- df %>% select(
 
 df <- df %>% 
   mutate(age = age_5yr_num) %>% 
-  mutate(strata = ststr) %>%
-  select(-`IDATE`, -`_AGEG5YR`, -`_AGE80`, -`AGE`, -`_AGE`, -`_SEX`)
+  select(-`IDATE`, -`_AGEG5YR`, -`_AGE80`, -`AGE`, -`_AGE`) #, -`_SEX`)
 
+df <- df  %>%
+ mutate(strata = strata_year) %>%
+  select(-strata_year)
 
 colnames(df)
 
