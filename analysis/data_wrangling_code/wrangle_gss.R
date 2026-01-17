@@ -31,7 +31,8 @@ if (!requireNamespace("gssr", quietly = TRUE)) {
 library(gssr)
 data("gss_all")
 
-data_gss_raw <- as.data.frame(gss_all) %>%
+data_gss_raw <- gss_all %>%
+  haven::zap_labels() %>%
   select(
     # Core variables
     year,
@@ -127,6 +128,7 @@ data_gss <- data_gss_raw %>%
   )
 
 rm(data_gss_raw)
+rm(gss_all)
 
 # ------------------------------------------------------------------------------
 # Survey object
@@ -149,5 +151,8 @@ svy_gss <- data_gss %>%
 # ------------------------------------------------------------------------------
 # Save wrangled data
 # ------------------------------------------------------------------------------
+ 
+# Strip all haven/Stata metadata (variable labels, format.stata attributes)
+data_gss <- labelled::remove_attributes(data_gss, c("label", "format.stata"))
 
 # readr::write_rds(data_gss, derived_path("data_gss.rds"))
