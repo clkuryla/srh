@@ -1,0 +1,493 @@
+---
+title: "Figure 1 Panel B: Age Coefficient on SRH Over Time"
+author: "Christine L. Kuryla"
+date: today
+format:
+  html:
+    toc: true
+    toc-location: left
+    toc-depth: 3
+    code-fold: true
+    code-tools: true
+    embed-resources: true
+  gfm:
+    toc: true
+editor: visual
+execute:
+  echo: true
+  message: true
+  warning: true
+---
+
+# Overview
+
+**Figure 1 Panel B** shows the convergence phenomenon from a regression perspective: for each year, we regress SRH on age and plot the age coefficient over time.
+
+**Key observation**: The age coefficient (typically negative, meaning older people report worse health) is trending toward zero over time, indicating that age is becoming less predictive of self-rated health.
+
+**Model**: SRH ~ age (simple linear regression, survey-weighted)
+
+**Surveys included**: NHIS, MEPS, BRFSS, GSS, CPS, NHANES
+
+**Output**:
+
+- 2x3 multi-panel figure with metaregression trend lines
+- Per-survey coefficient tables (CSV and RDS)
+- Metaregression results table
+
+
+# Setup
+
+```{r}
+#| label: setup
+#| message: false
+
+# ==============================================================================
+# Load required packages
+# ==============================================================================
+
+library(tidyverse)
+library(here)
+library(survey)
+library(srvyr)
+library(patchwork)
+library(knitr)
+library(DT)
+
+# ==============================================================================
+# Source project functions
+# ==============================================================================
+
+source(here::here("R/paths.R"))
+ensure_dirs()
+
+source(here::here("R/srh_common_functions.R"))
+source(here::here("R/functions/theme_srh.R"))
+source(here::here("R/functions/regress_srh_on_age.R"))
+source(here::here("R/functions/plot_fig1_panel_b.R"))
+
+cat("Functions loaded successfully.\n")
+```
+
+
+# Load Data
+
+Load all six wrangled survey datasets. For Panel B, we need continuous age (not age groups).
+
+```{r}
+#| label: load-data
+
+# ==============================================================================
+# Load and prepare each survey dataset
+# ==============================================================================
+# For regression, we need: srh, age (continuous), year, wt, psu, strata
+# ==============================================================================
+
+# --- NHIS ---
+data_nhis <- readr::read_rds(derived_path("data_nhis.rds")) |>
+  select(srh, age, year, psu, wt, strata) |>
+  filter(wt > 0) |>
+  drop_na(srh, age, year, wt)
+
+cat("NHIS: ", format(nrow(data_nhis), big.mark = ","), " obs, years ",
+    min(data_nhis$year), "-", max(data_nhis$year), "\n")
+
+# --- MEPS ---
+data_meps <- readr::read_rds(derived_path("data_meps.rds")) |>
+  select(srh, age, year, psu, wt, strata) |>
+  filter(wt > 0) |>
+  drop_na(srh, age, year, wt)
+
+cat("MEPS: ", format(nrow(data_meps), big.mark = ","), " obs, years ",
+    min(data_meps$year), "-", max(data_meps$year), "\n")
+
+# --- BRFSS ---
+data_brfss <- readr::read_rds(derived_path("data_brfss.rds")) |>
+  select(srh, age, year, wt) |>
+  filter(wt > 0) |>
+  drop_na(srh, age, year, wt)
+
+cat("BRFSS: ", format(nrow(data_brfss), big.mark = ","), " obs, years ",
+    min(data_brfss$year), "-", max(data_brfss$year), "\n")
+
+# --- GSS ---
+# NOTE: GSS uses 4-point SRH scale (1-4), not 5-point
+data_gss <- readr::read_rds(derived_path("data_gss.rds")) |>
+  select(srh, age, year, wt) |>
+  filter(wt > 0) |>
+  drop_na(srh, age, year, wt)
+
+cat("GSS: ", format(nrow(data_gss), big.mark = ","), " obs, years ",
+    min(data_gss$year), "-", max(data_gss$year), "\n")
+
+# --- CPS ---
+data_cps <- readr::read_rds(derived_path("data_cps.rds")) |>
+  select(srh, age, year, wt) |>
+  filter(wt > 0) |>
+  drop_na(srh, age, year, wt)
+
+cat("CPS: ", format(nrow(data_cps), big.mark = ","), " obs, years ",
+    min(data_cps$year), "-", max(data_cps$year), "\n")
+
+# --- NHANES ---
+data_nhanes <- readr::read_rds(derived_path("data_nhanes.rds")) |>
+  select(srh, age, year, psu, wt, strata) |>
+  filter(wt > 0) |>
+  drop_na(srh, age, year, wt)
+
+cat("NHANES: ", format(nrow(data_nhanes), big.mark = ","), " obs, years ",
+    min(data_nhanes$year), "-", max(data_nhanes$year), "\n")
+```
+
+
+# Run Yearly Regressions
+
+For each survey, run survey-weighted regression SRH ~ age for each year and extract the age coefficient.
+
+```{r}
+#| label: run-regressions
+#| message: true
+
+# ==============================================================================
+# Run regressions for each survey
+# ==============================================================================
+
+cat("\n=== Running yearly regressions ===\n\n")
+
+# --- NHIS ---
+coefficients_nhis <- regress_age_coefficient_by_year(data_nhis, "NHIS")
+
+# --- MEPS ---
+coefficients_meps <- regress_age_coefficient_by_year(data_meps, "MEPS")
+
+# --- BRFSS ---
+coefficients_brfss <- regress_age_coefficient_by_year(data_brfss, "BRFSS")
+
+# --- GSS ---
+coefficients_gss <- regress_age_coefficient_by_year(data_gss, "GSS")
+
+# --- CPS ---
+coefficients_cps <- regress_age_coefficient_by_year(data_cps, "CPS")
+
+# --- NHANES ---
+coefficients_nhanes <- regress_age_coefficient_by_year(data_nhanes, "NHANES")
+
+cat("\nAll regressions complete.\n")
+```
+
+
+# Coefficient Tables
+
+Display the age coefficients for each survey by year.
+
+## NHIS
+
+```{r}
+#| label: table-nhis
+
+table_render(
+  coefficients_nhis |> mutate(across(where(is.numeric), ~ round(.x, 5))),
+  caption = "NHIS: Age coefficient on SRH by year"
+)
+```
+
+## MEPS
+
+```{r}
+#| label: table-meps
+
+table_render(
+  coefficients_meps |> mutate(across(where(is.numeric), ~ round(.x, 5))),
+  caption = "MEPS: Age coefficient on SRH by year"
+)
+```
+
+## BRFSS
+
+```{r}
+#| label: table-brfss
+
+table_render(
+  coefficients_brfss |> mutate(across(where(is.numeric), ~ round(.x, 5))),
+  caption = "BRFSS: Age coefficient on SRH by year"
+)
+```
+
+## GSS
+
+```{r}
+#| label: table-gss
+
+table_render(
+  coefficients_gss |> mutate(across(where(is.numeric), ~ round(.x, 5))),
+  caption = "GSS: Age coefficient on SRH by year (4-point scale)"
+)
+```
+
+## CPS
+
+```{r}
+#| label: table-cps
+
+table_render(
+  coefficients_cps |> mutate(across(where(is.numeric), ~ round(.x, 5))),
+  caption = "CPS: Age coefficient on SRH by year"
+)
+```
+
+## NHANES
+
+```{r}
+#| label: table-nhanes
+
+table_render(
+  coefficients_nhanes |> mutate(across(where(is.numeric), ~ round(.x, 5))),
+  caption = "NHANES: Age coefficient on SRH by year"
+)
+```
+
+
+# Metaregression Results
+
+Run metaregression (coefficient ~ year, weighted by inverse variance) to quantify the trend in the age-SRH relationship over time.
+
+```{r}
+#| label: metaregression
+
+# ==============================================================================
+# Run metaregression for each survey
+# ==============================================================================
+
+meta_nhis <- run_metaregression(coefficients_nhis, "NHIS")
+meta_meps <- run_metaregression(coefficients_meps, "MEPS")
+meta_brfss <- run_metaregression(coefficients_brfss, "BRFSS")
+meta_gss <- run_metaregression(coefficients_gss, "GSS")
+meta_cps <- run_metaregression(coefficients_cps, "CPS")
+meta_nhanes <- run_metaregression(coefficients_nhanes, "NHANES")
+
+# Combine into single table
+meta_results_all <- bind_rows(
+  meta_nhis, meta_meps, meta_brfss, meta_gss, meta_cps, meta_nhanes
+)
+
+# Display
+table_render(
+  meta_results_all |> mutate(across(where(is.numeric), ~ round(.x, 6))),
+  caption = "Metaregression results: Trend in age coefficient over time"
+)
+```
+
+## Pooled Metaregression
+
+Run a single metaregression pooling all surveys to estimate the overall trend.
+
+```{r}
+#| label: pooled-metaregression
+
+# Assemble coefficients list
+coefficients_list <- list(
+  "BRFSS"  = coefficients_brfss,
+  "MEPS"   = coefficients_meps,
+  "NHIS"   = coefficients_nhis,
+  "GSS"    = coefficients_gss,
+  "CPS"    = coefficients_cps,
+  "NHANES" = coefficients_nhanes
+)
+
+# Run pooled metaregression
+meta_pooled <- run_pooled_metaregression(coefficients_list)
+
+cat("\n=== Pooled Metaregression (All Surveys) ===\n")
+cat("Slope: ", round(meta_pooled$slope, 6), " (SE: ", round(meta_pooled$slope_se, 6), ")\n")
+cat("P-value: ", format.pval(meta_pooled$slope_p_value, digits = 3), "\n")
+cat("R-squared: ", round(meta_pooled$r_squared, 4), "\n")
+cat("Interpretation: ", meta_pooled$interpretation, "\n")
+```
+
+
+# Individual Survey Plots
+
+View each survey's coefficient trend individually.
+
+```{r}
+#| label: individual-plots
+#| fig-width: 8
+#| fig-height: 5
+
+# Create meta results list for plotting
+meta_results_list <- list(
+  "NHIS"   = meta_nhis,
+  "MEPS"   = meta_meps,
+  "BRFSS"  = meta_brfss,
+  "GSS"    = meta_gss,
+  "CPS"    = meta_cps,
+  "NHANES" = meta_nhanes
+)
+
+# Individual plots
+plot_single_survey_coefficient(coefficients_nhis, "NHIS", meta_nhis)
+plot_single_survey_coefficient(coefficients_meps, "MEPS", meta_meps)
+plot_single_survey_coefficient(coefficients_brfss, "BRFSS", meta_brfss)
+plot_single_survey_coefficient(coefficients_gss, "GSS", meta_gss)
+plot_single_survey_coefficient(coefficients_cps, "CPS", meta_cps)
+plot_single_survey_coefficient(coefficients_nhanes, "NHANES", meta_nhanes)
+```
+
+
+# Combined Figure (2x3 Panel)
+
+The main publication figure combining all six surveys.
+
+**Layout**: 2 rows x 3 columns
+
+- Top row: BRFSS, MEPS, NHIS
+- Bottom row: GSS, CPS, NHANES
+
+```{r}
+#| label: combined-figure
+#| fig-width: 12
+#| fig-height: 8
+
+# Assemble in correct order
+coefficients_list_ordered <- list(
+  "BRFSS"  = coefficients_brfss,
+  "MEPS"   = coefficients_meps,
+  "NHIS"   = coefficients_nhis,
+  "GSS"    = coefficients_gss,
+  "CPS"    = coefficients_cps,
+  "NHANES" = coefficients_nhanes
+)
+
+meta_results_list_ordered <- list(
+  "BRFSS"  = meta_brfss,
+  "MEPS"   = meta_meps,
+  "NHIS"   = meta_nhis,
+  "GSS"    = meta_gss,
+  "CPS"    = meta_cps,
+  "NHANES" = meta_nhanes
+)
+
+# Generate figure with metaregression lines (default)
+fig1b <- plot_fig1_panel_b(
+  coefficients_list = coefficients_list_ordered,
+  meta_results_list = meta_results_list_ordered,
+  show_metareg = TRUE,
+  ncol = 3,
+  y_label = "Age coefficient",
+  x_label = "Year"
+)
+
+fig1b
+```
+
+## Alternative: Without Metaregression Lines
+
+```{r}
+#| label: combined-figure-no-meta
+#| fig-width: 12
+#| fig-height: 8
+
+fig1b_no_meta <- plot_fig1_panel_b(
+  coefficients_list = coefficients_list_ordered,
+  show_metareg = FALSE,
+  ncol = 3,
+  y_label = "Age coefficient",
+  x_label = "Year"
+)
+
+fig1b_no_meta
+```
+
+
+# Save Outputs
+
+## Save Figures
+
+```{r}
+#| label: save-figures
+
+fig_dir <- here::here("output", "figures")
+if (!dir.exists(fig_dir)) {
+  dir.create(fig_dir, recursive = TRUE)
+}
+
+draft_date <- format(Sys.Date(), "%Y%m%d")
+
+# Draft version
+ggsave(
+  filename = file.path(fig_dir, paste0("fig1b_draft_", draft_date, ".png")),
+  plot = fig1b,
+  width = 12,
+  height = 8,
+  dpi = 300
+)
+cat("Saved draft PNG\n")
+
+# Final versions
+ggsave(
+  filename = file.path(fig_dir, "fig1b_panel_b.png"),
+  plot = fig1b,
+  width = 12,
+  height = 8,
+  dpi = 300
+)
+cat("Saved final PNG\n")
+
+ggsave(
+  filename = file.path(fig_dir, "fig1b_panel_b.pdf"),
+  plot = fig1b,
+  width = 12,
+  height = 8
+)
+cat("Saved final PDF\n")
+
+# Version without metaregression
+ggsave(
+  filename = file.path(fig_dir, "fig1b_panel_b_no_metareg.png"),
+  plot = fig1b_no_meta,
+  width = 12,
+  height = 8,
+  dpi = 300
+)
+cat("Saved version without metaregression lines\n")
+```
+
+## Save Tables
+
+```{r}
+#| label: save-tables
+
+# Save coefficient tables for each survey
+save_all_coefficients_tables(
+  coefficients_list = coefficients_list_ordered,
+  output_dir = here::here("output", "tables"),
+  date_suffix = TRUE
+)
+
+# Save combined coefficients table
+combined_coefficients <- bind_rows(coefficients_list_ordered, .id = "survey")
+combined_path <- here::here("output", "tables",
+                            paste0("fig1b_coefficients_all_surveys_", draft_date, ".csv"))
+readr::write_csv(
+  combined_coefficients |> mutate(across(where(is.numeric), ~ round(.x, 6))),
+  combined_path
+)
+cat("Saved combined coefficients: ", basename(combined_path), "\n")
+
+# Save metaregression results (per-survey + pooled)
+meta_all_with_pooled <- bind_rows(meta_results_all, meta_pooled)
+save_metaregression_table(
+  meta_all_with_pooled,
+  output_dir = here::here("output", "tables"),
+  date_suffix = TRUE
+)
+```
+
+
+# Session Info
+
+```{r}
+#| label: session-info
+
+sessionInfo()
+```

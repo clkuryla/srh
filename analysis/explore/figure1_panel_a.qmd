@@ -1,0 +1,565 @@
+---
+title: "Figure 1 Panel A: Mean SRH by Age Group Over Time"
+author: "Christine L. Kuryla"
+date: today
+format:
+  html:
+    toc: true
+    toc-location: left
+    toc-depth: 3
+    code-fold: true
+    code-tools: true
+    embed-resources: true
+  gfm:
+    toc: true
+editor: visual
+execute:
+  echo: true
+  message: true
+  warning: true
+---
+
+# Overview
+
+**Figure 1 Panel A** shows the convergence phenomenon: weighted mean self-rated health (SRH) by age group over time across all six surveys.
+
+**Key observation**: Younger and older age groups are converging toward similar mean SRH values over time, suggesting a shift in how age relates to self-rated health.
+
+**Surveys included**: NHIS, MEPS, BRFSS, GSS, CPS, NHANES
+
+**Output**:
+
+- 2x3 multi-panel figure (publication-ready)
+- Per-survey estimates tables (CSV and RDS)
+
+
+# Setup
+
+```{r}
+#| label: setup
+#| message: false
+
+# ==============================================================================
+# Load required packages
+# ==============================================================================
+
+library(tidyverse)
+library(here)
+library(srvyr)        # Survey-weighted analysis
+library(patchwork)    # Combining plots
+library(cowplot)      # For extracting legends
+library(knitr)
+library(DT)
+
+# ==============================================================================
+# Source project functions
+# ==============================================================================
+
+# Paths: Provides depot_path() and derived_path() for data access
+source(here::here("R/paths.R"))
+ensure_dirs()
+
+# Common functions: table_render(), add_age_group(), color palettes
+source(here::here("R/srh_common_functions.R"))
+
+# Theme and colors: age_colors, theme_srh() (though we use theme_minimal for now)
+source(here::here("R/functions/theme_srh.R"))
+
+# SRH summarization: summarize_srh_over_time(), summarize_srh_over_time_chunked()
+source(here::here("old_code/srh_and_age_over_time.R"))
+
+# Figure 1A plotting functions: plot_fig1_panel_a(), save_estimates_table()
+source(here::here("R/functions/plot_fig1_panel_a.R"))
+
+# ==============================================================================
+# Display configuration
+# ==============================================================================
+
+# Print the age colors being used
+cat("Age colors (Okabe-Ito palette for scheme B):\n")
+print(age_colors)
+```
+
+
+# Load Data
+
+Load all six wrangled survey datasets from the data depot. Each dataset has been pre-processed with standardized variable names.
+
+**Required columns**: `srh`, `age`, `year`, `wt` (and `psu`, `strata` where available)
+
+**SRH coding**: Higher values = better health (1=Poor to 5=Excellent for most surveys; 1=Poor to 4=Excellent for GSS)
+
+```{r}
+#| label: load-data
+
+# ==============================================================================
+# Load and prepare each survey dataset
+# ==============================================================================
+#
+# Steps for each survey:
+# 1. Load from derived data path
+# 2. Select required columns (keep psu/strata if available)
+# 3. Filter out zero/missing weights
+# 4. Remove rows with missing key variables
+# 5. Add age_group using scheme "B" (18-29, 30-39, ..., 80-89)
+#
+# Note: We use scheme "B" throughout for consistency with the age_colors palette.
+# ==============================================================================
+
+# --- NHIS ---
+# Full survey design: has psu, strata, weights
+data_nhis <- readr::read_rds(derived_path("data_nhis.rds")) |>
+  select(srh, age, year, psu, wt, strata) |>
+  filter(wt != 0) |>
+
+  drop_na(srh, age, year, wt) |>
+  add_age_group(scheme = "B", new_var = age_group)
+
+cat("NHIS: ", nrow(data_nhis), " observations, years ",
+    min(data_nhis$year), "-", max(data_nhis$year), "\n")
+
+# --- MEPS ---
+# Full survey design: has psu, strata, weights
+data_meps <- readr::read_rds(derived_path("data_meps.rds")) |>
+  select(srh, age, year, psu, wt, strata) |>
+  filter(wt != 0) |>
+  drop_na(srh, age, year, wt) |>
+  add_age_group(scheme = "B", new_var = age_group)
+
+cat("MEPS: ", nrow(data_meps), " observations, years ",
+    min(data_meps$year), "-", max(data_meps$year), "\n")
+
+# --- BRFSS ---
+# Weights only (psu/strata complex; using weights-only for memory efficiency)
+data_brfss <- readr::read_rds(derived_path("data_brfss.rds")) |>
+  select(srh, age, year, wt) |>
+  filter(wt != 0) |>
+  drop_na(srh, age, year, wt) |>
+  add_age_group(scheme = "B", new_var = age_group)
+
+cat("BRFSS: ", nrow(data_brfss), " observations, years ",
+    min(data_brfss$year), "-", max(data_brfss$year), "\n")
+
+# --- GSS ---
+# Weights only (no psu/strata in standard extract)
+# NOTE: GSS uses 4-point scale (1=Poor to 4=Excellent), not 5-point
+data_gss <- readr::read_rds(derived_path("data_gss.rds")) |>
+  select(srh, age, year, wt) |>
+  filter(wt != 0) |>
+  drop_na(srh, age, year, wt) |>
+  add_age_group(scheme = "B", new_var = age_group)
+
+cat("GSS: ", nrow(data_gss), " observations, years ",
+    min(data_gss$year), "-", max(data_gss$year), "\n")
+cat("  NOTE: GSS uses 4-point SRH scale (1-4), not 5-point\n")
+
+# --- CPS ---
+# Weights only
+data_cps <- readr::read_rds(derived_path("data_cps.rds")) |>
+  select(srh, age, year, wt) |>
+  filter(wt != 0) |>
+  drop_na(srh, age, year, wt) |>
+  add_age_group(scheme = "B", new_var = age_group)
+
+cat("CPS: ", nrow(data_cps), " observations, years ",
+    min(data_cps$year), "-", max(data_cps$year), "\n")
+
+# --- NHANES ---
+# Full survey design: has psu, strata, weights
+data_nhanes <- readr::read_rds(derived_path("data_nhanes.rds")) |>
+  select(srh, age, year, psu, wt, strata) |>
+  filter(wt != 0) |>
+  drop_na(srh, age, year, wt) |>
+  add_age_group(scheme = "B", new_var = age_group)
+
+cat("NHANES: ", nrow(data_nhanes), " observations, years ",
+    min(data_nhanes$year), "-", max(data_nhanes$year), "\n")
+```
+
+
+# Data Validation
+
+Quick sanity checks to ensure data is correctly formatted before analysis.
+
+```{r}
+#| label: validate-data
+
+# ==============================================================================
+# Validate SRH ranges and age group coverage
+# ==============================================================================
+
+validate_survey <- function(data, name) {
+  cat("\n=== ", name, " ===\n")
+
+  # SRH range
+  srh_range <- range(data$srh, na.rm = TRUE)
+  cat("SRH range: ", srh_range[1], " to ", srh_range[2], "\n")
+
+  # Age groups present
+  age_groups_present <- levels(data$age_group)
+  cat("Age groups: ", paste(age_groups_present, collapse = ", "), "\n")
+
+  # Check for any missing age groups
+  n_per_age <- data |> count(age_group) |> pull(n)
+  cat("N per age group: ", paste(n_per_age, collapse = ", "), "\n")
+
+  # Year range
+  cat("Year range: ", min(data$year), " to ", max(data$year), "\n")
+}
+
+validate_survey(data_nhis, "NHIS")
+validate_survey(data_meps, "MEPS")
+validate_survey(data_brfss, "BRFSS")
+validate_survey(data_gss, "GSS")
+validate_survey(data_cps, "CPS")
+validate_survey(data_nhanes, "NHANES")
+```
+
+
+# Compute Survey-Weighted Estimates
+
+Compute weighted mean SRH by age group and year for each survey. This uses the `summarize_srh_over_time()` function which properly handles survey weights and design elements.
+
+```{r}
+#| label: compute-estimates
+#| message: true
+
+# ==============================================================================
+# Compute weighted mean SRH by age group and year for each survey
+# ==============================================================================
+#
+# The summarize_srh_over_time() function:
+# - Creates a survey design object respecting weights/psu/strata
+# - Computes weighted mean SRH with standard errors and CIs
+# - Returns list with $estimates (data frame) and $plot (ggplot)
+#
+# For BRFSS (very large), use the chunked version to avoid memory issues.
+# The chunked version processes year-by-year and can cache results.
+# ==============================================================================
+
+# Title style "dataset" = just survey name in title, not full description
+# (We'll use our own combined figure, so we just need the estimates)
+
+cat("Computing estimates for each survey...\n\n")
+
+# --- NHIS ---
+cat("NHIS...\n")
+srh_means_nhis <- summarize_srh_over_time(
+  data_nhis,
+  survey_name = "NHIS",
+  title_style = "dataset"
+)
+
+# --- MEPS ---
+cat("MEPS...\n")
+srh_means_meps <- summarize_srh_over_time(
+  data_meps,
+  survey_name = "MEPS",
+  title_style = "dataset"
+)
+
+# --- BRFSS (chunked for memory efficiency) ---
+cat("BRFSS (chunked processing)...\n")
+srh_means_brfss <- summarize_srh_over_time_chunked(
+  data_brfss,
+  survey_name = "BRFSS",
+  title_style = "dataset",
+  cache_dir = derived_path("cache")  # Cache to avoid recomputation
+)
+
+# --- GSS ---
+cat("GSS...\n")
+srh_means_gss <- summarize_srh_over_time(
+  data_gss,
+  survey_name = "GSS",
+  title_style = "dataset"
+)
+
+# --- CPS ---
+cat("CPS...\n")
+srh_means_cps <- summarize_srh_over_time(
+  data_cps,
+  survey_name = "CPS",
+  title_style = "dataset"
+)
+
+# --- NHANES ---
+cat("NHANES...\n")
+srh_means_nhanes <- summarize_srh_over_time(
+  data_nhanes,
+  survey_name = "NHANES",
+  title_style = "dataset"
+)
+
+cat("\nAll estimates computed successfully.\n")
+```
+
+
+# Estimates Tables
+
+Display and save the estimates tables for each survey. These tables contain:
+
+- `age_group`: Age group (scheme B)
+- `year`: Survey year
+- `mean_srh`: Weighted mean SRH
+- `se`: Standard error
+- `ci_lower`, `ci_upper`: 95% confidence interval bounds
+
+## NHIS
+
+```{r}
+#| label: table-nhis
+
+table_render(
+  srh_means_nhis$estimates,
+  caption = "NHIS: Weighted mean SRH by age group and year"
+)
+```
+
+## MEPS
+
+```{r}
+#| label: table-meps
+
+table_render(
+  srh_means_meps$estimates,
+  caption = "MEPS: Weighted mean SRH by age group and year"
+)
+```
+
+## BRFSS
+
+```{r}
+#| label: table-brfss
+
+table_render(
+  srh_means_brfss$estimates,
+  caption = "BRFSS: Weighted mean SRH by age group and year"
+)
+```
+
+## GSS
+
+```{r}
+#| label: table-gss
+
+table_render(
+  srh_means_gss$estimates,
+  caption = "GSS: Weighted mean SRH by age group and year (4-point scale)"
+)
+```
+
+## CPS
+
+```{r}
+#| label: table-cps
+
+table_render(
+  srh_means_cps$estimates,
+  caption = "CPS: Weighted mean SRH by age group and year"
+)
+```
+
+## NHANES
+
+```{r}
+#| label: table-nhanes
+
+table_render(
+  srh_means_nhanes$estimates,
+  caption = "NHANES: Weighted mean SRH by age group and year"
+)
+```
+
+
+# Individual Survey Plots
+
+View each survey's plot individually before combining. These use the default plots from `summarize_srh_over_time()`.
+
+```{r}
+#| label: individual-plots
+#| fig-width: 8
+#| fig-height: 5
+
+# Display individual plots (using the function's default styling)
+srh_means_nhis$plot + ggtitle("NHIS")
+srh_means_meps$plot + ggtitle("MEPS")
+srh_means_brfss$plot + ggtitle("BRFSS")
+srh_means_gss$plot + ggtitle("GSS (4-point scale)")
+srh_means_cps$plot + ggtitle("CPS")
+srh_means_nhanes$plot + ggtitle("NHANES")
+```
+
+
+# Combined Figure (2x3 Panel)
+
+The main publication figure combining all six surveys.
+
+**Layout**: 2 rows x 3 columns
+
+- Top row: BRFSS, MEPS, NHIS
+- Bottom row: GSS, CPS, NHANES
+
+**Design choices**:
+
+- Each panel has FREE y-axis (surveys have different SRH scales/ranges)
+- Each panel has FREE x-axis (surveys cover different year ranges)
+- Shared legend at bottom
+- Okabe-Ito colorblind-friendly colors for age groups
+
+```{r}
+#| label: combined-figure
+#| fig-width: 12
+#| fig-height: 8
+
+# ==============================================================================
+# Create the combined 2x3 figure
+# ==============================================================================
+
+# Assemble estimates into named list
+# Order determines position in figure: left-to-right, top-to-bottom
+# Top row:    BRFSS, MEPS, NHIS
+# Bottom row: GSS, CPS, NHANES
+estimates_list <- list(
+  "BRFSS"  = srh_means_brfss$estimates,
+  "MEPS"   = srh_means_meps$estimates,
+  "NHIS"   = srh_means_nhis$estimates,
+  "GSS"    = srh_means_gss$estimates,
+  "CPS"    = srh_means_cps$estimates,
+  "NHANES" = srh_means_nhanes$estimates
+)
+
+# Generate combined figure
+fig1a <- plot_fig1_panel_a(
+  estimates_list = estimates_list,
+  colors = age_colors,
+  show_ci = FALSE,  # Cleaner without CIs for publication
+  ncol = 3,
+  y_label = "Weighted mean SRH",
+  x_label = "Year"
+)
+
+# Display
+fig1a
+```
+
+## Alternative: With Confidence Intervals
+
+```{r}
+#| label: combined-figure-ci
+#| fig-width: 12
+#| fig-height: 8
+
+# Version with confidence interval ribbons
+fig1a_ci <- plot_fig1_panel_a(
+  estimates_list = estimates_list,
+  colors = age_colors,
+  show_ci = TRUE,
+  ncol = 3,
+  y_label = "Weighted mean SRH",
+  x_label = "Year"
+)
+
+fig1a_ci
+```
+
+
+# Save Outputs
+
+## Save Figures
+
+```{r}
+#| label: save-figures
+
+# ==============================================================================
+# Save figures in multiple formats
+# ==============================================================================
+
+# Ensure output directory exists
+fig_dir <- here::here("output", "figures")
+if (!dir.exists(fig_dir)) {
+  dir.create(fig_dir, recursive = TRUE)
+}
+
+# --- Draft version (with date) ---
+draft_date <- format(Sys.Date(), "%Y%m%d")
+
+ggsave(
+  filename = file.path(fig_dir, paste0("fig1a_draft_", draft_date, ".png")),
+  plot = fig1a,
+  width = 12,
+  height = 8,
+  dpi = 300
+)
+cat("Saved draft PNG\n")
+
+# --- Final versions (no date, will be overwritten) ---
+ggsave(
+  filename = file.path(fig_dir, "fig1a_panel_a.png"),
+  plot = fig1a,
+  width = 12,
+  height = 8,
+  dpi = 300
+)
+cat("Saved final PNG\n")
+
+ggsave(
+  filename = file.path(fig_dir, "fig1a_panel_a.pdf"),
+  plot = fig1a,
+  width = 12,
+  height = 8
+)
+cat("Saved final PDF\n")
+
+# --- Version with CIs ---
+ggsave(
+  filename = file.path(fig_dir, "fig1a_panel_a_with_ci.png"),
+  plot = fig1a_ci,
+  width = 12,
+  height = 8,
+  dpi = 300
+)
+cat("Saved CI version PNG\n")
+```
+
+## Save Tables
+
+```{r}
+#| label: save-tables
+
+# ==============================================================================
+# Save estimates tables for each survey
+# ==============================================================================
+
+# Save all tables (CSV and RDS formats)
+save_all_estimates_tables(
+  estimates_list = estimates_list,
+  output_dir = here::here("output", "tables"),
+  date_suffix = TRUE  # Include date for draft tracking
+)
+
+# Also save a combined table with all surveys
+combined_estimates <- bind_rows(
+  estimates_list,
+  .id = "survey"
+)
+
+# Save combined table
+combined_path <- here::here("output", "tables",
+                            paste0("fig1a_estimates_all_surveys_",
+                                   format(Sys.Date(), "%Y%m%d"), ".csv"))
+readr::write_csv(
+  combined_estimates |> mutate(across(where(is.numeric), ~ round(.x, 4))),
+  combined_path
+)
+cat("\nSaved combined estimates table: ", combined_path, "\n")
+```
+
+
+# Session Info
+
+```{r}
+#| label: session-info
+
+sessionInfo()
+```

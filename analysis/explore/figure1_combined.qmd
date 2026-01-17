@@ -1,0 +1,307 @@
+---
+title: "Figure 1 Combined: Panel A over Panel B (2x6 Layout)"
+author: "Christine L. Kuryla"
+date: today
+format:
+  html:
+    toc: true
+    toc-location: left
+    code-fold: true
+    embed-resources: true
+editor: visual
+execute:
+  echo: true
+  message: false
+  warning: true
+---
+
+# Overview
+
+**Combined Figure 1** arranges Panel A (mean SRH by age group) and Panel B (age coefficient) in a 2-row by 6-column layout where each column is a survey dataset.
+
+**Layout:**
+- **Row 1**: Weighted mean SRH by age group over time (Panel A content)
+- **Row 2**: Age coefficient on SRH over time (Panel B content)
+- **Columns**: BRFSS, MEPS, NHIS, GSS, CPS, NHANES (same order)
+
+This allows direct vertical comparison of the two convergence phenomena for each survey.
+
+
+# Setup
+
+```{r}
+#| label: setup
+
+library(tidyverse)
+library(here)
+library(patchwork)
+
+# Source project functions
+source(here::here("R/paths.R"))
+ensure_dirs()
+
+source(here::here("R/functions/theme_srh.R"))
+source(here::here("R/functions/plot_fig1_combined.R"))
+
+cat("Functions loaded.\n")
+cat("Age colors:\n")
+print(age_colors)
+```
+
+
+# Load Existing Estimates
+
+Load the pre-computed estimates from the Panel A and Panel B analyses.
+
+```{r}
+#| label: load-estimates
+
+# ==============================================================================
+# Load Panel A estimates (mean SRH by age group and year)
+# ==============================================================================
+
+# Survey order for the figure
+survey_order <- c("BRFSS", "MEPS", "NHIS", "GSS", "CPS", "NHANES")
+
+# Load from saved RDS files
+estimates_list <- lapply(survey_order, function(svy) {
+  path <- here::here("output", "tables",
+                     paste0("fig1a_estimates_", tolower(svy), "_20260116.rds"))
+  if (file.exists(path)) {
+    readr::read_rds(path)
+  } else {
+    stop("Missing Panel A estimates for ", svy, ": ", path)
+  }
+})
+names(estimates_list) <- survey_order
+
+cat("Loaded Panel A estimates for:", paste(names(estimates_list), collapse = ", "), "\n")
+
+# Quick check
+lapply(estimates_list, function(df) {
+  cat("  ", unique(df$age_group)[1], "...", nrow(df), "rows\n")
+})
+```
+
+```{r}
+#| label: load-coefficients
+
+# ==============================================================================
+# Load Panel B coefficients (age coefficient by year)
+# ==============================================================================
+
+coefficients_list <- lapply(survey_order, function(svy) {
+  path <- here::here("output", "tables",
+                     paste0("fig1b_coefficients_", tolower(svy), "_20260116.rds"))
+  if (file.exists(path)) {
+    readr::read_rds(path)
+  } else {
+    stop("Missing Panel B coefficients for ", svy, ": ", path)
+  }
+})
+names(coefficients_list) <- survey_order
+
+cat("Loaded Panel B coefficients for:", paste(names(coefficients_list), collapse = ", "), "\n")
+
+# Quick check
+lapply(coefficients_list, function(df) {
+  cat("  Years:", min(df$year), "-", max(df$year), ", n =", nrow(df), "\n")
+})
+```
+
+
+# Compute Metaregression Results
+
+Run metaregression for each survey (coefficient ~ year) to get trend lines for Panel B.
+
+```{r}
+#| label: compute-metareg
+
+# Source the regression functions
+source(here::here("R/functions/regress_srh_on_age.R"))
+
+# Run metaregression for each survey
+meta_results_list <- lapply(survey_order, function(svy) {
+  run_metaregression(coefficients_list[[svy]], svy)
+})
+names(meta_results_list) <- survey_order
+
+# Display results
+meta_summary <- bind_rows(meta_results_list) |>
+  select(survey, slope, slope_se, slope_p_value, r_squared) |>
+  mutate(across(where(is.numeric), ~ round(.x, 5)))
+
+cat("\nMetaregression results (slope = change in age coefficient per year):\n")
+print(meta_summary)
+```
+
+
+# Generate Combined Figure
+
+```{r}
+#| label: combined-figure
+#| fig-width: 16
+#| fig-height: 8
+
+# ==============================================================================
+# Create the combined 2x6 figure
+# ==============================================================================
+
+fig1_combined <- plot_fig1_combined(
+  estimates_list = estimates_list,
+  coefficients_list = coefficients_list,
+  meta_results_list = meta_results_list,
+  colors = age_colors,
+  show_ci = FALSE,
+  show_metareg = TRUE,
+  title = "Self Rated Health and Age Over Time",
+  base_size = 14
+)
+
+fig1_combined
+```
+
+
+## Alternative: With Horizontal X-Axis Labels
+
+```{r}
+#| label: combined-figure-horizontal
+#| fig-width: 16
+#| fig-height: 8
+
+fig1_combined_horizontal <- plot_fig1_combined(
+  estimates_list = estimates_list,
+  coefficients_list = coefficients_list,
+  meta_results_list = meta_results_list,
+  colors = age_colors,
+  show_ci = FALSE,
+  show_metareg = TRUE,
+  title = "Self Rated Health and Age Over Time",
+  base_size = 14,
+  tilt_x_labels = 0
+)
+
+fig1_combined_horizontal
+```
+
+
+## Alternative: With Confidence Intervals on Panel A
+
+```{r}
+#| label: combined-figure-ci
+#| fig-width: 16
+#| fig-height: 8
+
+fig1_combined_ci <- plot_fig1_combined(
+  estimates_list = estimates_list,
+  coefficients_list = coefficients_list,
+  meta_results_list = meta_results_list,
+  colors = age_colors,
+  show_ci = TRUE,
+  show_metareg = TRUE,
+  title = "Self Rated Health and Age Over Time",
+  base_size = 14
+)
+
+fig1_combined_ci
+```
+
+
+## Alternative: Without Metaregression Lines
+
+```{r}
+#| label: combined-figure-no-meta
+#| fig-width: 16
+#| fig-height: 8
+
+fig1_combined_no_meta <- plot_fig1_combined(
+  estimates_list = estimates_list,
+  coefficients_list = coefficients_list,
+  meta_results_list = NULL,
+  colors = age_colors,
+  show_ci = FALSE,
+  show_metareg = FALSE,
+  title = "Self Rated Health and Age Over Time",
+  base_size = 14
+)
+
+fig1_combined_no_meta
+```
+
+
+# Save Outputs
+
+```{r}
+#| label: save-figures
+
+fig_dir <- here::here("output", "figures")
+draft_date <- format(Sys.Date(), "%Y%m%d")
+
+# --- Main version (default settings) ---
+ggsave(
+  filename = file.path(fig_dir, paste0("fig1_combined_draft_", draft_date, ".png")),
+  plot = fig1_combined,
+  width = 16,
+  height = 8,
+  dpi = 300
+)
+cat("Saved draft PNG\n")
+
+ggsave(
+  filename = file.path(fig_dir, "fig1_combined.png"),
+  plot = fig1_combined,
+  width = 16,
+  height = 8,
+  dpi = 300
+)
+cat("Saved final PNG\n")
+
+ggsave(
+  filename = file.path(fig_dir, "fig1_combined.pdf"),
+  plot = fig1_combined,
+  width = 16,
+  height = 8
+)
+cat("Saved final PDF\n")
+
+# --- Version with tilted x-axis labels ---
+ggsave(
+  filename = file.path(fig_dir, "fig1_combined_tilted.png"),
+  plot = fig1_combined_tilted,
+  width = 16,
+  height = 8,
+  dpi = 300
+)
+cat("Saved tilted version PNG\n")
+
+# --- Version with CI ---
+ggsave(
+  filename = file.path(fig_dir, "fig1_combined_with_ci.png"),
+  plot = fig1_combined_ci,
+  width = 16,
+  height = 8,
+  dpi = 300
+)
+cat("Saved CI version PNG\n")
+
+# --- Version without metaregression lines ---
+ggsave(
+  filename = file.path(fig_dir, "fig1_combined_no_metareg.png"),
+  plot = fig1_combined_no_meta,
+  width = 16,
+  height = 8,
+  dpi = 300
+)
+cat("Saved no-metareg version PNG\n")
+
+cat("\nAll figures saved to:", fig_dir, "\n")
+```
+
+
+# Session Info
+
+```{r}
+#| label: session-info
+
+sessionInfo()
+```
