@@ -66,7 +66,7 @@ source(here::here("R/srh_common_functions.R"))
 source(here::here("R/functions/theme_srh.R"))
 
 # SRH summarization: summarize_srh_over_time(), summarize_srh_over_time_chunked()
-source(here::here("old_code/srh_and_age_over_time.R"))
+source(here::here("R/functions/srh_and_age_over_time.R"))
 
 # Figure 1A plotting functions: plot_fig1_panel_a(), save_estimates_table()
 source(here::here("R/functions/plot_fig1_panel_a.R"))

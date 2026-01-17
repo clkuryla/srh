@@ -270,3 +270,196 @@ table_mean_srh <- function(df, caption = NULL) {
     )
   )
 }
+
+
+# -------------------------------------------------------------------------------
+# -------------- Chunked version for large datasets (e.g., BRFSS) --------------
+# -------------------------------------------------------------------------------
+# Process large datasets year-by-year AND age-group-by-age-group to avoid memory limits.
+# Returns same structure as summarize_srh_over_time().
+
+summarize_srh_over_time_chunked <- function(
+  data,
+  survey_name,
+  age_group_var = "age_group",
+  srh_var = "srh",
+  year_var = "year",
+  psu_var = "psu",
+  strata_var = "strata",
+  wt_var = "wt",
+  ci_level = 0.95,
+  show_ci = FALSE,
+  colors = c("#D55E00", "#E69F00", "#F0E442", "#009E73", "#56B4E9", "#0072B2", "#CC79A7"),
+  lonely_psu = "adjust",
+  title_style = c("descriptive", "dataset"),
+  cache_dir = NULL,
+  force_recompute = FALSE
+) {
+  
+  title_style <- match.arg(title_style)
+  
+  # Optionally cache intermediate results
+  if (!is.null(cache_dir)) {
+    dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
+    cache_file <- file.path(cache_dir, paste0(survey_name, "_srh_means.rds"))
+    if (file.exists(cache_file) && !force_recompute) {
+      message("Loading cached results from: ", cache_file)
+      estimates <- readr::read_rds(cache_file)
+      return(.build_srh_plot(estimates, survey_name, title_style, colors, show_ci))
+    }
+  }
+
+  old_lonely <- getOption("survey.lonely.psu")
+  options(survey.lonely.psu = lonely_psu)
+  on.exit(options(survey.lonely.psu = old_lonely), add = TRUE)
+
+  # Get unique years and age groups
+
+  years <- sort(unique(data[[year_var]]))
+  age_groups <- sort(unique(data[[age_group_var]]))
+  
+  message("Processing ", length(years), " years x ", length(age_groups), 
+          " age groups for ", survey_name, "...")
+
+  # Check which design elements are available
+  vars_present <- names(data)
+  has_psu <- !is.null(psu_var) && psu_var %in% vars_present
+  has_strata <- !is.null(strata_var) && strata_var %in% vars_present
+  has_wt <- wt_var %in% vars_present
+  stopifnot(has_wt)
+
+  # Process each year x age_group combination separately
+  results_list <- vector("list", length(years) * length(age_groups))
+  idx <- 0
+  
+  for (i in seq_along(years)) {
+    yr <- years[i]
+    message("  Year ", yr, " (", i, "/", length(years), ")")
+    
+    for (j in seq_along(age_groups)) {
+      ag <- age_groups[j]
+      idx <- idx + 1
+      
+      # Subset to single year AND age group using base R for memory efficiency
+      row_mask <- data[[year_var]] == yr & data[[age_group_var]] == ag
+      data_chunk <- data[row_mask, , drop = FALSE]
+      
+      # Skip if no data
+      if (nrow(data_chunk) == 0) {
+        next
+      }
+
+      # Filter to valid observations using base R
+      valid_mask <- !is.na(data_chunk[[srh_var]]) & 
+                    is.finite(data_chunk[[srh_var]]) &
+                    !is.na(data_chunk[[wt_var]]) & 
+                    is.finite(data_chunk[[wt_var]]) & 
+                    data_chunk[[wt_var]] > 0
+      
+      if (has_psu) valid_mask <- valid_mask & !is.na(data_chunk[[psu_var]])
+      if (has_strata) valid_mask <- valid_mask & !is.na(data_chunk[[strata_var]])
+      
+      data_chunk <- data_chunk[valid_mask, , drop = FALSE]
+      
+      if (nrow(data_chunk) == 0) {
+        next
+      }
+
+      # Create survey design based on available elements
+      if (has_psu && has_strata) {
+        svy <- survey::svydesign(
+          ids = as.formula(paste0("~", psu_var)),
+          strata = as.formula(paste0("~", strata_var)),
+          weights = as.formula(paste0("~", wt_var)),
+          data = data_chunk,
+          nest = TRUE
+        )
+      } else if (has_psu) {
+        svy <- survey::svydesign(
+          ids = as.formula(paste0("~", psu_var)),
+          weights = as.formula(paste0("~", wt_var)),
+          data = data_chunk
+        )
+      } else if (has_strata) {
+        svy <- survey::svydesign(
+          ids = ~1,
+          strata = as.formula(paste0("~", strata_var)),
+          weights = as.formula(paste0("~", wt_var)),
+          data = data_chunk
+        )
+      } else {
+        svy <- survey::svydesign(
+          ids = ~1,
+          weights = as.formula(paste0("~", wt_var)),
+          data = data_chunk
+        )
+      }
+
+      # Compute mean for this year x age_group using survey package directly
+      srh_formula <- as.formula(paste0("~", srh_var))
+      mean_result <- survey::svymean(srh_formula, svy, na.rm = TRUE)
+      ci_result <- confint(mean_result, level = ci_level)
+      
+      results_list[[idx]] <- data.frame(
+        age_group = ag,
+        year = yr,
+        mean_srh = as.numeric(coef(mean_result)),
+        se = as.numeric(survey::SE(mean_result)),
+        ci_lower = ci_result[1],
+        ci_upper = ci_result[2],
+        stringsAsFactors = FALSE
+      )
+
+      # Aggressive cleanup
+      rm(data_chunk, svy, mean_result, ci_result, valid_mask, row_mask)
+    }
+    
+    # Force garbage collection after each year
+    gc(verbose = FALSE)
+  }
+
+  # Combine all results
+  estimates <- dplyr::bind_rows(results_list) %>%
+    mutate(age_group = factor(age_group, levels = age_groups)) %>%
+    arrange(age_group, year)
+
+  stopifnot(nrow(estimates) > 0)
+
+  # Cache if requested
+  if (!is.null(cache_dir)) {
+    readr::write_rds(estimates, cache_file)
+    message("Cached results to: ", cache_file)
+  }
+
+  .build_srh_plot(estimates, survey_name, title_style, colors, show_ci)
+}
+
+# Helper function to build the plot (shared by both functions)
+.build_srh_plot <- function(estimates, survey_name, title_style, colors, show_ci) {
+  
+  plot_title <- if (title_style == "descriptive") {
+    paste0(survey_name, ": Weighted mean self-rated health by age group")
+  } else {
+    survey_name
+  }
+
+  p <- ggplot(estimates, aes(x = year, y = mean_srh, color = age_group, group = age_group)) +
+    geom_line(linewidth = 0.6) +
+    geom_point(size = 1.2) +
+    scale_color_manual(values = colors) +
+    labs(
+      title = plot_title,
+      x = "Survey year",
+      y = "Weighted mean SRH",
+      color = "Age group"
+    ) +
+    theme_minimal()
+
+  if (isTRUE(show_ci)) {
+    p <- p +
+      geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper, fill = age_group), alpha = 0.15, color = NA) +
+      scale_fill_manual(values = colors, guide = "none")
+  }
+
+  list(estimates = estimates, plot = p)
+}

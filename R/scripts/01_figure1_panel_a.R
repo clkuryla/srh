@@ -37,7 +37,7 @@ ensure_dirs()
 
 source(here::here("R/srh_common_functions.R"))
 source(here::here("R/functions/theme_srh.R"))
-source(here::here("old_code/srh_and_age_over_time.R"))
+source(here::here("R/functions/srh_and_age_over_time.R"))
 source(here::here("R/functions/plot_fig1_panel_a.R"))
 
 cat("========================================\n")
