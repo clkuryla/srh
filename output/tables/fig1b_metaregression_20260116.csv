@@ -1,0 +1,8 @@
+survey,slope,slope_se,slope_p_value,intercept,r_squared,n_years,year_min,year_max,interpretation
+NHIS,1.33e-4,1.2e-5,0,-0.284945,0.769196,37,1983,2023,Age coefficient trending toward zero (convergence)
+MEPS,1.84e-4,2.6e-5,0,-0.386245,0.700037,24,2000,2023,Age coefficient trending toward zero (convergence)
+BRFSS,2e-4,1.3e-5,0,-0.414489,0.891827,32,1993,2024,Age coefficient trending toward zero (convergence)
+GSS,2.61e-4,1.8e-5,0,-0.531219,0.874188,31,1972,2022,Age coefficient trending toward zero (convergence)
+CPS,2.67e-4,1.3e-5,0,-0.558681,0.938169,29,1996,2024,Age coefficient trending toward zero (convergence)
+NHANES,3.24e-4,1.29e-4,0.040408,-0.657912,0.473651,9,2001.5,2017.5,Age coefficient trending toward zero (convergence)
+Pooled (all surveys),1.95e-4,3.8e-5,1e-6,-0.408113,0.138876,162,1972,2024,Age coefficient trending toward zero (convergence)
