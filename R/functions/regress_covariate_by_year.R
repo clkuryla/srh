@@ -337,3 +337,220 @@ save_fig3_coefficients_table <- function(
 
   invisible(NULL)
 }
+
+
+# ------------------------------------------------------------------------------
+# AGE-STRATIFIED REGRESSION FUNCTION
+# ------------------------------------------------------------------------------
+
+#' Run survey-weighted regression of SRH on a covariate, stratified by age group
+#'
+#' @description
+#' For each age group × year combination, fits a survey-weighted linear model:
+#'   SRH ~ covariate
+#' and extracts the covariate coefficient with standard error and CI.
+#'
+#' This function is designed for Figure 3: showing that within each age group,
+#' the relationship between covariates and SRH remains stable over time.
+#'
+#' @param data Data frame with columns: srh, covariate, year, age_group, wt
+#'   (and optional psu, strata)
+#' @param covariate_var Name of covariate variable (character string)
+#' @param covariate_label Human-readable label for the covariate (for output)
+#' @param survey_name Character string for labeling output (e.g., "NHIS")
+#' @param age_group_var Name of age group variable (default "age_group")
+#' @param age_groups Character vector of age groups to include
+#'   (default: scheme B from add_age_group)
+#' @param srh_var Name of SRH variable (default "srh")
+#' @param year_var Name of year variable (default "year")
+#' @param psu_var Name of PSU variable (default "psu", NULL if not available)
+#' @param strata_var Name of strata variable (default "strata", NULL if not available)
+#' @param wt_var Name of weight variable (default "wt")
+#' @param ci_level Confidence level for intervals (default 0.95)
+#' @param lonely_psu How to handle single-PSU strata (default "adjust")
+#' @param min_n Minimum observations per age-year cell to include (default 50)
+#'
+#' @return Data frame with columns:
+#'   - survey: Survey name
+#'   - covariate: Covariate name
+#'   - covariate_label: Human-readable label
+#'   - age_group: Age group
+#'   - year: Survey year
+#'   - coefficient: Covariate coefficient
+#'   - se: Standard error of coefficient
+#'   - ci_lower, ci_upper: Confidence interval bounds
+#'   - n_unweighted: Unweighted sample size for that age-year cell
+#'
+regress_covariate_by_age_year <- function(
+    data,
+    covariate_var,
+    covariate_label = NULL,
+    survey_name,
+    age_group_var = "age_group",
+    age_groups = c("18-29", "30-39", "40-49", "50-59", "60-69", "70-79", "80-89"),
+    srh_var = "srh",
+    year_var = "year",
+    psu_var = "psu",
+    strata_var = "strata",
+    wt_var = "wt",
+    ci_level = 0.95,
+    lonely_psu = "adjust",
+    min_n = 50
+) {
+
+  # --- Input validation ---
+  stopifnot(is.data.frame(data))
+  stopifnot(srh_var %in% names(data))
+  stopifnot(covariate_var %in% names(data))
+  stopifnot(year_var %in% names(data))
+  stopifnot(wt_var %in% names(data))
+  stopifnot(age_group_var %in% names(data))
+
+  if (is.null(covariate_label)) {
+    covariate_label <- covariate_var
+  }
+
+  # --- Set survey options ---
+  old_lonely <- getOption("survey.lonely.psu")
+  options(survey.lonely.psu = lonely_psu)
+  on.exit(options(survey.lonely.psu = old_lonely), add = TRUE)
+
+  # --- Check which design elements are available ---
+  has_psu <- !is.null(psu_var) && psu_var %in% names(data)
+  has_strata <- !is.null(strata_var) && strata_var %in% names(data)
+
+  # --- Get unique years and filter age groups ---
+  years <- sort(unique(data[[year_var]]))
+
+  # Filter to specified age groups that exist in data
+  existing_age_groups <- unique(data[[age_group_var]])
+  age_groups <- intersect(age_groups, existing_age_groups)
+
+  if (length(age_groups) == 0) {
+    warning("No matching age groups found in data.")
+    return(NULL)
+  }
+
+  message("Processing ", survey_name, " - ", covariate_label, ": ",
+          length(years), " years × ", length(age_groups), " age groups")
+
+  # --- Run regression for each age group × year ---
+  results_list <- list()
+
+  for (ag in age_groups) {
+    for (yr in years) {
+
+      # Subset to this age group and year
+      data_subset <- data[
+        data[[age_group_var]] == ag & data[[year_var]] == yr, ,
+        drop = FALSE
+      ]
+
+      # Filter to valid observations
+      valid_mask <- !is.na(data_subset[[srh_var]]) &
+        !is.na(data_subset[[covariate_var]]) &
+        !is.na(data_subset[[wt_var]]) &
+        data_subset[[wt_var]] > 0
+
+      if (has_psu) valid_mask <- valid_mask & !is.na(data_subset[[psu_var]])
+      if (has_strata) valid_mask <- valid_mask & !is.na(data_subset[[strata_var]])
+
+      data_subset <- data_subset[valid_mask, , drop = FALSE]
+      n_unweighted <- nrow(data_subset)
+
+      # Skip if too few observations
+      if (n_unweighted < min_n) {
+        next
+      }
+
+      # Skip if no variation in covariate
+      if (length(unique(data_subset[[covariate_var]])) < 2) {
+        next
+      }
+
+      # --- Create survey design ---
+      tryCatch({
+        if (has_psu && has_strata) {
+          svy_design <- svydesign(
+            ids = as.formula(paste0("~", psu_var)),
+            strata = as.formula(paste0("~", strata_var)),
+            weights = as.formula(paste0("~", wt_var)),
+            data = data_subset,
+            nest = TRUE
+          )
+        } else if (has_psu) {
+          svy_design <- svydesign(
+            ids = as.formula(paste0("~", psu_var)),
+            weights = as.formula(paste0("~", wt_var)),
+            data = data_subset
+          )
+        } else if (has_strata) {
+          svy_design <- svydesign(
+            ids = ~1,
+            strata = as.formula(paste0("~", strata_var)),
+            weights = as.formula(paste0("~", wt_var)),
+            data = data_subset
+          )
+        } else {
+          svy_design <- svydesign(
+            ids = ~1,
+            weights = as.formula(paste0("~", wt_var)),
+            data = data_subset
+          )
+        }
+
+        # --- Fit the model: SRH ~ covariate ---
+        formula <- as.formula(paste0(srh_var, " ~ ", covariate_var))
+        model <- svyglm(formula, design = svy_design)
+
+        # --- Extract covariate coefficient ---
+        coef_summary <- summary(model)$coefficients
+        covar_row <- coef_summary[covariate_var, ]
+
+        coefficient <- covar_row["Estimate"]
+        se <- covar_row["Std. Error"]
+
+        # Confidence interval
+        ci <- confint(model, level = ci_level)[covariate_var, ]
+        ci_lower <- ci[1]
+        ci_upper <- ci[2]
+
+        results_list[[length(results_list) + 1]] <- data.frame(
+          survey = survey_name,
+          covariate = covariate_var,
+          covariate_label = covariate_label,
+          age_group = ag,
+          year = yr,
+          coefficient = coefficient,
+          se = se,
+          ci_lower = ci_lower,
+          ci_upper = ci_upper,
+          n_unweighted = n_unweighted,
+          stringsAsFactors = FALSE
+        )
+
+      }, error = function(e) {
+        # Silently skip failed cells
+      })
+    }
+  }
+
+  # --- Combine results ---
+  coefficients <- dplyr::bind_rows(results_list)
+  rownames(coefficients) <- NULL
+
+  if (nrow(coefficients) == 0) {
+    warning("No valid results for ", survey_name, " - ", covariate_label)
+    return(NULL)
+  }
+
+  # Ensure age_group is a factor with correct ordering
+  coefficients$age_group <- factor(
+    coefficients$age_group,
+    levels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70-79", "80-89")
+  )
+
+  message("  Completed: ", nrow(coefficients), " age-year cells with valid coefficients")
+
+  return(coefficients)
+}
