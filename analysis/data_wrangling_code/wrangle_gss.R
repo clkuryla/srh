@@ -56,9 +56,9 @@ data_gss_raw <- gss_all %>%
     marital,
     partyid,
     # Weights (vpsu and vstrat not available in gssr)
+    # Note: wtsscomp was removed in gssr v0.8+
     wtssps,
-    wtssall,
-    wtsscomp
+    wtssall
   )
 
 # ------------------------------------------------------------------------------
@@ -101,9 +101,8 @@ data_gss <- data_gss_raw %>%
       sex == 2 ~ "Female",
       TRUE ~ NA_character_
     ),
-    # Weights: prefer wtsscomp for analyses spanning multiple years
-    # wtssall stops at 2018, wtssps is for single-year analyses
-    wt = coalesce(wtsscomp, wtssall, wtssps)
+    # Weights: wtssall for multi-year analyses, wtssps for single-year
+    wt = coalesce(wtssall, wtssps)
   ) %>%
   # Create age groups consistent with other surveys
   mutate(
