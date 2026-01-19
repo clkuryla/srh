@@ -311,7 +311,22 @@ create_lexis_subplot <- function(data,
                                   cohort_line_color = "gray30",
                                   cohort_line_alpha = 0.7,
                                   tilt_x_labels = 45,
+                                  na_fill = "gray80",
                                   base_size = 12) {
+
+
+  # Complete the grid so missing cells show as gray instead of white gaps
+  # Infer year step from data (handles annual, biennial, etc.)
+  all_years_data <- sort(unique(data$year))
+  if (length(all_years_data) > 1) {
+    year_step <- min(diff(all_years_data))
+    all_years <- seq(min(all_years_data), max(all_years_data), by = year_step)
+  } else {
+    all_years <- all_years_data
+  }
+  all_ages <- sort(unique(data$age))
+  complete_grid <- expand.grid(year = all_years, age = all_ages)
+  data <- merge(complete_grid, data, by = c("year", "age"), all.x = TRUE)
 
   # Base plot
   p <- ggplot(data, aes(x = year, y = age, fill = mean_srh)) +
@@ -321,14 +336,11 @@ create_lexis_subplot <- function(data,
   if (shared_scale) {
     # Use fixed limits for shared scale
     limits <- scale_limits
-    # Format legend title with actual range (rounded to 2 decimal places)
-    legend_title <- paste0("Mean SRH\n(",
-                           round(scale_limits[1], 2), "-",
-                           round(scale_limits[2], 2), ")")
+    legend_title <- "Mean SRH"
   } else {
     # Use data-driven limits for independent scales
     limits <- NULL
-    legend_title <- "Mean\nSRH"
+    legend_title <- "Mean SRH"
   }
 
   # Color scale
@@ -340,6 +352,7 @@ create_lexis_subplot <- function(data,
       high = if (reverse_colors) low_color else high_color,
       midpoint = midpoint,
       limits = limits,
+      na.value = na_fill,
       name = legend_title,
       guide = guide_colorbar(barwidth = 0.8, barheight = 5)
     )
@@ -357,6 +370,7 @@ create_lexis_subplot <- function(data,
       option = viridis_option,
       direction = if (reverse_colors) -1 else 1,
       limits = limits,
+      na.value = na_fill,
       name = legend_title,
       guide = guide_colorbar(barwidth = 0.8, barheight = 5)
     )

@@ -106,7 +106,7 @@ cat("Preparing Lexis data...\n")
 # Common settings across surveys
 age_bin <- 5       # 5-year age bins
 min_age <- 20      # Standardized minimum age
-max_age <- 80      # Standardized maximum age (avoids BRFSS top-coding issues)
+max_age <- 89      # Standardized maximum age
 min_cell_n <- 30   # Minimum obs per cell
 
 cat("  NHIS (2-year periods)...\n")
@@ -133,9 +133,14 @@ lexis_meps <- prepare_lexis_data(
   srh_scale = "5"
 )
 
-cat("  BRFSS...\n")
+cat("  BRFSS (combining ages 80+ due to top-coding)...\n")
+# BRFSS top-codes ages 70+ as 72, 77, or 89 only (no ages 80-88)
+# Recode 89 to 82 so all 80+ fall into one age bin
+data_brfss_recoded <- data_brfss |>
+  mutate(age = if_else(age >= 80, 82, age))
+
 lexis_brfss <- prepare_lexis_data(
-  data_brfss,
+  data_brfss_recoded,
   age_binwidth = age_bin,
   year_binwidth = 1,
   min_age = min_age,
