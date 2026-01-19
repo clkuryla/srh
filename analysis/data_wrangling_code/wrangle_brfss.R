@@ -197,8 +197,6 @@ data_brfss_raw <- bind_rows(all_dfs)
 
 # data_brfss_raw <- read_csv(derived_path("brfss_selected_not_recoded.csv"))
 
-```
-
 ################## Wrangle BRFSS data ##################
 ########################################################
 
