@@ -11,19 +11,21 @@ library(scales)
 # COLOR PALETTES
 # ------------------------------------------------------------------------------
 
-#' Age group color palette
+#' Age group color palette (Okabe-Ito colorblind-friendly, rainbow order)
 #' @description Consistent colors for age groups across all figures.
-#'   Adjust the names to match your actual age group factor levels.
+#'   Supports both scheme B (80-89) and scheme C (80+) naming.
+#'   Uses Okabe-Ito colorblind-friendly palette in rainbow order
+#'   (youngest = vermillion, oldest = reddish purple).
 #' @export
 age_colors <- c(
-
-  "18-29" = "#E64B35",
-"30-39" = "#F39B7F",
-  "40-49" = "#FFDC91",
-  "50-59" = "#8491B4",
-  "60-69" = "#3C5488",
-  "70-79" = "#00A087",
-  "80+"   = "#4DBBD5"
+  "18-29" = "#D55E00",  # vermillion
+  "30-39" = "#E69F00",  # orange
+  "40-49" = "#F0E442",  # yellow
+  "50-59" = "#009E73",  # bluish green
+  "60-69" = "#56B4E9",  # sky blue
+  "70-79" = "#0072B2",  # blue
+  "80-89" = "#CC79A7",  # reddish purple
+  "80+"   = "#CC79A7"   # Alias for scheme C
 )
 
 #' Broader age group palette (if using fewer categories)
@@ -55,6 +57,38 @@ survey_shapes <- c(
   "NHANES" = 8,   # asterisk
   "CPS"    = 3    # plus
 )
+
+#' SRH category color palette (5-point scale)
+#' @description Colors for SRH categories from Poor to Excellent.
+#'   Warm colors for worse health, cool colors for better health.
+#'   Uses Okabe-Ito colorblind-friendly palette.
+#' @export
+srh_cat_colors <- c(
+  "Poor"      = "#D55E00",  # vermillion
+  "Fair"      = "#E69F00",  # orange
+  "Good"      = "#F0E442",  # yellow
+  "Very Good" = "#56B4E9",  # sky blue
+  "Excellent" = "#009E73"   # teal
+)
+
+#' SRH category color palette (4-point scale, for GSS)
+#' @description Colors for GSS 4-point SRH scale (no "Very Good" option).
+#' @export
+srh_cat_colors_gss <- c(
+  "Poor"      = "#D55E00",  # vermillion
+  "Fair"      = "#E69F00",  # orange
+  "Good"      = "#56B4E9",  # sky blue
+  "Excellent" = "#009E73"   # teal
+)
+
+#' SRH category labels (5-point scale)
+#' @description Standard labels for SRH categories, ordered Poor to Excellent.
+#' @export
+srh_cat_labels <- c("Poor", "Fair", "Good", "Very Good", "Excellent")
+
+#' SRH category labels (4-point scale, for GSS)
+#' @export
+srh_cat_labels_gss <- c("Poor", "Fair", "Good", "Excellent")
 
 # ------------------------------------------------------------------------------
 # GGPLOT THEME
@@ -140,7 +174,32 @@ scale_fill_survey <- function(...) {
 #' Survey shape scale
 #' @export
 scale_shape_survey <- function(...) {
+
   scale_shape_manual(values = survey_shapes, ...)
+}
+
+#' SRH category color scale (5-point)
+#' @export
+scale_color_srh_cat <- function(...) {
+  scale_color_manual(values = srh_cat_colors, ...)
+}
+
+#' SRH category fill scale (5-point)
+#' @export
+scale_fill_srh_cat <- function(...) {
+  scale_fill_manual(values = srh_cat_colors, ...)
+}
+
+#' SRH category color scale (4-point, for GSS)
+#' @export
+scale_color_srh_cat_gss <- function(...) {
+  scale_color_manual(values = srh_cat_colors_gss, ...)
+}
+
+#' SRH category fill scale (4-point, for GSS)
+#' @export
+scale_fill_srh_cat_gss <- function(...) {
+  scale_fill_manual(values = srh_cat_colors_gss, ...)
 }
 
 # ------------------------------------------------------------------------------
