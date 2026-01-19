@@ -11,19 +11,32 @@ library(scales)
 # COLOR PALETTES
 # ------------------------------------------------------------------------------
 
-#' Age group color palette
+#' Age group color palette (Scheme B: 18-29 through 80-89)
 #' @description Consistent colors for age groups across all figures.
-#'   Adjust the names to match your actual age group factor levels.
+#'   Uses Okabe-Ito colorblind-friendly palette in rainbow order:
+#'   youngest (vermillion/warm) to oldest (purple/cool).
+#'   Matches age binning scheme "B" from add_age_group().
 #' @export
 age_colors <- c(
+  "18-29" = "#D55E00",
+  "30-39" = "#E69F00",
+  "40-49" = "#F0E442",
+  "50-59" = "#009E73",
+  "60-69" = "#56B4E9",
+  "70-79" = "#0072B2",
+  "80-89" = "#CC79A7"
+)
 
-  "18-29" = "#E64B35",
-"30-39" = "#F39B7F",
-  "40-49" = "#FFDC91",
-  "50-59" = "#8491B4",
-  "60-69" = "#3C5488",
-  "70-79" = "#00A087",
-  "80+"   = "#4DBBD5"
+#' Alternative age group palette for scheme "C" (70+ top group)
+#' @description For analyses that combine 70+ into single group
+#' @export
+age_colors_scheme_c <- c(
+  "18-29" = "#D55E00",
+  "30-39" = "#E69F00",
+  "40-49" = "#F0E442",
+  "50-59" = "#009E73",
+  "60-69" = "#56B4E9",
+  "70+"   = "#0072B2"
 )
 
 #' Broader age group palette (if using fewer categories)
