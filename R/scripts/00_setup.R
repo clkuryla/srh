@@ -43,6 +43,17 @@ source(here("R", "functions", "theme_srh.R"))
 source(here("R", "functions", "plot_utils.R"))
 source(here("R", "functions", "plot_lexis.R"))
 
+# Mortality analysis functions (loaded conditionally if available)
+if (file.exists(here("R", "functions", "mortality_utils.R"))) {
+  source(here("R", "functions", "mortality_utils.R"))
+}
+if (file.exists(here("R", "functions", "run_mortality_models.R"))) {
+  source(here("R", "functions", "run_mortality_models.R"))
+}
+if (file.exists(here("R", "functions", "plot_mortality.R"))) {
+  source(here("R", "functions", "plot_mortality.R"))
+}
+
 # ------------------------------------------------------------------------------
 # GLOBAL OPTIONS
 # ------------------------------------------------------------------------------
