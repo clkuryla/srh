@@ -1,12 +1,12 @@
 # SRH Convergence Paper - Figure Generation
 # Author: Christine Lucille Kuryla
-# Goal: Generate publication-ready figures for SRH convergence manuscript
+# Goal: Generate publication-ready figures for SRH manuscript
 
 ## Project Status
 
 **Timeline:** 3 weeks to first draft
 **Priority:** Finalize figures, not explore new concepts (for now)
-**Mode:** Execution, not exploration, unless explicitly asked
+**Mode:** Execution of pre-defined analyses with high consistency and quality
 
 ## Paper Structure
 
@@ -167,7 +167,7 @@ overall - green ("bluish green")
 ## Immediate Priorities
 
 1. ✅ Set up shared theme and plotting functions
-2. ⬜ Figure 1: Convergence (both panels, all 6 surveys)
+2. ✅ Figure 1: Convergence (both panels, all 6 surveys)
 3. ⬜ Figure 3: Coefficient stability (available covariates)
 4. ⬜ Figure 4: Prevalence trends (available covariates)
 5. ⬜ Figure 2: Lexis diagrams (all 6 surveys)
@@ -227,7 +227,7 @@ This repo contains scientific analysis code for SRH using NHIS, MEPS, BRFSS, GSS
 - Be explicit about NA handling (na.rm=, drop_na vs replace_na, etc).
 - When refactoring, preserve outputs: same columns, same units, same grouping.
   If you must change them, explain the change and why.
-- When do analyses (not final paper Figure generation) Add minimal checks (stopifnot/assertthat) around assumptions that could silently break.
+- When doing analyses (not final paper Figure generation) Add minimal checks (stopifnot/assertthat) around assumptions that could silently break.
 - Encourage small functions, explicit inputs/outputs, informative errors, and reproducible scripts.
 
 - This is a scientific R project.
