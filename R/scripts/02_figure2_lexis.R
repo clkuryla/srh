@@ -313,6 +313,103 @@ cat("  Saved: fig2_lexis_draft_", draft_date, ".png\n\n")
 
 
 # ==============================================================================
+# GENERATE FIGURE 2A: INDEPENDENT SCALES (RAW VALUES)
+# ==============================================================================
+# Each survey has its own color scale with raw (non-normalized) SRH values
+
+cat("Preparing raw (non-normalized) Lexis data for Figure 2a...\n")
+
+# Prepare data WITHOUT normalization for independent scales
+lexis_nhis_raw <- prepare_lexis_data(
+  data_nhis, age_binwidth = age_bin, year_binwidth = 2,
+  min_age = min_age, max_age = max_age, min_n = min_cell_n,
+  rescale_01 = FALSE, srh_scale = "5"
+)
+
+lexis_meps_raw <- prepare_lexis_data(
+  data_meps, age_binwidth = age_bin, year_binwidth = 1,
+  min_age = min_age, max_age = max_age, min_n = min_cell_n,
+  rescale_01 = FALSE, srh_scale = "5"
+)
+
+lexis_brfss_raw <- prepare_lexis_data(
+  data_brfss_recoded, age_binwidth = age_bin, year_binwidth = 1,
+  min_age = min_age, max_age = max_age, min_n = min_cell_n,
+  rescale_01 = FALSE, srh_scale = "5"
+)
+
+lexis_gss_raw <- prepare_lexis_data(
+  data_gss, age_binwidth = age_bin, year_binwidth = 2,
+  min_age = min_age, max_age = max_age, min_n = 20,
+  rescale_01 = FALSE, srh_scale = "4"
+)
+
+lexis_cps_raw <- prepare_lexis_data(
+  data_cps, age_binwidth = age_bin, year_binwidth = 1,
+  min_age = min_age, max_age = max_age, min_n = min_cell_n,
+  rescale_01 = FALSE, srh_scale = "5"
+)
+
+lexis_nhanes_raw <- prepare_lexis_data(
+  data_nhanes, age_binwidth = age_bin, year_binwidth = 2,
+  min_age = min_age, max_age = max_age, min_n = 20,
+  rescale_01 = FALSE, srh_scale = "5"
+)
+
+lexis_list_raw <- list(
+  "BRFSS"  = lexis_brfss_raw,
+  "MEPS"   = lexis_meps_raw,
+  "NHIS"   = lexis_nhis_raw,
+  "GSS"    = lexis_gss_raw,
+  "CPS"    = lexis_cps_raw,
+  "NHANES" = lexis_nhanes_raw
+)
+
+cat("Generating Figure 2a (independent scales per survey)...\n")
+
+fig2a <- plot_lexis_combined(
+  lexis_list_raw,
+  ncol = 6,
+  show_cohort_lines = TRUE,
+  cohort_line_spacing = 10,
+  cohort_line_width = 1.0,
+  cohort_line_color = "gray30",
+  cohort_line_alpha = 0.7,
+  color_scale = "turbo",
+  reverse_colors = TRUE,
+  shared_scale = FALSE,           # Independent scales per survey
+  title = "Lexis Diagrams of Mean SRH",
+  subtitle = NULL,
+  tilt_x_labels = 45,
+  base_size = 12
+)
+
+cat("Done.\n\n")
+
+# Save Figure 2a
+cat("Saving Figure 2a...\n")
+
+fig2a_height <- 6  # Taller to accommodate individual legends
+
+ggsave(
+  filename = file.path(fig_dir, "fig2a_lexis_independent.png"),
+  plot = fig2a,
+  width = fig_width,
+  height = fig2a_height,
+  dpi = 300
+)
+cat("  Saved: fig2a_lexis_independent.png\n")
+
+ggsave(
+  filename = file.path(fig_dir, "fig2a_lexis_independent.pdf"),
+  plot = fig2a,
+  width = fig_width,
+  height = fig2a_height
+)
+cat("  Saved: fig2a_lexis_independent.pdf\n\n")
+
+
+# ==============================================================================
 # OPTIONAL: INDIVIDUAL SURVEY PLOTS
 # ==============================================================================
 # Uncomment to generate individual survey Lexis diagrams

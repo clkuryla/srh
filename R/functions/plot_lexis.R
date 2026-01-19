@@ -530,8 +530,6 @@ plot_lexis_combined <- function(lexis_list,
   nrow_grid <- ceiling(n_surveys / ncol)
 
   # --- Create individual plots ---
-  # All plots keep their legend with position="bottom"
-  # patchwork's guides="collect" will merge identical legends
   plots <- lapply(seq_along(survey_names), function(i) {
     svy <- survey_names[i]
 
@@ -539,7 +537,7 @@ plot_lexis_combined <- function(lexis_list,
       data = lexis_list[[svy]],
       survey_name = svy,
       show_title = TRUE,
-      show_legend = TRUE,  # All plots keep legend - patchwork will collect
+      show_legend = TRUE,
       show_cohort_lines = show_cohort_lines,
       color_scale = color_scale,
       reverse_colors = reverse_colors,
@@ -581,14 +579,48 @@ plot_lexis_combined <- function(lexis_list,
   # Stack: panels_with_ylabel / x_label
   combined <- panels_with_ylabel / wrap_elements(x_label_grob)
 
-  # Set heights and collect guides (same pattern as Figure 1)
-  combined <- combined +
-    plot_layout(heights = c(1, 0.06), guides = "collect") &
-    theme(
-      legend.position = "bottom",
-      legend.background = element_blank(),
-      legend.box.background = element_blank()
-    )
+  if (shared_scale) {
+    # Shared scale: collect guides into single legend at bottom
+    combined <- combined +
+      plot_layout(heights = c(1, 0.06), guides = "collect") &
+      theme(
+        legend.position = "bottom",
+        legend.background = element_blank(),
+        legend.box.background = element_blank()
+      )
+  } else {
+    # Independent scales: Year label above legends, Mean SRH label to the left
+    # Rearrange layout: panels / x_label / (srh_label | legends)
+
+    # Apply theme to keep legends at bottom of each panel
+    combined <- combined +
+      plot_layout(heights = c(1, 0.05)) &
+      theme(
+        legend.position = "bottom",
+        legend.title = element_blank(),
+        legend.background = element_blank(),
+        legend.box.background = element_blank(),
+        legend.key.width = unit(1.2, "cm"),
+        legend.key.height = unit(0.25, "cm"),
+        legend.text = element_text(size = base_size - 3),
+        legend.margin = margin(0, 0, 0, 0),
+        legend.box.margin = margin(0, 0, 0, 0)
+      )
+
+    # Add "Mean SRH" label aligned with the legends at the bottom left
+    combined <- combined +
+      plot_annotation(
+        caption = "Mean SRH",
+        theme = theme(
+          plot.caption = element_text(
+            size = base_size,
+            face = "bold",
+            hjust = 0,
+            margin = margin(t = -15, l = 35)
+          )
+        )
+      )
+  }
 
   # --- Add overall title/subtitle ---
   if (!is.null(title) || !is.null(subtitle)) {
