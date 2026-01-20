@@ -1,7 +1,8 @@
 # Harmonize education variables across all surveys
 #
 # Run AFTER all individual survey wrangling scripts have been run.
-# This script adds two harmonized education variables to each survey data file:
+# This script adds harmonized education variables to each survey data file:
+#   - educ_3cat: 3-level education (available for all 6 surveys)
 #   - educ_4cat: 4-level education (available for all 6 surveys)
 #   - educ_5cat: 5-level education (CPS, GSS, MEPS, NHIS only; NA for BRFSS/NHANES)
 #
@@ -192,6 +193,27 @@ process_nhis <- function(df) {
 }
 
 # ------------------------------------------------------------------------------
+# Derive educ_3cat from educ_4cat
+# ------------------------------------------------------------------------------
+#
+# 3-level education (derived from educ_4cat):
+#   1 = Less than high school (educ_4cat = 1)
+#   2 = High school graduate / some college (educ_4cat = 2 or 3)
+#   3 = Bachelor's degree or higher (educ_4cat = 4)
+
+add_educ_3cat <- function(df) {
+  df %>%
+    mutate(
+      educ_3cat = case_when(
+        educ_4cat == 1 ~ 1L,
+        educ_4cat %in% c(2, 3) ~ 2L,
+        educ_4cat == 4 ~ 3L,
+        TRUE ~ NA_integer_
+      )
+    )
+}
+
+# ------------------------------------------------------------------------------
 # Validation function
 # ------------------------------------------------------------------------------
 
@@ -199,15 +221,19 @@ validate_education <- function(df, survey_name) {
   # Check required columns exist
   stopifnot(
     "educ_orig" %in% names(df),
+    "educ_3cat" %in% names(df),
     "educ_4cat" %in% names(df),
     "educ_5cat" %in% names(df)
   )
 
-
   # Check value ranges (excluding NA)
+  valid_3cat <- all(na.omit(df$educ_3cat) %in% 1:3)
   valid_4cat <- all(na.omit(df$educ_4cat) %in% 1:4)
   valid_5cat <- all(na.omit(df$educ_5cat) %in% c(NA_integer_, 1:5))
 
+  if (!valid_3cat) {
+    stop(survey_name, ": educ_3cat has values outside 1-3")
+  }
   if (!valid_4cat) {
     stop(survey_name, ": educ_4cat has values outside 1-4")
   }
@@ -249,9 +275,10 @@ if (!file.exists(file_path)) {
 
   message("Processing ", s$name, "...")
 
-  # Load, process, validate, save
+  # Load, process, add educ_3cat, validate, save
   df <- readRDS(file_path)
   df <- s$process(df)
+  df <- add_educ_3cat(df)
   validate_education(df, s$name)
   saveRDS(df, file_path)
 
@@ -263,6 +290,7 @@ if (!file.exists(file_path)) {
     Year_Range = if (!is.na(year_col)) {
       paste(min(df[[year_col]], na.rm = TRUE), "-", max(df[[year_col]], na.rm = TRUE))
     } else NA_character_,
+    educ_3cat_pct = round(100 * mean(!is.na(df$educ_3cat)), 1),
     educ_4cat_pct = round(100 * mean(!is.na(df$educ_4cat)), 1),
     educ_5cat_pct = round(100 * mean(!is.na(df$educ_5cat)), 1)
   )
@@ -282,6 +310,7 @@ summary_df <- bind_rows(results)
 print(summary_df, n = 10)
 
 cat("\nEducation variable labels:\n")
+cat("  educ_3cat: 1=Less than HS, 2=HS grad/some college, 3=BA or higher\n")
 cat("  educ_4cat: 1=Less than HS, 2=HS graduate, 3=Some college, 4=BA or higher\n")
 cat("  educ_5cat: 1=Less than HS, 2=HS graduate, 3=Some college, 4=BA, 5=Graduate degree\n")
 cat("  educ_orig: Original source variable (preserved)\n")
