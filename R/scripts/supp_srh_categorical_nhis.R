@@ -1,0 +1,85 @@
+# ==============================================================================
+# supp_srh_categorical_nhis.R
+# Generate Supplemental Figures: SRH Categorical Distribution (NHIS)
+# ==============================================================================
+
+library(tidyverse)
+library(here)
+library(srvyr)
+
+source(here::here("R/paths.R"))
+ensure_dirs()
+source(here::here("R/functions/theme_srh.R"))
+source(here::here("R/srh_common_functions.R"))
+source(here::here("R/functions/summarize_srh_categories.R"))
+source(here::here("R/functions/plot_srh_distribution.R"))
+
+cat("Functions loaded.\n")
+
+# Configuration
+survey_name <- "NHIS"
+srh_scale <- 5
+
+cat("Loading NHIS data...\n")
+data_raw <- readr::read_rds(derived_path("data_nhis.rds"))
+cat("  Loaded", nrow(data_raw), "rows.\n")
+
+# Prepare data
+data_prep <- data_raw %>%
+  select(srh, age, year, psu, strata, wt) %>%
+  filter(
+    !is.na(srh), srh >= 1, srh <= srh_scale,
+    !is.na(age), !is.na(year),
+    !is.na(wt), wt > 0
+  ) %>%
+  add_age_group(scheme = "B", new_var = age_group)
+
+cat("  After filtering:", nrow(data_prep), "rows.\n")
+cat("  Years:", min(data_prep$year), "-", max(data_prep$year), "\n")
+
+# Compute proportions
+cat("\nComputing proportions...\n")
+props_by_age <- summarize_srh_proportions(data_prep, survey_name, srh_scale = srh_scale)
+cat("  Props by age:", nrow(props_by_age), "rows.\n")
+
+props_by_srh <- summarize_age_composition_by_srh(data_prep, survey_name, srh_scale = srh_scale)
+cat("  Props by SRH:", nrow(props_by_srh), "rows.\n")
+
+spread_stats <- summarize_srh_spread(data_prep, survey_name, srh_scale = srh_scale)
+cat("  Spread stats:", nrow(spread_stats), "rows.\n")
+
+# Generate figures
+cat("\nGenerating figures...\n")
+fig1 <- plot_srh_by_age_group(props_by_age, survey_name, srh_scale, ncol = 7)
+fig2a <- plot_srh_age_composition(props_by_srh, survey_name, ncol = srh_scale)
+fig2b <- plot_srh_category_by_age(props_by_age, survey_name, ncol = srh_scale)
+fig3 <- plot_srh_stacked_area(props_by_age, survey_name, srh_scale, ncol = 7)
+fig6_var <- plot_srh_spread(spread_stats, survey_name, "variance")
+fig6_ent <- plot_srh_spread(spread_stats, survey_name, "entropy")
+cat("  Done.\n")
+
+# Save outputs
+cat("\nSaving...\n")
+fig_dir <- here::here("output", "figures")
+table_dir <- here::here("output", "tables")
+survey_lower <- tolower(survey_name)
+draft_date <- format(Sys.Date(), "%Y%m%d")
+
+readr::write_rds(props_by_age, file.path(table_dir, paste0("supp_srh_props_", survey_lower, "_", draft_date, ".rds")))
+readr::write_rds(props_by_srh, file.path(table_dir, paste0("supp_srh_age_comp_", survey_lower, "_", draft_date, ".rds")))
+readr::write_rds(spread_stats, file.path(table_dir, paste0("supp_srh_spread_", survey_lower, "_", draft_date, ".rds")))
+
+ggsave(file.path(fig_dir, paste0("supp_srh_by_age_", survey_lower, ".png")), fig1, width = 16, height = 4, dpi = 300)
+ggsave(file.path(fig_dir, paste0("supp_srh_by_age_", survey_lower, ".pdf")), fig1, width = 16, height = 4)
+ggsave(file.path(fig_dir, paste0("supp_srh_age_comp_", survey_lower, ".png")), fig2a, width = 14, height = 6, dpi = 300)
+ggsave(file.path(fig_dir, paste0("supp_srh_age_comp_", survey_lower, ".pdf")), fig2a, width = 14, height = 6)
+ggsave(file.path(fig_dir, paste0("supp_srh_cat_by_age_", survey_lower, ".png")), fig2b, width = 14, height = 6, dpi = 300)
+ggsave(file.path(fig_dir, paste0("supp_srh_cat_by_age_", survey_lower, ".pdf")), fig2b, width = 14, height = 6)
+ggsave(file.path(fig_dir, paste0("supp_srh_stacked_", survey_lower, ".png")), fig3, width = 16, height = 4, dpi = 300)
+ggsave(file.path(fig_dir, paste0("supp_srh_stacked_", survey_lower, ".pdf")), fig3, width = 16, height = 4)
+ggsave(file.path(fig_dir, paste0("supp_srh_variance_", survey_lower, ".png")), fig6_var, width = 10, height = 6, dpi = 300)
+ggsave(file.path(fig_dir, paste0("supp_srh_variance_", survey_lower, ".pdf")), fig6_var, width = 10, height = 6)
+ggsave(file.path(fig_dir, paste0("supp_srh_entropy_", survey_lower, ".png")), fig6_ent, width = 10, height = 6, dpi = 300)
+ggsave(file.path(fig_dir, paste0("supp_srh_entropy_", survey_lower, ".pdf")), fig6_ent, width = 10, height = 6)
+
+cat("\n=== Done:", survey_name, "===\n")

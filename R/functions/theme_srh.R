@@ -69,6 +69,38 @@ survey_shapes <- c(
   "CPS"    = 3    # plus
 )
 
+#' SRH category color palette (5-point scale)
+#' @description Colors for SRH categories from Poor to Excellent.
+#'   Warm colors for worse health, cool colors for better health.
+#'   Uses Okabe-Ito colorblind-friendly palette.
+#' @export
+srh_cat_colors <- c(
+  "Poor"      = "#D55E00",  # vermillion
+  "Fair"      = "#E69F00",  # orange
+  "Good"      = "#F0E442",  # yellow
+  "Very Good" = "#56B4E9",  # sky blue
+  "Excellent" = "#009E73"   # teal
+)
+
+#' SRH category color palette (4-point scale, for GSS)
+#' @description Colors for GSS 4-point SRH scale (no "Very Good" option).
+#' @export
+srh_cat_colors_gss <- c(
+  "Poor"      = "#D55E00",  # vermillion
+  "Fair"      = "#E69F00",  # orange
+  "Good"      = "#56B4E9",  # sky blue
+  "Excellent" = "#009E73"   # teal
+)
+
+#' SRH category labels (5-point scale)
+#' @description Standard labels for SRH categories, ordered Poor to Excellent.
+#' @export
+srh_cat_labels <- c("Poor", "Fair", "Good", "Very Good", "Excellent")
+
+#' SRH category labels (4-point scale, for GSS)
+#' @export
+srh_cat_labels_gss <- c("Poor", "Fair", "Good", "Excellent")
+
 # ------------------------------------------------------------------------------
 # GGPLOT THEME
 # ------------------------------------------------------------------------------
@@ -154,6 +186,30 @@ scale_fill_survey <- function(...) {
 #' @export
 scale_shape_survey <- function(...) {
   scale_shape_manual(values = survey_shapes, ...)
+}
+
+#' SRH category color scale (5-point)
+#' @export
+scale_color_srh_cat <- function(...) {
+  scale_color_manual(values = srh_cat_colors, ...)
+}
+
+#' SRH category fill scale (5-point)
+#' @export
+scale_fill_srh_cat <- function(...) {
+  scale_fill_manual(values = srh_cat_colors, ...)
+}
+
+#' SRH category color scale (4-point, for GSS)
+#' @export
+scale_color_srh_cat_gss <- function(...) {
+  scale_color_manual(values = srh_cat_colors_gss, ...)
+}
+
+#' SRH category fill scale (4-point, for GSS)
+#' @export
+scale_fill_srh_cat_gss <- function(...) {
+  scale_fill_manual(values = srh_cat_colors_gss, ...)
 }
 
 # ------------------------------------------------------------------------------
