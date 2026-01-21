@@ -205,8 +205,9 @@ This repo contains scientific analysis code for SRH using NHIS, MEPS, BRFSS, GSS
 - Prefer `srh_01` (0–1 rescale) or `srh_fairpoor` for cross-dataset summaries, or an ordinal model that accounts for scale differences.
 
 ## Survey design
-- Use weights/strata/PSU when available and valid. Do not drop design elements “to make it run.”
+- Use weights/strata/PSU when available and valid. Do not drop design elements “to make it run.” EXCEPTION: For all analyses except Fig. 1, do not use nested/strata for BRFSS due to computational constraints; for BRFSS, just use wt. 
 - If only weights are available, use weights-only design explicitly and label outputs.
+- Use functions from libraries survey/srvyr/etc to run survey-design compatible analyses; do not run unweighted analyses if possible. If the requested analysis is only feasible without weights (for example, it requires a specialized package because the process is complicated), tell me that is the case and confirm that is ok before proceeding. Otherwise, restrict to using functions from the survey/srvyr packages. 
 
 ## Coding expectations
 - Prefer minimal diffs over rewrites.
