@@ -1,22 +1,12 @@
 # SRH Convergence Paper - Figure Generation
 # Author: Christine Lucille Kuryla
-# Goal: Generate publication-ready figures for SRH convergence manuscript
-
-## Project Status
-
-**Timeline:** 3 weeks to first draft
-**Priority:** Finalize figures, not explore new concepts (for now)
-**Mode:** Execution, not exploration, unless explicitly asked
+# Goal: Generate publication-ready figures for self rated health (SRH) manuscript
 
 ## Paper Structure
 
 **Figure 1:** Convergence phenomenon (all 6 surveys)
 - Panel A: Mean SRH by age group over time
 - Panel B: Age coefficient trending toward zero
-
-**Figure 2:** APC / Lexis diagrams (all 6 surveys)
-- Lexis surface plots showing no diagonal (cohort) pattern
-- Additional APC methods deferred until after first draft
 
 **Figure 3:** Coefficient stability (BRFSS, MEPS, NHIS, NHANES as available)
 - Coefficients of covariates on SRH over time, cox regressions
@@ -34,8 +24,29 @@ All figures should look like they belong together:
 - Consistent color/shape palette for surveys
 - Matching fonts, sizes, axis styling
 - Uniform panel spacing and labels
+Use:
+source(here::here("R/functions/theme_srh.R"))
 
+## Organization
 Use the shared functions in `R/functions/` for all plotting.
+
+## Data locations of cleaned datasets
+
+For scripts that are using pre-wrangled data, the locations should be found through sourcing R/paths.R and then using the shortcuts.
+Example:
+library(here)
+source(here::here("R/paths.R")) # Source project functions
+ensure_dirs()
+
+data_nhis <- readr::read_rds(derived_path("data_nhis.rds")) 
+data_brfss <- readr::read_rds(derived_path("data_brfss.rds")) 
+data_meps <- readr::read_rds(derived_path("data_meps.rds")) 
+data_gss <- readr::read_rds(derived_path("data_gss.rds")) 
+data_cps <- readr::read_rds(derived_path("data_cps.rds")) 
+data_nhanes <- readr::read_rds(derived_path("data_nhanes.rds"))
+
+Make sure to drop NAs of srh, age, year, wt ( |> drop_na(srh, age, year, wt) )
+
 
 ---
 
@@ -81,8 +92,9 @@ Christine has extensive existing analyses in a separate (messy) repository.
 3. **Generate using shared functions** - Use theme_srh(), consistent palettes
 4. **Review output** - Check against old results if available
 5. **Save in multiple formats** - PNG for review, PDF for publication
+6. Interpret results if possible
 
-### Saving conventions:
+### Saving conventions (unless otherwise specified):
 ```r
 # Review versions (with date)
 ggsave("output/figures/fig1_convergence_draft_20260116.png", width = 10, height = 8, dpi = 300)
@@ -155,28 +167,19 @@ srh-paper/
 
 ### Age groups (use consistently across all figures)
 See R/srh_common_functions.R
-
-### Types of covariates
-See R/srh_common_functions.R
-mental health - sky blue, dark blue (blue)
-physical health - pink ("reddish purple"), orange ("orange"), red ("vermillion")
-overall - green ("bluish green")
+source(here::here("R/functions/theme_srh.R"))
 
 ---
 
 ## Immediate Priorities
 
 1. ✅ Set up shared theme and plotting functions
-2. ⬜ Figure 1: Convergence (both panels, all 6 surveys)
-3. ⬜ Figure 3: Coefficient stability (available covariates)
-4. ⬜ Figure 4: Prevalence trends (available covariates)
-5. ⬜ Figure 2: Lexis diagrams (all 6 surveys)
+2. ✅ Figure 1: Convergence (both panels, all 6 surveys)
+3. ✅ Figure 3: Coefficient stability (available covariates)
+4. ✅ Figure 4: Prevalence trends (available covariates)
+5. ⬜ Various sensitivity analyses
 6. ⬜ Combine into publication-ready multi-panel figures
 
-After first draft to advisors:
-- Expand Figure 2 with additional APC methods
-- Sensitivity analyses
-- Supplementary figures
 
 ---
 
@@ -202,8 +205,9 @@ This repo contains scientific analysis code for SRH using NHIS, MEPS, BRFSS, GSS
 - Prefer `srh_01` (0–1 rescale) or `srh_fairpoor` for cross-dataset summaries, or an ordinal model that accounts for scale differences.
 
 ## Survey design
-- Use weights/strata/PSU when available and valid. Do not drop design elements “to make it run.”
+- Use weights/strata/PSU when available and valid. Do not drop design elements “to make it run.” EXCEPTION: For all analyses except Fig. 1, do not use nested/strata for BRFSS due to computational constraints; for BRFSS, just use wt. 
 - If only weights are available, use weights-only design explicitly and label outputs.
+- Use functions from libraries survey/srvyr/etc to run survey-design compatible analyses; do not run unweighted analyses if possible. If the requested analysis is only feasible without weights (for example, it requires a specialized package because the process is complicated), tell me that is the case and confirm that is ok before proceeding. Otherwise, restrict to using functions from the survey/srvyr packages. 
 
 ## Coding expectations
 - Prefer minimal diffs over rewrites.
@@ -227,7 +231,7 @@ This repo contains scientific analysis code for SRH using NHIS, MEPS, BRFSS, GSS
 - Be explicit about NA handling (na.rm=, drop_na vs replace_na, etc).
 - When refactoring, preserve outputs: same columns, same units, same grouping.
   If you must change them, explain the change and why.
-- When do analyses (not final paper Figure generation) Add minimal checks (stopifnot/assertthat) around assumptions that could silently break.
+- When doing analyses (not final paper Figure generation) Add minimal checks (stopifnot/assertthat) around assumptions that could silently break.
 - Encourage small functions, explicit inputs/outputs, informative errors, and reproducible scripts.
 
 - This is a scientific R project.
