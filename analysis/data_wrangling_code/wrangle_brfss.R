@@ -997,7 +997,7 @@ colnames(df)
 data_brfss <- df
 
 
-# readr::write_rds(data_brfss, derived_path("data_brfss.rds"))
+readr::write_rds(data_brfss, derived_path("data_brfss.rds"))
 
 # write_csv(df, here("big_data/BRFSS/brfss_selected_20250916.csv"))
 

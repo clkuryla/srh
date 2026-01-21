@@ -20,23 +20,11 @@ ensure_dirs()
 # Load data from IPUMS CPS extract
 # ------------------------------------------------------------------------------
 
-# Install if needed:
-# install.packages("ipumsr")
-
-if (!requireNamespace("ipumsr", quietly = TRUE)) {
-
-  stop("Package 'ipumsr' is required. Install with:\n
-       install.packages('ipumsr')")
-}
-
-library(ipumsr)
-
-# Read IPUMS DDI (metadata) and microdata
-# Adjust filenames if your extract has a different number
-ddi <- read_ipums_ddi(depot_path("surveys", "CPS", "cps_00001.xml"))
-data_cps_raw <- read_ipums_micro(
-  ddi,
-  data_file = depot_path("surveys", "CPS", "cps_00001.dat.gz")
+# Read IPUMS CPS CSV extract
+# Adjust filename if your extract has a different number
+data_cps_raw <- readr::read_csv(
+  depot_path("surveys", "CPS", "cps_00003.csv"),
+  show_col_types = FALSE
 )
 
 # ------------------------------------------------------------------------------
@@ -108,7 +96,7 @@ data_cps <- data_cps_raw %>%
     everything()
   )
 
-rm(data_cps_raw, ddi)
+rm(data_cps_raw)
 
 # ------------------------------------------------------------------------------
 # Survey object
