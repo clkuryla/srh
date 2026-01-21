@@ -39,11 +39,17 @@ source(here::here("R/paths.R")) # Source project functions
 ensure_dirs()
 
 data_nhis <- readr::read_rds(derived_path("data_nhis.rds")) 
+
 data_brfss <- readr::read_rds(derived_path("data_brfss.rds")) 
+
 data_meps <- readr::read_rds(derived_path("data_meps.rds")) 
+
 data_gss <- readr::read_rds(derived_path("data_gss.rds")) 
+
 data_cps <- readr::read_rds(derived_path("data_cps.rds")) 
+
 data_nhanes <- readr::read_rds(derived_path("data_nhanes.rds"))
+
 
 Make sure to drop NAs of srh, age, year, wt ( |> drop_na(srh, age, year, wt) )
 
