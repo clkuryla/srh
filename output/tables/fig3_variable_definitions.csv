@@ -1,0 +1,33 @@
+Survey,Category,Variable,Figure Label,Description,Scale/Coding
+BRFSS,Chronic Conditions,diabetes_dx,Diabetes,Ever told you have diabetes,Binary: 0=No 1=Yes
+BRFSS,Chronic Conditions,htn_dx,Hypertension,Ever told you have high blood pressure,Binary: 0=No 1=Yes
+BRFSS,Chronic Conditions,chd_dx,Heart Disease,Ever told you have coronary heart disease or MI,Binary: 0=No 1=Yes
+BRFSS,Chronic Conditions,stroke_dx,Stroke,Ever told you had a stroke,Binary: 0=No 1=Yes
+BRFSS,Chronic Conditions,arthritis_dx,Arthritis,Ever told you have arthritis,Binary: 0=No 1=Yes
+BRFSS,Chronic Conditions,copd_dx,COPD,Ever told you have COPD/emphysema/chronic bronchitis,Binary: 0=No 1=Yes
+BRFSS,Chronic Conditions,cancer_any_dx,Cancer,Ever told you had any type of cancer,Binary: 0=No 1=Yes
+BRFSS,Mental Health,ment_bad_scaled,Mental Days (scaled),Days mental health not good in past 30 days (rescaled),Continuous: 0-1 (original 0-30 divided by 30)
+BRFSS,Functional Health,phys_bad_scaled,Physical Days (scaled),Days physical health not good in past 30 days (rescaled),Continuous: 0-1 (original 0-30 divided by 30)
+BRFSS,Functional Health,activlim_bad_scaled,Activity Days (scaled),Days poor health prevented usual activities (rescaled),Continuous: 0-1 (original 0-30 divided by 30)
+MEPS,Chronic Conditions,DIABETICEV,Diabetes,Ever diagnosed with diabetes,Binary: 0=No 1=Yes
+MEPS,Chronic Conditions,HYPERTENEV,Hypertension,Ever diagnosed with high blood pressure,Binary: 0=No 1=Yes
+MEPS,Chronic Conditions,CHEARTDIEV,Heart Disease,Ever diagnosed with coronary heart disease,Binary: 0=No 1=Yes
+MEPS,Chronic Conditions,STROKEV,Stroke,Ever diagnosed with stroke,Binary: 0=No 1=Yes
+MEPS,Chronic Conditions,ARTHGLUPEV,Arthritis,Ever diagnosed with arthritis,Binary: 0=No 1=Yes
+MEPS,Chronic Conditions,CANCEREV,Cancer,Ever diagnosed with cancer,Binary: 0=No 1=Yes
+MEPS,Chronic Conditions,ASTHMAEV,Asthma,Ever diagnosed with asthma,Binary: 0=No 1=Yes
+MEPS,Mental Health,K6SUM_scaled,K6 (scaled),Kessler-6 psychological distress scale (rescaled),Continuous: 0-6 (original 0-24 rescaled)
+MEPS,Mental Health,PHQ2,PHQ-2,Patient Health Questionnaire 2-item depression screener,Continuous: 0-6
+MEPS,Functional Health,ANYLMT,Any Limitation,Any limitation in work/housework/school,Binary: 0=No 1=Yes
+MEPS,Functional Health,ADPALS,Phys Accomplished Less,Physical health caused accomplishing less,Binary: 0=No 1=Yes
+MEPS,Functional Health,ADMALS,Mental Accomplished Less,Mental health caused accomplishing less,Binary: 0=No 1=Yes
+NHIS,Chronic Conditions,DIABETICEV,Diabetes,Ever been told you have diabetes,Binary: 0=No 1=Yes
+NHIS,Chronic Conditions,HYPERTENEV,Hypertension,Ever been told you have hypertension,Binary: 0=No 1=Yes
+NHIS,Chronic Conditions,CHEARTDIEV,Heart Disease,Ever been told you have coronary heart disease,Binary: 0=No 1=Yes
+NHIS,Chronic Conditions,STROKEV,Stroke,Ever been told you had a stroke,Binary: 0=No 1=Yes
+NHIS,Chronic Conditions,ARTHGLUPEV,Arthritis,Ever been told you have arthritis/gout/lupus/fibromyalgia,Binary: 0=No 1=Yes
+NHIS,Chronic Conditions,COPDEV,COPD,Ever been told you have COPD,Binary: 0=No 1=Yes
+NHIS,Chronic Conditions,CANCEREV,Cancer,Ever been told you have cancer,Binary: 0=No 1=Yes
+NHIS,Chronic Conditions,ASTHMAEV,Asthma,Ever been told you have asthma,Binary: 0=No 1=Yes
+NHIS,Mental Health,k6_scaled,K6 (scaled),Kessler-6 psychological distress scale (rescaled),Continuous: 0-6 (original 0-24 rescaled)
+NHIS,Functional Health,flclimb_binary,Difficulty Climbing,Any difficulty climbing stairs without equipment,Binary: 0=No difficulty 1=Any difficulty
