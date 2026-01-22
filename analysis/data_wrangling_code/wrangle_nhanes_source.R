@@ -157,13 +157,9 @@ data_nhanes <- all_data %>%
     strata = SDMVSTRA,
     psu = SDMVPSU
   ) %>%
-  # Sex recode
+  # Sex recode (RIAGENDR is a factor with "Male"/"Female" labels from nhanesA)
   mutate(
-    sex = case_when(
-      RIAGENDR == 1 ~ "Male",
-      RIAGENDR == 2 ~ "Female",
-      TRUE ~ NA_character_
-    )
+    sex = as.character(RIAGENDR)
   ) %>%
   # Create age groups consistent with other surveys
   mutate(
