@@ -4,9 +4,9 @@ Self Rated Health Analysis on 6 Datasets
 
 # Overview
 
-This repository contains code to reproduce the analyses and figures for:
+This repository contains code to reproduce the analyses and figures for a project on Self Rated Health.
 
-## Self Rated Health
+## Data
 
 Due to data use agreements and file size constraints, raw data are not included in this repository.
 
@@ -18,35 +18,36 @@ The project is structured to separate:
 This avoids data duplication, reduces clutter, and supports reproducibility.
 
 Data access & data depot
-Raw data
+### Raw data
 
 This project uses the following datasets:
 
-[Dataset 1] (e.g., MEPS via IPUMS)
-
-[Dataset 2]
-
-[Dataset 3]
+- Behavioral Risk Factor Surveillance System (BRFSS)
+  - https://www.cdc.gov/brfss/index.html
+- Medical Expenditure Panel Survey (MEPS)
+  - https://meps.ipums.org/meps/
+- National Health Interview Survey (NHIS)
+  - https://nhis.ipums.org/nhis/
+- Current Population Survey (CPS)
+  - https://cps.ipums.org/cps/
+- National Health and Nutrition Examination Survey (NHANES)
+  - https://www.cdc.gov/nchs/nhanes/index.html
+- General Social Survey (GSS)
+  - https://gss.norc.org/
 
 Users must obtain these datasets directly from the original sources.
 
-Data depot (external storage)
+### Data depot (external storage)
 
 Raw data are stored outside the repository in a local data depot.
 
 Example structure:
 
-data_depot/
-  DATASET_1/
-  DATASET_2/
-  DATASET_3/
-  _derived/
-    project_name/
-
+<img width="468" height="249" alt="image" src="https://github.com/user-attachments/assets/96346755-437b-4864-af67-574135288794" />
 
 This prevents duplication of large files and allows multiple projects to reference the same raw data. See R/paths.R for path helper. 
 
-One-time setup
+**One-time setup**
 1. Set data depot location
 
 Set an environment variable pointing to your local data depot:
@@ -62,7 +63,7 @@ Restart R/RStudio after setting this.
 
 Install required R packages as needed (see scripts for details).
 
-Repository structure
+## Repository structure
 project/
   R/            # reusable functions and path helpers
   data_wrangling_code/      # scripts: raw data -> analytic datasets
@@ -143,13 +144,3 @@ Reproducibility notes
     Files in sandbox/ are exploratory and not part of the reproducible pipeline.
     
     This repository supports procedural reproducibility: a knowledgeable analyst can reproduce results by following documented steps.
-
-Philosophy
-
-This repository prioritizes:
-  clarity over cleverness
-  explicit data flow
-  separation of exploration and production
-  scientific reproducibility without unnecessary software complexity
-
-This structure is intended to scale across projects and datasets while remaining manageable for research workflows.
