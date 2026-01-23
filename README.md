@@ -37,6 +37,20 @@ This project uses the following datasets:
 
 Users must obtain these datasets directly from the original sources.
 
+### Loading the data:
+
+This project is meant to be easily reproducible. R/paths.R describes the paths, which you can set up to match the scripts, or you can just use your own paths and edit the scripts. All data is available for free; some require that you register. 
+
+-	MEPS, NHIS, and CPS: Go to the IPUMS website and create extracts with your variables of interest (see code), save them as csvs, and update the paths to the extracts. The wrangling scripts will work.
+
+-	NHANES: Run the wrangling script; it will fetch the NHANES data directly using the NhanesA package.
+
+-	GSS: Run the wrangling script; it will fetch the NHANES data directly using the gssr package.
+
+-	BRFSS: Download the xpt files of interest from the BRFSS website, make a year to file key as in the repository, and run the wrangling script.
+
+Covariates are harmonized in individual wrangling files in the repository. If you are interested in particular covariates, use the harmonization scripts after importing with the wrangling scripts.
+ 
 ### Data depot (external storage)
 
 Raw data are stored outside the repository in a local data depot.
