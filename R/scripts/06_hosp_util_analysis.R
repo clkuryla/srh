@@ -68,9 +68,9 @@ AGE_GROUPS <- c("18-29", "30-39", "40-49", "50-59", "60-69", "70-79", "80-89")
 # CONFIGURATION
 # ==============================================================================
 
-# Which surveys to run (MEPS can be added later)
+# Which surveys to run
 run_nhis <- TRUE
-run_meps <- FALSE  # Set to TRUE when MEPS utilization vars are wrangled
+run_meps <- TRUE
 
 # NHIS year filter - include all years with utilization data
 # Note: 2019 redesign may cause discontinuity
@@ -79,16 +79,31 @@ nhis_start_year <- 1997
 # Minimum sample size per age-year cell
 min_n <- 50
 
-# Hospital utilization variables to analyze
-# Note: sickdays removed due to very limited data availability (0.6% valid)
-util_vars <- c(
+# Hospital utilization variables common to NHIS and MEPS
+# Note: sickdays and home_care removed (not available in MEPS)
+util_vars_common <- c(
   hospitalized    = "Hospitalized",
   any_er          = "Any ER Visit",
   er_visits       = "ER Visits (count)",
-  home_care       = "Home Care",
   has_usual_care  = "Usual Care",
   uninsured       = "Uninsured"
 )
+
+# NHIS-only variables (retain for backward compatibility)
+util_vars_nhis_only <- c(
+  home_care       = "Home Care"
+)
+
+# MEPS satisfaction variables
+satisfaction_vars <- c(
+  provider_listens    = "Provider Listens",
+  provider_respect    = "Provider Respect",
+  provider_explains   = "Provider Explains",
+  provider_confidence = "Provider Confidence"
+)
+
+# Combined for NHIS (includes home_care)
+util_vars <- c(util_vars_common, util_vars_nhis_only)
 
 
 # ==============================================================================
@@ -163,6 +178,45 @@ if (run_nhis && exists("data_nhis")) {
   }
 }
 
+# --- MEPS ---
+if (run_meps && exists("data_meps")) {
+  message("\nProcessing MEPS...")
+
+  # Add age group (scheme B) if not already present
+  if (!"age_group" %in% names(data_meps)) {
+    data_meps <- add_age_group(data_meps, age_var = age, scheme = "B")
+  }
+
+  message("  MEPS: ", nrow(data_meps), " rows, years ",
+          min(data_meps$year), "-", max(data_meps$year))
+
+  # Check utilization variable availability
+  message("\n  Utilization variable availability:")
+  for (var in names(util_vars_common)) {
+    if (var %in% names(data_meps)) {
+      n_valid <- sum(!is.na(data_meps[[var]]))
+      pct_valid <- round(100 * n_valid / nrow(data_meps), 1)
+      mean_val <- round(mean(data_meps[[var]], na.rm = TRUE), 3)
+      message("    ", var, ": ", n_valid, " valid (", pct_valid, "%), mean = ", mean_val)
+    } else {
+      message("    ", var, ": NOT FOUND")
+    }
+  }
+
+  # Check satisfaction variable availability
+  message("\n  Satisfaction variable availability:")
+  for (var in names(satisfaction_vars)) {
+    if (var %in% names(data_meps)) {
+      n_valid <- sum(!is.na(data_meps[[var]]))
+      pct_valid <- round(100 * n_valid / nrow(data_meps), 1)
+      mean_val <- round(mean(data_meps[[var]], na.rm = TRUE), 3)
+      message("    ", var, ": ", n_valid, " valid (", pct_valid, "%), mean = ", mean_val)
+    } else {
+      message("    ", var, ": NOT FOUND")
+    }
+  }
+}
+
 
 # ==============================================================================
 # PART 3: RUN AGE-STRATIFIED REGRESSIONS (utilization ~ SRH)
@@ -215,10 +269,76 @@ if (run_nhis && exists("data_nhis")) {
   message("\n  Total coefficient results: ", nrow(coef_nhis), " age-year-variable cells")
 }
 
-# --- MEPS Regressions (future) ---
+# --- MEPS Regressions ---
 if (run_meps && exists("data_meps")) {
   message("\n--- MEPS: utilization ~ SRH Coefficients ---")
-  # Similar structure as NHIS when MEPS vars are added
+
+  coef_list_meps <- list()
+
+  # Run regressions for common utilization variables
+  for (i in seq_along(util_vars_common)) {
+    var_name <- names(util_vars_common)[i]
+    var_label <- util_vars_common[i]
+
+    if (!var_name %in% names(data_meps)) {
+      message("  Skipping ", var_name, ": not found in data")
+      next
+    }
+
+    coef_result <- regress_outcome_on_srh_by_age_year(
+      data = data_meps,
+      outcome_var = var_name,
+      outcome_label = var_label,
+      survey_name = "MEPS",
+      psu_var = NULL,    # Using weights-only for computational efficiency
+      strata_var = NULL,
+      min_n = min_n
+    )
+
+    if (!is.null(coef_result)) {
+      coef_list_meps[[var_name]] <- coef_result %>%
+        mutate(category = var_label)
+    }
+  }
+
+  coef_meps <- bind_rows(coef_list_meps)
+  message("\n  Total MEPS coefficient results: ", nrow(coef_meps), " age-year-variable cells")
+}
+
+# --- MEPS Satisfaction Regressions ---
+coef_satisfaction <- NULL
+if (run_meps && exists("data_meps")) {
+  message("\n--- MEPS: satisfaction ~ SRH Coefficients ---")
+
+  coef_list_satisfaction <- list()
+
+  for (i in seq_along(satisfaction_vars)) {
+    var_name <- names(satisfaction_vars)[i]
+    var_label <- satisfaction_vars[i]
+
+    if (!var_name %in% names(data_meps)) {
+      message("  Skipping ", var_name, ": not found in data")
+      next
+    }
+
+    coef_result <- regress_outcome_on_srh_by_age_year(
+      data = data_meps,
+      outcome_var = var_name,
+      outcome_label = var_label,
+      survey_name = "MEPS",
+      psu_var = NULL,
+      strata_var = NULL,
+      min_n = min_n
+    )
+
+    if (!is.null(coef_result)) {
+      coef_list_satisfaction[[var_name]] <- coef_result %>%
+        mutate(category = var_label)
+    }
+  }
+
+  coef_satisfaction <- bind_rows(coef_list_satisfaction)
+  message("\n  Total satisfaction coefficient results: ", nrow(coef_satisfaction), " age-year-variable cells")
 }
 
 
@@ -266,6 +386,77 @@ if (run_nhis && exists("data_nhis")) {
   message("\n  Total prevalence results: ", nrow(prev_nhis), " age-year-variable cells")
 }
 
+# --- MEPS Prevalence ---
+if (run_meps && exists("data_meps")) {
+  message("\n--- MEPS Utilization Prevalence ---")
+
+  prev_list_meps <- list()
+
+  for (i in seq_along(util_vars_common)) {
+    var_name <- names(util_vars_common)[i]
+    var_label <- util_vars_common[i]
+
+    if (!var_name %in% names(data_meps)) {
+      message("  Skipping ", var_name, ": not found in data")
+      next
+    }
+
+    prev_result <- mean_by_age_year(
+      data = data_meps,
+      var_name = var_name,
+      var_label = var_label,
+      survey_name = "MEPS",
+      psu_var = NULL,
+      strata_var = NULL,
+      min_n = min_n
+    )
+
+    if (!is.null(prev_result)) {
+      prev_list_meps[[var_name]] <- prev_result %>%
+        mutate(category = var_label)
+    }
+  }
+
+  prev_meps <- bind_rows(prev_list_meps)
+  message("\n  Total MEPS prevalence results: ", nrow(prev_meps), " age-year-variable cells")
+}
+
+# --- MEPS Satisfaction Prevalence ---
+prev_satisfaction <- NULL
+if (run_meps && exists("data_meps")) {
+  message("\n--- MEPS Satisfaction Prevalence ---")
+
+  prev_list_satisfaction <- list()
+
+  for (i in seq_along(satisfaction_vars)) {
+    var_name <- names(satisfaction_vars)[i]
+    var_label <- satisfaction_vars[i]
+
+    if (!var_name %in% names(data_meps)) {
+      message("  Skipping ", var_name, ": not found in data")
+      next
+    }
+
+    prev_result <- mean_by_age_year(
+      data = data_meps,
+      var_name = var_name,
+      var_label = var_label,
+      survey_name = "MEPS",
+      psu_var = NULL,
+      strata_var = NULL,
+      min_n = min_n
+    )
+
+    if (!is.null(prev_result)) {
+      prev_list_satisfaction[[var_name]] <- prev_result %>%
+        mutate(category = var_label)
+    }
+  }
+
+  prev_satisfaction <- bind_rows(prev_list_satisfaction)
+  message("\n  Total satisfaction prevalence results: ", nrow(prev_satisfaction), " age-year-variable cells")
+}
+
 
 # ==============================================================================
 # PART 5: SAVE TABLES
@@ -273,18 +464,46 @@ if (run_nhis && exists("data_nhis")) {
 
 message("\n========== Saving tables ==========\n")
 
-# Coefficients
+# NHIS Coefficients
 if (!is.null(coef_nhis) && nrow(coef_nhis) > 0) {
   readr::write_csv(coef_nhis, file.path(tables_dir, paste0("fig_util_coef_nhis_", date_suffix, ".csv")))
   readr::write_rds(coef_nhis, file.path(tables_dir, paste0("fig_util_coef_nhis_", date_suffix, ".rds")))
   message("Saved: fig_util_coef_nhis_", date_suffix, " (.csv and .rds)")
 }
 
-# Prevalence
+# NHIS Prevalence
 if (!is.null(prev_nhis) && nrow(prev_nhis) > 0) {
   readr::write_csv(prev_nhis, file.path(tables_dir, paste0("fig_util_prev_nhis_", date_suffix, ".csv")))
   readr::write_rds(prev_nhis, file.path(tables_dir, paste0("fig_util_prev_nhis_", date_suffix, ".rds")))
   message("Saved: fig_util_prev_nhis_", date_suffix, " (.csv and .rds)")
+}
+
+# MEPS Coefficients
+if (!is.null(coef_meps) && nrow(coef_meps) > 0) {
+  readr::write_csv(coef_meps, file.path(tables_dir, paste0("fig_util_coef_meps_", date_suffix, ".csv")))
+  readr::write_rds(coef_meps, file.path(tables_dir, paste0("fig_util_coef_meps_", date_suffix, ".rds")))
+  message("Saved: fig_util_coef_meps_", date_suffix, " (.csv and .rds)")
+}
+
+# MEPS Prevalence
+if (!is.null(prev_meps) && nrow(prev_meps) > 0) {
+  readr::write_csv(prev_meps, file.path(tables_dir, paste0("fig_util_prev_meps_", date_suffix, ".csv")))
+  readr::write_rds(prev_meps, file.path(tables_dir, paste0("fig_util_prev_meps_", date_suffix, ".rds")))
+  message("Saved: fig_util_prev_meps_", date_suffix, " (.csv and .rds)")
+}
+
+# Satisfaction Coefficients
+if (!is.null(coef_satisfaction) && nrow(coef_satisfaction) > 0) {
+  readr::write_csv(coef_satisfaction, file.path(tables_dir, paste0("fig_satisfaction_coef_", date_suffix, ".csv")))
+  readr::write_rds(coef_satisfaction, file.path(tables_dir, paste0("fig_satisfaction_coef_", date_suffix, ".rds")))
+  message("Saved: fig_satisfaction_coef_", date_suffix, " (.csv and .rds)")
+}
+
+# Satisfaction Prevalence
+if (!is.null(prev_satisfaction) && nrow(prev_satisfaction) > 0) {
+  readr::write_csv(prev_satisfaction, file.path(tables_dir, paste0("fig_satisfaction_prev_", date_suffix, ".csv")))
+  readr::write_rds(prev_satisfaction, file.path(tables_dir, paste0("fig_satisfaction_prev_", date_suffix, ".rds")))
+  message("Saved: fig_satisfaction_prev_", date_suffix, " (.csv and .rds)")
 }
 
 
@@ -391,32 +610,63 @@ get_year_range <- function(df) {
 }
 
 xlim_nhis <- get_year_range(coef_nhis)
+xlim_meps <- get_year_range(coef_meps)
 
-# Categories in order for figure (6 variables, arranged as 2 rows of 3)
-categories_ordered <- c(
+# Common categories (shared between NHIS and MEPS) - 5 variables
+categories_common <- c(
   "Hospitalized", "Any ER Visit", "ER Visits (count)",
-  "Home Care", "Usual Care", "Uninsured"
+  "Usual Care", "Uninsured"
+)
+
+# Satisfaction categories (MEPS only) - 4 variables
+categories_satisfaction <- c(
+  "Provider Listens", "Provider Respect",
+  "Provider Explains", "Provider Confidence"
+)
+
+# Extended variable descriptions
+var_descriptions_coef <- c(
+  "Hospitalized"       = "Coef (SRH)",
+  "Any ER Visit"       = "Coef (SRH)",
+  "ER Visits (count)"  = "Coef (SRH)",
+  "Usual Care"         = "Coef (SRH)",
+  "Uninsured"          = "Coef (SRH)",
+  "Provider Listens"   = "Coef (SRH)",
+  "Provider Respect"   = "Coef (SRH)",
+  "Provider Explains"  = "Coef (SRH)",
+  "Provider Confidence" = "Coef (SRH)"
+)
+
+var_descriptions_prev <- c(
+  "Hospitalized"       = "Proportion",
+  "Any ER Visit"       = "Proportion",
+  "ER Visits (count)"  = "Mean Count",
+  "Usual Care"         = "Proportion",
+  "Uninsured"          = "Proportion",
+  "Provider Listens"   = "Proportion",
+  "Provider Respect"   = "Proportion",
+  "Provider Explains"  = "Proportion",
+  "Provider Confidence" = "Proportion"
 )
 
 
 # ==============================================================================
-# FIGURE: COEFFICIENTS (7 panels for NHIS)
+# FIGURE: COEFFICIENTS - Combined NHIS + MEPS (5 common variables)
 # ==============================================================================
 
-message("\n--- Creating Coefficient Figure ---\n")
+message("\n--- Creating Combined Coefficient Figure ---\n")
 
+fig_util_coef <- NULL
+
+# Build NHIS row
+coef_panels_nhis <- list()
 if (!is.null(coef_nhis) && nrow(coef_nhis) > 0) {
-
-  coef_panels <- list()
-
-  for (i in seq_along(categories_ordered)) {
-    cat_name <- categories_ordered[i]
+  for (i in seq_along(categories_common)) {
+    cat_name <- categories_common[i]
     cat_data <- coef_nhis %>% filter(category == cat_name)
-
-    # First panel gets row label
     row_label <- if (i == 1) "NHIS" else NULL
 
-    coef_panels[[cat_name]] <- create_age_subplot(
+    coef_panels_nhis[[cat_name]] <- create_age_subplot(
       cat_data,
       y_var = "coefficient",
       show_title = TRUE,
@@ -426,17 +676,40 @@ if (!is.null(coef_nhis) && nrow(coef_nhis) > 0) {
       row_label = row_label
     )
   }
+}
 
-  # Assemble figure: 2 rows of panels (3 + 3)
-  row1 <- (coef_panels[[1]] | coef_panels[[2]] | coef_panels[[3]])
-  row2 <- (coef_panels[[4]] | coef_panels[[5]] | coef_panels[[6]])
+# Build MEPS row
+coef_panels_meps <- list()
+if (!is.null(coef_meps) && nrow(coef_meps) > 0) {
+  for (i in seq_along(categories_common)) {
+    cat_name <- categories_common[i]
+    cat_data <- coef_meps %>% filter(category == cat_name)
+    row_label <- if (i == 1) "MEPS" else NULL
 
-  fig_util_coef <- (row1 / row2 / guide_area()) +
+    coef_panels_meps[[cat_name]] <- create_age_subplot(
+      cat_data,
+      y_var = "coefficient",
+      show_title = FALSE,  # No titles on second row
+      ylabel = var_descriptions_coef[cat_name],
+      xlim = xlim_meps,
+      row_label = row_label
+    )
+  }
+}
+
+# Assemble combined figure if we have both surveys
+if (length(coef_panels_nhis) > 0 && length(coef_panels_meps) > 0) {
+  row_nhis <- (coef_panels_nhis[[1]] | coef_panels_nhis[[2]] | coef_panels_nhis[[3]] |
+               coef_panels_nhis[[4]] | coef_panels_nhis[[5]])
+  row_meps <- (coef_panels_meps[[1]] | coef_panels_meps[[2]] | coef_panels_meps[[3]] |
+               coef_panels_meps[[4]] | coef_panels_meps[[5]])
+
+  fig_util_coef <- (row_nhis / row_meps / guide_area()) +
     plot_layout(heights = c(1, 1, 0.1), guides = "collect") +
     plot_annotation(
-      title = "SRH Predicts Healthcare Utilization (NHIS)",
+      title = "SRH Predicts Healthcare Utilization (NHIS & MEPS)",
       subtitle = "Model: utilization ~ SRH. Negative coefficient = better SRH (higher) -> less utilization.",
-      caption = "This validity test shows SRH consistently predicts healthcare-seeking behavior.",
+      caption = "This validity test shows SRH consistently predicts healthcare-seeking behavior across surveys.",
       theme = theme(
         plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
         plot.subtitle = element_text(size = 10, hjust = 0.5, color = "gray40"),
@@ -450,30 +723,46 @@ if (!is.null(coef_nhis) && nrow(coef_nhis) > 0) {
           legend.text = element_text(size = 10)) &
     guides(color = guide_legend(nrow = 1))
 
+} else if (length(coef_panels_nhis) > 0) {
+  # NHIS only fallback
+  row1 <- (coef_panels_nhis[[1]] | coef_panels_nhis[[2]] | coef_panels_nhis[[3]])
+  row2 <- (coef_panels_nhis[[4]] | coef_panels_nhis[[5]] | plot_spacer())
+
+  fig_util_coef <- (row1 / row2 / guide_area()) +
+    plot_layout(heights = c(1, 1, 0.1), guides = "collect") +
+    plot_annotation(
+      title = "SRH Predicts Healthcare Utilization (NHIS)",
+      subtitle = "Model: utilization ~ SRH. Negative coefficient = better SRH (higher) -> less utilization.",
+      theme = theme(
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 10, hjust = 0.5, color = "gray40"),
+        plot.background = element_rect(fill = "white", color = NA)
+      )
+    ) &
+    theme(legend.position = "bottom") &
+    guides(color = guide_legend(nrow = 1))
 } else {
   message("No coefficient data to plot")
-  fig_util_coef <- NULL
 }
 
 
 # ==============================================================================
-# FIGURE: PREVALENCE (7 panels for NHIS)
+# FIGURE: PREVALENCE - Combined NHIS + MEPS
 # ==============================================================================
 
-message("\n--- Creating Prevalence Figure ---\n")
+message("\n--- Creating Combined Prevalence Figure ---\n")
 
+fig_util_prev <- NULL
+
+# Build NHIS row
+prev_panels_nhis <- list()
 if (!is.null(prev_nhis) && nrow(prev_nhis) > 0) {
-
-  prev_panels <- list()
-
-  for (i in seq_along(categories_ordered)) {
-    cat_name <- categories_ordered[i]
+  for (i in seq_along(categories_common)) {
+    cat_name <- categories_common[i]
     cat_data <- prev_nhis %>% filter(category == cat_name)
-
-    # First panel gets row label
     row_label <- if (i == 1) "NHIS" else NULL
 
-    prev_panels[[cat_name]] <- create_age_subplot(
+    prev_panels_nhis[[cat_name]] <- create_age_subplot(
       cat_data,
       y_var = "mean",
       show_title = TRUE,
@@ -484,16 +773,40 @@ if (!is.null(prev_nhis) && nrow(prev_nhis) > 0) {
       row_label = row_label
     )
   }
+}
 
-  # Assemble figure: 2 rows of panels (3 + 3)
-  row1 <- (prev_panels[[1]] | prev_panels[[2]] | prev_panels[[3]])
-  row2 <- (prev_panels[[4]] | prev_panels[[5]] | prev_panels[[6]])
+# Build MEPS row
+prev_panels_meps <- list()
+if (!is.null(prev_meps) && nrow(prev_meps) > 0) {
+  for (i in seq_along(categories_common)) {
+    cat_name <- categories_common[i]
+    cat_data <- prev_meps %>% filter(category == cat_name)
+    row_label <- if (i == 1) "MEPS" else NULL
 
-  fig_util_prev <- (row1 / row2 / guide_area()) +
+    prev_panels_meps[[cat_name]] <- create_age_subplot(
+      cat_data,
+      y_var = "mean",
+      show_title = FALSE,
+      ylabel = var_descriptions_prev[cat_name],
+      xlim = xlim_meps,
+      show_hline = FALSE,
+      row_label = row_label
+    )
+  }
+}
+
+# Assemble combined figure
+if (length(prev_panels_nhis) > 0 && length(prev_panels_meps) > 0) {
+  row_nhis <- (prev_panels_nhis[[1]] | prev_panels_nhis[[2]] | prev_panels_nhis[[3]] |
+               prev_panels_nhis[[4]] | prev_panels_nhis[[5]])
+  row_meps <- (prev_panels_meps[[1]] | prev_panels_meps[[2]] | prev_panels_meps[[3]] |
+               prev_panels_meps[[4]] | prev_panels_meps[[5]])
+
+  fig_util_prev <- (row_nhis / row_meps / guide_area()) +
     plot_layout(heights = c(1, 1, 0.1), guides = "collect") +
     plot_annotation(
-      title = "Hospital Utilization: Prevalence Trends by Age Group (NHIS)",
-      subtitle = "Note: Values represent survey-weighted means by age group and year",
+      title = "Hospital Utilization: Prevalence Trends by Age Group (NHIS & MEPS)",
+      subtitle = "Survey-weighted means by age group and year",
       theme = theme(
         plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
         plot.subtitle = element_text(size = 10, hjust = 0.5, color = "gray40"),
@@ -506,9 +819,133 @@ if (!is.null(prev_nhis) && nrow(prev_nhis) > 0) {
           legend.text = element_text(size = 10)) &
     guides(color = guide_legend(nrow = 1))
 
+} else if (length(prev_panels_nhis) > 0) {
+  # NHIS only fallback
+  row1 <- (prev_panels_nhis[[1]] | prev_panels_nhis[[2]] | prev_panels_nhis[[3]])
+  row2 <- (prev_panels_nhis[[4]] | prev_panels_nhis[[5]] | plot_spacer())
+
+  fig_util_prev <- (row1 / row2 / guide_area()) +
+    plot_layout(heights = c(1, 1, 0.1), guides = "collect") +
+    plot_annotation(
+      title = "Hospital Utilization: Prevalence Trends by Age Group (NHIS)",
+      subtitle = "Survey-weighted means by age group and year",
+      theme = theme(
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 10, hjust = 0.5, color = "gray40"),
+        plot.background = element_rect(fill = "white", color = NA)
+      )
+    ) &
+    theme(legend.position = "bottom") &
+    guides(color = guide_legend(nrow = 1))
 } else {
   message("No prevalence data to plot")
-  fig_util_prev <- NULL
+}
+
+
+# ==============================================================================
+# FIGURE: SATISFACTION COEFFICIENTS (MEPS only)
+# ==============================================================================
+
+message("\n--- Creating Satisfaction Coefficient Figure ---\n")
+
+fig_satisfaction_coef <- NULL
+
+if (!is.null(coef_satisfaction) && nrow(coef_satisfaction) > 0) {
+  sat_coef_panels <- list()
+
+  for (i in seq_along(categories_satisfaction)) {
+    cat_name <- categories_satisfaction[i]
+    cat_data <- coef_satisfaction %>% filter(category == cat_name)
+    row_label <- if (i == 1) "MEPS" else NULL
+
+    sat_coef_panels[[cat_name]] <- create_age_subplot(
+      cat_data,
+      y_var = "coefficient",
+      show_title = TRUE,
+      title = cat_name,
+      ylabel = var_descriptions_coef[cat_name],
+      xlim = xlim_meps,
+      row_label = row_label
+    )
+  }
+
+  if (length(sat_coef_panels) >= 4) {
+    fig_satisfaction_coef <- (sat_coef_panels[[1]] | sat_coef_panels[[2]] |
+                              sat_coef_panels[[3]] | sat_coef_panels[[4]]) /
+      guide_area() +
+      plot_layout(heights = c(1, 0.1), guides = "collect") +
+      plot_annotation(
+        title = "SRH Predicts Care Satisfaction (MEPS)",
+        subtitle = "Model: satisfaction ~ SRH. Positive coefficient = better SRH -> more satisfaction.",
+        caption = "CAHPS satisfaction items: Provider listens, shows respect, explains, gives confidence.",
+        theme = theme(
+          plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+          plot.subtitle = element_text(size = 10, hjust = 0.5, color = "gray40"),
+          plot.caption = element_text(size = 9, hjust = 0.5, color = "gray50"),
+          plot.background = element_rect(fill = "white", color = NA)
+        )
+      ) &
+      theme(legend.position = "bottom",
+            legend.direction = "horizontal",
+            legend.title = element_text(face = "bold", size = 11),
+            legend.text = element_text(size = 10)) &
+      guides(color = guide_legend(nrow = 1))
+  }
+} else {
+  message("No satisfaction coefficient data to plot")
+}
+
+
+# ==============================================================================
+# FIGURE: SATISFACTION PREVALENCE (MEPS only)
+# ==============================================================================
+
+message("\n--- Creating Satisfaction Prevalence Figure ---\n")
+
+fig_satisfaction_prev <- NULL
+
+if (!is.null(prev_satisfaction) && nrow(prev_satisfaction) > 0) {
+  sat_prev_panels <- list()
+
+  for (i in seq_along(categories_satisfaction)) {
+    cat_name <- categories_satisfaction[i]
+    cat_data <- prev_satisfaction %>% filter(category == cat_name)
+    row_label <- if (i == 1) "MEPS" else NULL
+
+    sat_prev_panels[[cat_name]] <- create_age_subplot(
+      cat_data,
+      y_var = "mean",
+      show_title = TRUE,
+      title = cat_name,
+      ylabel = var_descriptions_prev[cat_name],
+      xlim = xlim_meps,
+      show_hline = FALSE,
+      row_label = row_label
+    )
+  }
+
+  if (length(sat_prev_panels) >= 4) {
+    fig_satisfaction_prev <- (sat_prev_panels[[1]] | sat_prev_panels[[2]] |
+                              sat_prev_panels[[3]] | sat_prev_panels[[4]]) /
+      guide_area() +
+      plot_layout(heights = c(1, 0.1), guides = "collect") +
+      plot_annotation(
+        title = "Care Satisfaction Trends by Age Group (MEPS)",
+        subtitle = "Survey-weighted proportion reporting positive response",
+        theme = theme(
+          plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+          plot.subtitle = element_text(size = 10, hjust = 0.5, color = "gray40"),
+          plot.background = element_rect(fill = "white", color = NA)
+        )
+      ) &
+      theme(legend.position = "bottom",
+            legend.direction = "horizontal",
+            legend.title = element_text(face = "bold", size = 11),
+            legend.text = element_text(size = 10)) &
+      guides(color = guide_legend(nrow = 1))
+  }
+} else {
+  message("No satisfaction prevalence data to plot")
 }
 
 
@@ -518,44 +955,84 @@ if (!is.null(prev_nhis) && nrow(prev_nhis) > 0) {
 
 message("\n========== Saving figures ==========\n")
 
-# Coefficient figure
+# Utilization Coefficient figure (NHIS + MEPS)
 if (!is.null(fig_util_coef)) {
   ggsave(
     filename = file.path(output_dir, paste0("fig_util_coef_draft_", date_suffix, ".png")),
     plot = fig_util_coef,
-    width = 12, height = 8, dpi = 300
+    width = 14, height = 7, dpi = 300
   )
   ggsave(
     filename = file.path(output_dir, "fig_util_coef.png"),
     plot = fig_util_coef,
-    width = 12, height = 8, dpi = 300
+    width = 14, height = 7, dpi = 300
   )
   ggsave(
     filename = file.path(output_dir, "fig_util_coef.pdf"),
     plot = fig_util_coef,
-    width = 12, height = 8
+    width = 14, height = 7
   )
   message("Saved: fig_util_coef (.png and .pdf)")
 }
 
-# Prevalence figure
+# Utilization Prevalence figure (NHIS + MEPS)
 if (!is.null(fig_util_prev)) {
   ggsave(
     filename = file.path(output_dir, paste0("fig_util_prev_draft_", date_suffix, ".png")),
     plot = fig_util_prev,
-    width = 12, height = 8, dpi = 300
+    width = 14, height = 7, dpi = 300
   )
   ggsave(
     filename = file.path(output_dir, "fig_util_prev.png"),
     plot = fig_util_prev,
-    width = 12, height = 8, dpi = 300
+    width = 14, height = 7, dpi = 300
   )
   ggsave(
     filename = file.path(output_dir, "fig_util_prev.pdf"),
     plot = fig_util_prev,
-    width = 12, height = 8
+    width = 14, height = 7
   )
   message("Saved: fig_util_prev (.png and .pdf)")
+}
+
+# Satisfaction Coefficient figure (MEPS only)
+if (!is.null(fig_satisfaction_coef)) {
+  ggsave(
+    filename = file.path(output_dir, paste0("fig_satisfaction_coef_draft_", date_suffix, ".png")),
+    plot = fig_satisfaction_coef,
+    width = 14, height = 5, dpi = 300
+  )
+  ggsave(
+    filename = file.path(output_dir, "fig_satisfaction_coef.png"),
+    plot = fig_satisfaction_coef,
+    width = 14, height = 5, dpi = 300
+  )
+  ggsave(
+    filename = file.path(output_dir, "fig_satisfaction_coef.pdf"),
+    plot = fig_satisfaction_coef,
+    width = 14, height = 5
+  )
+  message("Saved: fig_satisfaction_coef (.png and .pdf)")
+}
+
+# Satisfaction Prevalence figure (MEPS only)
+if (!is.null(fig_satisfaction_prev)) {
+  ggsave(
+    filename = file.path(output_dir, paste0("fig_satisfaction_prev_draft_", date_suffix, ".png")),
+    plot = fig_satisfaction_prev,
+    width = 14, height = 5, dpi = 300
+  )
+  ggsave(
+    filename = file.path(output_dir, "fig_satisfaction_prev.png"),
+    plot = fig_satisfaction_prev,
+    width = 14, height = 5, dpi = 300
+  )
+  ggsave(
+    filename = file.path(output_dir, "fig_satisfaction_prev.pdf"),
+    plot = fig_satisfaction_prev,
+    width = 14, height = 5
+  )
+  message("Saved: fig_satisfaction_prev (.png and .pdf)")
 }
 
 
@@ -627,13 +1104,57 @@ check_prev_summary <- function(df, name) {
   }
 }
 
-message("\n--- Coefficient Check ---")
+# Function to check satisfaction coefficient directions
+check_satisfaction_summary <- function(df, name) {
+  if (is.null(df) || nrow(df) == 0) {
+    message("  ", name, ": No data")
+    return()
+  }
+
+  summary_df <- df %>%
+    group_by(category, age_group) %>%
+    summarise(
+      n_years = n(),
+      mean_coef = mean(coefficient, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    group_by(category) %>%
+    summarise(
+      n_age_groups = n_distinct(age_group),
+      overall_mean = mean(mean_coef, na.rm = TRUE),
+      .groups = "drop"
+    )
+
+  message("  ", name, ":")
+  for (i in 1:nrow(summary_df)) {
+    row <- summary_df[i, ]
+    # Positive is expected (better SRH -> more satisfaction)
+    if (row$overall_mean > 0) {
+      direction <- "POSITIVE (expected)"
+    } else {
+      direction <- "NEGATIVE (unexpected!)"
+    }
+    message("    ", row$category, ": mean coef = ", round(row$overall_mean, 3),
+            " (", direction, "), ", row$n_age_groups, " age groups")
+  }
+}
+
+message("\n--- Utilization Coefficient Check ---")
 message("Expected: Negative coefficients (better SRH -> less utilization)")
 message("Exception: 'Usual Care' may be positive (better SRH -> more preventive care)")
 check_coef_summary(coef_nhis, "NHIS")
+check_coef_summary(coef_meps, "MEPS")
 
-message("\n--- Prevalence Check ---")
+message("\n--- Satisfaction Coefficient Check ---")
+message("Expected: Positive coefficients (better SRH -> more satisfaction)")
+check_satisfaction_summary(coef_satisfaction, "MEPS Satisfaction")
+
+message("\n--- Utilization Prevalence Check ---")
 check_prev_summary(prev_nhis, "NHIS")
+check_prev_summary(prev_meps, "MEPS")
+
+message("\n--- Satisfaction Prevalence Check ---")
+check_prev_summary(prev_satisfaction, "MEPS Satisfaction")
 
 # Sample size check
 message("\n--- Sample Size Check ---")
@@ -642,17 +1163,32 @@ if (!is.null(coef_nhis) && nrow(coef_nhis) > 0) {
   mean_n_obs <- round(mean(coef_nhis$n_unweighted, na.rm = TRUE))
   message("  NHIS coefficients: min n = ", min_n_obs, ", mean n = ", mean_n_obs)
 }
+if (!is.null(coef_meps) && nrow(coef_meps) > 0) {
+  min_n_obs <- min(coef_meps$n_unweighted, na.rm = TRUE)
+  mean_n_obs <- round(mean(coef_meps$n_unweighted, na.rm = TRUE))
+  message("  MEPS coefficients: min n = ", min_n_obs, ", mean n = ", mean_n_obs)
+}
+if (!is.null(coef_satisfaction) && nrow(coef_satisfaction) > 0) {
+  min_n_obs <- min(coef_satisfaction$n_unweighted, na.rm = TRUE)
+  mean_n_obs <- round(mean(coef_satisfaction$n_unweighted, na.rm = TRUE))
+  message("  MEPS satisfaction: min n = ", min_n_obs, ", mean n = ", mean_n_obs)
+}
 
 # Check for 2019 redesign effects
-message("\n--- 2019 Redesign Note ---")
+message("\n--- Survey Notes ---")
 if (!is.null(coef_nhis)) {
   years_with_data <- unique(coef_nhis$year)
   if (2019 %in% years_with_data && 2018 %in% years_with_data) {
-    message("  Data spans 2018-2019 transition. Visual inspection recommended for discontinuity.")
+    message("  NHIS: Data spans 2018-2019 transition. Visual inspection recommended for discontinuity.")
   }
+}
+if (!is.null(coef_meps)) {
+  message("  MEPS: Years ", min(coef_meps$year), "-", max(coef_meps$year))
 }
 
 message("\n========== Hospital Utilization Analysis Complete ==========\n")
 
 # Clean up large objects
-rm(data_nhis); gc()
+if (exists("data_nhis")) rm(data_nhis)
+if (exists("data_meps")) rm(data_meps)
+gc()

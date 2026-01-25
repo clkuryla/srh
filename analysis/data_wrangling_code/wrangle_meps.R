@@ -11,7 +11,7 @@ source(here::here("R/paths.R")) # To access path for data as depot_path
 ensure_dirs()
 
 data_meps_raw <- readr::read_csv(
-  depot_path("surveys", "MEPS", "ipums_extracts", "meps_00001.csv"),
+  depot_path("surveys", "MEPS", "ipums_extracts", "meps_00002.csv"),
   show_col_types = FALSE
 )
 
@@ -101,6 +101,28 @@ meps_vars_sum_k6_phq2 <- c(# 0-24 (!= 96, 98)
   "PHQ2" #	PHQ-2 depression screen summary score
 )
 
+# Hospital utilization variables (direct counts from meps_00002 extract)
+meps_vars_utilization <- c(
+  "ERTOTVIS",    # ER visits total (0=none, 1+=count)
+  "HPTOTDIS",    # Hospital discharges (0=none, 1+=count)
+  "HPTOTNIGHT",  # Hospital nights (0=none, 1+=count)
+  "OBTOTVIS"     # Office-based visits (0=none, 1+=count)
+)
+
+# Insurance/access variables
+meps_vars_access <- c(
+  "HINOTCOV",    # Not covered by insurance
+  "USUALPL"      # Has usual place of care
+)
+
+# Satisfaction variables (CAHPS items) - 0=NIU, 1=No, 2=Yes, 9=Unknown
+meps_vars_satisfaction <- c(
+  "USCPRLSTN",   # Provider listens
+  "USCPRRSPCT",  # Provider shows respect
+  "USCPREXPLN",  # Provider explains
+  "USCPRCNFDT"   # Provider gives confidence
+)
+
 ### MEPS VARS CONSOLIDATED 
 
 # meps_vars_demog
@@ -122,18 +144,21 @@ meps_covar_notcomorb <- combine(meps_vars_k6_specific,
 ###### SELECT VARS OF INTEREST
 ####################################################
 
-data_meps <- data_meps_raw %>% 
-  select(MEPSID, 
-         YEAR, AGE, HEALTH, 
-         BIRTHYR, 
+data_meps <- data_meps_raw %>%
+  select(MEPSID,
+         YEAR, AGE, HEALTH,
+         BIRTHYR,
          PERWEIGHT, # person weight for general variables
          SAQWEIGHT, #For HEALTH (srh)
-         PSUANN, STRATANN, #, 
-         PSUPLD, STRATAPLD, 
+         PSUANN, STRATANN, #,
+         PSUPLD, STRATAPLD,
          #   PANELYR, RELYR,
          all_of(c(meps_vars_demog,
-                  meps_vars_comorb, 
-                  meps_covar_notcomorb))
+                  meps_vars_comorb,
+                  meps_covar_notcomorb,
+                  meps_vars_utilization,
+                  meps_vars_access,
+                  meps_vars_satisfaction))
   )
 
 ####################################################
@@ -214,10 +239,81 @@ data_meps <- data_meps %>%
                   .x == 1 ~ 0, # No
                   .x == 2 ~ 1, # Yes
                   TRUE    ~ NA_real_
-                )))
+                ))) %>%
+  # =======================================================================
+  # Hospital Utilization Variables
+  # =======================================================================
+  mutate(
+    # Hospital admission (binary) - matches NHIS
+    hospitalized = case_when(
+      HPTOTDIS > 0 ~ 1L,
+      HPTOTDIS == 0 ~ 0L,
+      TRUE ~ NA_integer_
+    ),
+
+    # Any ER visit (binary) - matches NHIS
+    any_er = case_when(
+      ERTOTVIS > 0 ~ 1L,
+      ERTOTVIS == 0 ~ 0L,
+      TRUE ~ NA_integer_
+    ),
+
+    # ER visits count - matches NHIS
+    er_visits = case_when(
+      ERTOTVIS >= 0 ~ as.numeric(ERTOTVIS),
+      TRUE ~ NA_real_
+    ),
+
+    # Uninsured (HINOTCOV: 1=Covered, 2=Not covered)
+    uninsured = case_when(
+      HINOTCOV == 2 ~ 1L,
+      HINOTCOV == 1 ~ 0L,
+      TRUE ~ NA_integer_
+    ),
+
+    # Has usual place of care (USUALPL: 1=No, 2=Yes)
+    has_usual_care = case_when(
+      USUALPL == 2 ~ 1L,
+      USUALPL == 1 ~ 0L,
+      TRUE ~ NA_integer_
+    ),
+
+    # =======================================================================
+    # Satisfaction Variables (CAHPS items)
+    # Coding: 0=NIU, 1=No, 2=Yes, 9=Unknown
+    # =======================================================================
+
+    # Provider listens
+    provider_listens = case_when(
+      USCPRLSTN == 2 ~ 1L,  # Yes
+      USCPRLSTN == 1 ~ 0L,  # No
+      TRUE ~ NA_integer_    # NIU or unknown
+    ),
+
+    # Provider shows respect
+    provider_respect = case_when(
+      USCPRRSPCT == 2 ~ 1L,
+      USCPRRSPCT == 1 ~ 0L,
+      TRUE ~ NA_integer_
+    ),
+
+    # Provider explains
+    provider_explains = case_when(
+      USCPREXPLN == 2 ~ 1L,
+      USCPREXPLN == 1 ~ 0L,
+      TRUE ~ NA_integer_
+    ),
+
+    # Provider gives confidence
+    provider_confidence = case_when(
+      USCPRCNFDT == 2 ~ 1L,
+      USCPRCNFDT == 1 ~ 0L,
+      TRUE ~ NA_integer_
+    )
+  )
 
 
-# readr::write_rds(data_meps, derived_path("data_meps.rds"))
+readr::write_rds(data_meps, derived_path("data_meps.rds"))
 
 rm(data_meps_raw)
 #################################################### 
