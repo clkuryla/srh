@@ -406,6 +406,266 @@ save_all_coefficients_tables <- function(
 }
 
 
+# ------------------------------------------------------------------------------
+# LOGISTIC REGRESSION FUNCTION (for dichotomized SRH)
+# ------------------------------------------------------------------------------
+
+#' Run survey-weighted logistic regression of dichotomized SRH on age for each year
+#'
+#' @description
+#' For each year in the dataset, fits a survey-weighted logistic model:
+#'   SRH_dichot ~ age
+#' and extracts the age coefficient with standard error and confidence interval.
+#' Optionally computes marginal effects on the probability scale.
+#'
+#' @param data Data frame with columns: dichotomized SRH, age, year, wt (and optional psu, strata)
+#' @param survey_name Character string for labeling output (e.g., "NHIS")
+#' @param srh_dichot_var Name of dichotomized SRH variable (default "srh_dichot")
+#' @param age_var Name of age variable (default "age")
+#' @param year_var Name of year variable (default "year")
+#' @param psu_var Name of PSU variable (default "psu", NULL if not available)
+#' @param strata_var Name of strata variable (default "strata", NULL if not available)
+#' @param wt_var Name of weight variable (default "wt")
+#' @param ci_level Confidence level for intervals (default 0.95)
+#' @param lonely_psu How to handle single-PSU strata (default "adjust")
+#' @param compute_marginal Compute average marginal effect? (default TRUE)
+#' @param age_increment Age increment for marginal effect (default 10 years)
+#'
+#' @return Data frame with columns:
+#'   - survey: Survey name
+#'   - year: Survey year
+#'   - coefficient: Age coefficient on log-odds scale
+#'   - se: Standard error of coefficient
+#'   - ci_lower, ci_upper: Confidence interval bounds (log-odds)
+#'   - marginal_effect: Average marginal effect (change in probability per age_increment years)
+#'   - marginal_se: Standard error of marginal effect
+#'   - n_unweighted: Unweighted sample size for that year
+#'
+#' @details
+#' The model is: SRH_dichot ~ age (simple logistic regression, no covariates)
+#'
+#' Interpretation:
+#' - With "higher = better" coding (1 = good health):
+#'   - Negative coefficient: Older people have lower probability of good health (typical)
+#'   - Coefficient trending toward zero: Age becoming less predictive (convergence)
+#' - Marginal effect: Average change in predicted probability per `age_increment` year increase
+#'
+regress_age_coefficient_by_year_logistic <- function(
+    data,
+    survey_name,
+    srh_dichot_var = "srh_dichot",
+    age_var = "age",
+    year_var = "year",
+    psu_var = "psu",
+    strata_var = "strata",
+    wt_var = "wt",
+    ci_level = 0.95,
+    lonely_psu = "adjust",
+    compute_marginal = TRUE,
+    age_increment = 10
+) {
+
+  # --- Input validation ---
+  stopifnot(is.data.frame(data))
+  stopifnot(srh_dichot_var %in% names(data))
+  stopifnot(age_var %in% names(data))
+  stopifnot(year_var %in% names(data))
+  stopifnot(wt_var %in% names(data))
+
+  # --- Set survey options ---
+  old_lonely <- getOption("survey.lonely.psu")
+  options(survey.lonely.psu = lonely_psu)
+  on.exit(options(survey.lonely.psu = old_lonely), add = TRUE)
+
+  # --- Check which design elements are available ---
+  has_psu <- !is.null(psu_var) && psu_var %in% names(data)
+  has_strata <- !is.null(strata_var) && strata_var %in% names(data)
+
+  if (!has_psu || !has_strata) {
+    message("Note: ", survey_name, " - Using weights-only design. ",
+            "PSU: ", has_psu, ", Strata: ", has_strata)
+  }
+
+  # --- Get unique years ---
+  years <- sort(unique(data[[year_var]]))
+  message("Processing ", survey_name, " (logistic): ", length(years), " years (",
+          min(years), "-", max(years), ")")
+
+  # --- Run regression for each year ---
+  results_list <- vector("list", length(years))
+
+  for (i in seq_along(years)) {
+    yr <- years[i]
+
+    # Subset to this year
+    data_year <- data[data[[year_var]] == yr, , drop = FALSE]
+
+    # Filter to valid observations
+    valid_mask <- !is.na(data_year[[srh_dichot_var]]) &
+      !is.na(data_year[[age_var]]) &
+      !is.na(data_year[[wt_var]]) &
+      data_year[[wt_var]] > 0
+
+    if (has_psu) valid_mask <- valid_mask & !is.na(data_year[[psu_var]])
+    if (has_strata) valid_mask <- valid_mask & !is.na(data_year[[strata_var]])
+
+    data_year <- data_year[valid_mask, , drop = FALSE]
+    n_unweighted <- nrow(data_year)
+
+    # Skip if too few observations
+    if (n_unweighted < 30) {
+      warning("Year ", yr, " has only ", n_unweighted, " observations. Skipping.")
+      next
+    }
+
+    # --- Create survey design ---
+    tryCatch({
+      if (has_psu && has_strata) {
+        svy_design <- svydesign(
+          ids = as.formula(paste0("~", psu_var)),
+          strata = as.formula(paste0("~", strata_var)),
+          weights = as.formula(paste0("~", wt_var)),
+          data = data_year,
+          nest = TRUE
+        )
+      } else if (has_psu) {
+        svy_design <- svydesign(
+          ids = as.formula(paste0("~", psu_var)),
+          weights = as.formula(paste0("~", wt_var)),
+          data = data_year
+        )
+      } else if (has_strata) {
+        svy_design <- svydesign(
+          ids = ~1,
+          strata = as.formula(paste0("~", strata_var)),
+          weights = as.formula(paste0("~", wt_var)),
+          data = data_year
+        )
+      } else {
+        svy_design <- svydesign(
+          ids = ~1,
+          weights = as.formula(paste0("~", wt_var)),
+          data = data_year
+        )
+      }
+
+      # --- Fit the logistic model: SRH_dichot ~ age ---
+      formula <- as.formula(paste0(srh_dichot_var, " ~ ", age_var))
+      model <- svyglm(formula, design = svy_design, family = quasibinomial())
+
+      # --- Extract age coefficient (log-odds scale) ---
+      coef_summary <- summary(model)$coefficients
+      age_row <- coef_summary[age_var, ]
+
+      coefficient <- age_row["Estimate"]
+      se <- age_row["Std. Error"]
+      t_value <- age_row["t value"]
+      p_value <- age_row["Pr(>|t|)"]
+
+      # Confidence interval (log-odds scale)
+      ci <- confint(model, level = ci_level)[age_var, ]
+      ci_lower <- ci[1]
+      ci_upper <- ci[2]
+
+      # --- Compute average marginal effect (probability scale) ---
+      marginal_effect <- NA_real_
+      marginal_se <- NA_real_
+
+      if (compute_marginal) {
+        # Average marginal effect: mean of dP/d(age) across all observations
+        # dP/d(age) = beta * p * (1 - p) where p = predicted probability
+        # For age_increment years: multiply by age_increment
+
+        beta <- coefficient
+        pred_probs <- predict(model, type = "response")
+
+        # Marginal effect for each observation
+        me_individual <- beta * pred_probs * (1 - pred_probs) * age_increment
+
+        # Average marginal effect (weighted)
+        weights_vec <- weights(svy_design)
+        marginal_effect <- weighted.mean(me_individual, w = weights_vec, na.rm = TRUE)
+
+        # Approximate SE using delta method
+        # Var(AME) approx = (AME/beta)^2 * Var(beta) for large samples
+        if (!is.na(marginal_effect) && !is.na(se) && abs(coefficient) > 1e-10) {
+          marginal_se <- abs(marginal_effect / coefficient) * se
+        }
+      }
+
+      results_list[[i]] <- data.frame(
+        survey = survey_name,
+        year = yr,
+        coefficient = coefficient,
+        se = se,
+        t_value = t_value,
+        p_value = p_value,
+        ci_lower = ci_lower,
+        ci_upper = ci_upper,
+        marginal_effect = marginal_effect,
+        marginal_se = marginal_se,
+        n_unweighted = n_unweighted,
+        stringsAsFactors = FALSE
+      )
+
+    }, error = function(e) {
+      warning("Year ", yr, " failed: ", e$message)
+    })
+  }
+
+  # --- Combine results ---
+  coefficients <- dplyr::bind_rows(results_list)
+  rownames(coefficients) <- NULL
+
+  if (nrow(coefficients) == 0) {
+    stop("No valid results for ", survey_name)
+  }
+
+  message("  Completed: ", nrow(coefficients), " years with valid coefficients")
+
+  return(coefficients)
+}
+
+
+#' Run metaregression on logistic age coefficients over time
+#'
+#' @description
+#' Wrapper for run_metaregression() that works with logistic regression output.
+#' Can run on either log-odds coefficients or marginal effects.
+#'
+#' @param coefficients Data frame output from regress_age_coefficient_by_year_logistic()
+#' @param survey_name Character string for labeling
+#' @param use_marginal Use marginal_effect instead of coefficient? Default FALSE (log-odds)
+#'
+#' @return Data frame with metaregression results
+#'
+run_metaregression_logistic <- function(coefficients, survey_name = NULL, use_marginal = FALSE) {
+
+  if (use_marginal) {
+    # Use marginal effects
+    if (!"marginal_effect" %in% names(coefficients) ||
+        all(is.na(coefficients$marginal_effect))) {
+      stop("Marginal effects not available in coefficients data frame")
+    }
+
+    coefficients_tmp <- coefficients %>%
+      transmute(
+        survey = survey,
+        year = year,
+        coefficient = marginal_effect,
+        se = marginal_se
+      ) %>%
+      filter(!is.na(coefficient), !is.na(se))
+
+  } else {
+    # Use log-odds coefficients
+    coefficients_tmp <- coefficients
+  }
+
+  run_metaregression(coefficients_tmp, survey_name = survey_name)
+}
+
+
 #' Save metaregression results table
 #'
 #' @param meta_results Data frame of metaregression results (one row per survey)
