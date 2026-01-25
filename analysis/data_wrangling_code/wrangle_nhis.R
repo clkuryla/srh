@@ -112,7 +112,7 @@ nhis_vars_binary_recode <- c(nhis_vars_comorb, "ANXIETYEV")
 # =============================================================================
 
 data_nhis_raw <- readr::read_csv(
-  depot_path("surveys", "NHIS", "nhis_00008.csv"),
+  depot_path("surveys", "NHIS", "nhis_00009.csv"),
   show_col_types = FALSE
 )
 
@@ -120,7 +120,7 @@ data_nhis <- data_nhis_raw %>%
   # Basic filters
   filter(!is.na(HEALTH)) %>%
   filter(!is.na(AGE)) %>%
-  filter(AGE >= 18) %>%
+  filter(AGE >= 18, AGE < 900) %>%  # Filter out AGE 997/999 codes (unknown/top-coded)
   filter(YEAR >= 1982) %>% # SRH has no "Very Good" in NHIS pre-1982
   filter(HEALTH %in% 1:5) %>%
   # Create standardized variable names
@@ -143,21 +143,9 @@ data_nhis <- data_nhis_raw %>%
     )
   )) %>%
   # Add age group using scheme B (18-29, 30-39, etc.)
-  add_age_group(age_var = age, scheme = "B")
-  filter(!(is.na(HEALTH))) %>% 
-  filter(!(is.na(AGE))) %>% 
-  filter(AGE >= 18, AGE < 900) %>%  # Filter out AGE 997/999 codes (unknown/top-coded)
-  filter(YEAR >= 1982) %>% # SRH has no "Very Good" in NHIS pre-1982
-#  select(AGE, YEAR, HEALTH, PSU, STRATA, SAMPWEIGHT, SEX) %>% 
-  filter(HEALTH %in% 1:5) %>% 
-  mutate(age = AGE,
-         year = YEAR,
-    #     cohort = year - age,
-         srh = 6 - HEALTH,
-         psu = PSU,
-         wt = SAMPWEIGHT,
-         strata = STRATA,
-         sex = SEX,
+  add_age_group(age_var = age, scheme = "B") %>%
+  # Additional variable processing
+  mutate(
          flclimb = case_when(
            FLCLIMB %in% c(0, 50, 97, 98, 99) ~ NA_real_,
            FLCLIMB == 10 ~ 1,
@@ -178,7 +166,72 @@ data_nhis <- data_nhis_raw %>%
          # K6 summary: 0=low, 1=medium, 2=serious distress; 8=unknown → NA
          pdistressk6 = if_else(PDISTRESSK6 %in% 0:2, PDISTRESSK6, NA_integer_),
          # K6 score (0-24): sum of 6 items, NA if any item missing
-         k6 = aeffort + ahopeless + anervous + arestless + asad + aworthless) 
+         k6 = aeffort + ahopeless + anervous + arestless + asad + aworthless,
+
+         # =======================================================================
+         # Hospital Utilization Variables
+         # =======================================================================
+
+         # HOSPNGHT: Hospital stay past year (0=NIU, 1=No, 2=Yes, 7/8/9=Unknown)
+         hospitalized = case_when(
+           HOSPNGHT == 2 ~ 1L,    # Yes
+           HOSPNGHT == 1 ~ 0L,    # No
+           TRUE ~ NA_integer_
+         ),
+
+         # ERYRNO: ER visits past year - binary (any visits)
+         any_er = case_when(
+           ERYRNO == 10 ~ 0L,                    # No visits
+           ERYRNO %in% c(20, 30:48) ~ 1L,        # Any visits
+           TRUE ~ NA_integer_
+         ),
+
+         # ERYRNO: ER visits (midpoint-imputed from categorical bands)
+         # Code 10=No visits, 20=1, 30=2-3, 31=2, 32=3, 40=4+, 41=4-5, 42=6-7,
+         # 43=8-9, 45=10-12, 46-48=13+, 97-99=Unknown
+         er_visits = case_when(
+           ERYRNO == 10 ~ 0,      # No visits
+           ERYRNO == 20 ~ 1,      # 1 visit
+           ERYRNO == 30 ~ 2.5,    # 2-3 visits (midpoint)
+           ERYRNO == 31 ~ 2,      # 2 visits (granular code)
+           ERYRNO == 32 ~ 3,      # 3 visits
+           ERYRNO == 40 ~ 5,      # 4+ visits (conservative)
+           ERYRNO == 41 ~ 4.5,    # 4-5 visits
+           ERYRNO == 42 ~ 6.5,    # 6-7 visits
+           ERYRNO == 43 ~ 8.5,    # 8-9 visits
+           ERYRNO == 45 ~ 11,     # 10-12 visits
+           ERYRNO %in% 46:48 ~ 15, # 13+ visits (top-coded)
+           TRUE ~ NA_real_
+         ),
+
+         # HOMECAREYR: Home care past year (1=No, 2=Yes)
+         home_care = case_when(
+           HOMECAREYR == 2 ~ 1L,
+           HOMECAREYR == 1 ~ 0L,
+           TRUE ~ NA_integer_
+         ),
+
+         # SLDAYR: Sick leave days (count of days illness kept person in bed)
+         # 0-365 = actual count, 997+ = unknown/refused
+         sickdays = case_when(
+           SLDAYR %in% 0:365 ~ as.numeric(SLDAYR),
+           TRUE ~ NA_real_
+         ),
+
+         # USUALPL: Usual place of care (1=No, 2=Yes)
+         has_usual_care = case_when(
+           USUALPL == 2 ~ 1L,    # Yes
+           USUALPL == 1 ~ 0L,    # No
+           TRUE ~ NA_integer_
+         ),
+
+         # HINOTCOVE: No health insurance coverage (1=Covered, 2=Not covered)
+         uninsured = case_when(
+           HINOTCOVE == 2 ~ 1L,  # Not covered
+           HINOTCOVE == 1 ~ 0L,  # Covered
+           TRUE ~ NA_integer_
+         )
+  )
 
 rm(data_nhis_raw)
 
