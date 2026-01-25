@@ -1,10 +1,17 @@
 # ==============================================================================
 # 06_hosp_util_analysis.R
-# Hospital Utilization Analysis: Coefficient Stability and Prevalence Trends
+# Hospital Utilization Validity Analysis
 #
 # Purpose:
-#   Show that SRH-utilization relationship is stable (meaning unchanged) and
-#   how utilization patterns are changing by age group over time.
+#   This is a VALIDITY TEST: Does self-rated health predict actual healthcare
+#   utilization? We show that:
+#   1. Coefficients: SRH predicts utilization consistently over time (SRH meaning
+#      is stable)
+#   2. Prevalence: How utilization patterns are changing by age group
+#
+# Model direction: utilization ~ SRH (NOT SRH ~ utilization)
+#   - Negative coefficient = better SRH (higher value) -> less utilization
+#   - This is the expected pattern for a valid SRH measure
 #
 # Variables analyzed (7 measures):
 #   - hospitalized: Any hospital stay past year (binary)
@@ -15,7 +22,7 @@
 #   - uninsured: No health insurance (binary)
 #   - sickdays: Sick leave days (count)
 #
-# Layout: Rows = Surveys (NHIS), Cols = Variables
+# Note: 2019 NHIS redesign may cause discontinuity in some variables
 #
 # Author: Christine Lucille Kuryla
 # ==============================================================================
@@ -35,7 +42,7 @@ source(here("R", "paths.R"))
 source(here("R", "srh_common_functions.R"))
 source(here("R", "functions", "theme_srh.R"))
 source(here("R", "functions", "plot_utils.R"))
-source(here("R", "functions", "regress_covariate_by_year.R"))
+source(here("R", "functions", "regress_outcome_on_srh.R"))
 source(here("R", "functions", "prevalence_by_age_year.R"))
 
 # Set theme
@@ -73,14 +80,14 @@ nhis_start_year <- 1997
 min_n <- 50
 
 # Hospital utilization variables to analyze
+# Note: sickdays removed due to very limited data availability (0.6% valid)
 util_vars <- c(
   hospitalized    = "Hospitalized",
   any_er          = "Any ER Visit",
   er_visits       = "ER Visits (count)",
   home_care       = "Home Care",
   has_usual_care  = "Usual Care",
-  uninsured       = "Uninsured",
-  sickdays        = "Sick Days"
+  uninsured       = "Uninsured"
 )
 
 
@@ -158,17 +165,21 @@ if (run_nhis && exists("data_nhis")) {
 
 
 # ==============================================================================
-# PART 3: RUN AGE-STRATIFIED REGRESSIONS (COEFFICIENTS)
+# PART 3: RUN AGE-STRATIFIED REGRESSIONS (utilization ~ SRH)
+# ==============================================================================
+# This is a validity test: we regress utilization ON SRH to show that
+# SRH predicts healthcare-seeking behavior. A negative coefficient means
+# better SRH (higher value) -> less utilization, which is the expected pattern.
 # ==============================================================================
 
-message("\n========== Running age-stratified regressions ==========\n")
+message("\n========== Running regressions: utilization ~ SRH ==========\n")
 
 coef_nhis <- NULL
 coef_meps <- NULL
 
 # --- NHIS Regressions ---
 if (run_nhis && exists("data_nhis")) {
-  message("\n--- NHIS Utilization Coefficients ---")
+  message("\n--- NHIS: utilization ~ SRH Coefficients ---")
 
   coef_list <- list()
 
@@ -181,10 +192,13 @@ if (run_nhis && exists("data_nhis")) {
       next
     }
 
-    coef_result <- regress_covariate_by_age_year(
+    # NOTE: Using regress_outcome_on_srh_by_age_year which fits:
+    #   outcome ~ SRH (NOT SRH ~ outcome)
+    # This tests whether SRH predicts utilization
+    coef_result <- regress_outcome_on_srh_by_age_year(
       data = data_nhis,
-      covariate_var = var_name,
-      covariate_label = var_label,
+      outcome_var = var_name,
+      outcome_label = var_label,
       survey_name = "NHIS",
       psu_var = NULL,    # Using weights-only for computational efficiency
       strata_var = NULL,
@@ -203,7 +217,7 @@ if (run_nhis && exists("data_nhis")) {
 
 # --- MEPS Regressions (future) ---
 if (run_meps && exists("data_meps")) {
-  message("\n--- MEPS Utilization Coefficients ---")
+  message("\n--- MEPS: utilization ~ SRH Coefficients ---")
   # Similar structure as NHIS when MEPS vars are added
 }
 
@@ -281,14 +295,24 @@ if (!is.null(prev_nhis) && nrow(prev_nhis) > 0) {
 message("\n========== Creating figures ==========\n")
 
 # --- Variable descriptions for y-axis labels ---
-var_descriptions <- c(
-  "Hospitalized"     = "Hospitalized (0/1)",
-  "Any ER Visit"     = "Any ER (0/1)",
-  "ER Visits (count)" = "ER Visits (count)",
-  "Home Care"        = "Home Care (0/1)",
-  "Usual Care"       = "Has Usual Care (0/1)",
-  "Uninsured"        = "Uninsured (0/1)",
-  "Sick Days"        = "Sick Days (count)"
+# For coefficient figure: these are coefficients of SRH on each outcome
+# For prevalence figure: these are weighted means
+var_descriptions_coef <- c(
+  "Hospitalized"     = "Coef (SRH)",
+  "Any ER Visit"     = "Coef (SRH)",
+  "ER Visits (count)" = "Coef (SRH)",
+  "Home Care"        = "Coef (SRH)",
+  "Usual Care"       = "Coef (SRH)",
+  "Uninsured"        = "Coef (SRH)"
+)
+
+var_descriptions_prev <- c(
+  "Hospitalized"     = "Proportion",
+  "Any ER Visit"     = "Proportion",
+  "ER Visits (count)" = "Mean Count",
+  "Home Care"        = "Proportion",
+  "Usual Care"       = "Proportion",
+  "Uninsured"        = "Proportion"
 )
 
 # --- Helper function to create a single panel ---
@@ -323,7 +347,7 @@ create_age_subplot <- function(
                         color = age_group, group = age_group)) +
     geom_line(linewidth = 0.6, alpha = 0.8) +
     geom_point(size = 1.2, alpha = 0.8) +
-    scale_color_manual(values = age_colors, name = "Age Group") +
+    scale_color_manual(values = age_colors_oi, name = "Age Group") +
     labs(
       x = NULL,
       y = ylabel,
@@ -368,10 +392,10 @@ get_year_range <- function(df) {
 
 xlim_nhis <- get_year_range(coef_nhis)
 
-# Categories in order for figure
+# Categories in order for figure (6 variables, arranged as 2 rows of 3)
 categories_ordered <- c(
-  "Hospitalized", "Any ER Visit", "ER Visits (count)", "Home Care",
-  "Usual Care", "Uninsured", "Sick Days"
+  "Hospitalized", "Any ER Visit", "ER Visits (count)",
+  "Home Care", "Usual Care", "Uninsured"
 )
 
 
@@ -397,24 +421,26 @@ if (!is.null(coef_nhis) && nrow(coef_nhis) > 0) {
       y_var = "coefficient",
       show_title = TRUE,
       title = cat_name,
-      ylabel = var_descriptions[cat_name],
+      ylabel = var_descriptions_coef[cat_name],
       xlim = xlim_nhis,
       row_label = row_label
     )
   }
 
-  # Assemble figure: 2 rows of panels (4 + 3)
-  row1 <- (coef_panels[[1]] | coef_panels[[2]] | coef_panels[[3]] | coef_panels[[4]])
-  row2 <- (coef_panels[[5]] | coef_panels[[6]] | coef_panels[[7]] | plot_spacer())
+  # Assemble figure: 2 rows of panels (3 + 3)
+  row1 <- (coef_panels[[1]] | coef_panels[[2]] | coef_panels[[3]])
+  row2 <- (coef_panels[[4]] | coef_panels[[5]] | coef_panels[[6]])
 
   fig_util_coef <- (row1 / row2 / guide_area()) +
     plot_layout(heights = c(1, 1, 0.1), guides = "collect") +
     plot_annotation(
-      title = "Hospital Utilization: Coefficient Trends by Age Group (NHIS)",
-      subtitle = "Note: Negative coefficients indicate worse SRH is associated with more utilization",
+      title = "SRH Predicts Healthcare Utilization (NHIS)",
+      subtitle = "Model: utilization ~ SRH. Negative coefficient = better SRH (higher) -> less utilization.",
+      caption = "This validity test shows SRH consistently predicts healthcare-seeking behavior.",
       theme = theme(
         plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
         plot.subtitle = element_text(size = 10, hjust = 0.5, color = "gray40"),
+        plot.caption = element_text(size = 9, hjust = 0.5, color = "gray50"),
         plot.background = element_rect(fill = "white", color = NA)
       )
     ) &
@@ -452,16 +478,16 @@ if (!is.null(prev_nhis) && nrow(prev_nhis) > 0) {
       y_var = "mean",
       show_title = TRUE,
       title = cat_name,
-      ylabel = var_descriptions[cat_name],
+      ylabel = var_descriptions_prev[cat_name],
       xlim = xlim_nhis,
       show_hline = FALSE,
       row_label = row_label
     )
   }
 
-  # Assemble figure: 2 rows of panels (4 + 3)
-  row1 <- (prev_panels[[1]] | prev_panels[[2]] | prev_panels[[3]] | prev_panels[[4]])
-  row2 <- (prev_panels[[5]] | prev_panels[[6]] | prev_panels[[7]] | plot_spacer())
+  # Assemble figure: 2 rows of panels (3 + 3)
+  row1 <- (prev_panels[[1]] | prev_panels[[2]] | prev_panels[[3]])
+  row2 <- (prev_panels[[4]] | prev_panels[[5]] | prev_panels[[6]])
 
   fig_util_prev <- (row1 / row2 / guide_area()) +
     plot_layout(heights = c(1, 1, 0.1), guides = "collect") +
@@ -497,17 +523,17 @@ if (!is.null(fig_util_coef)) {
   ggsave(
     filename = file.path(output_dir, paste0("fig_util_coef_draft_", date_suffix, ".png")),
     plot = fig_util_coef,
-    width = 14, height = 8, dpi = 300
+    width = 12, height = 8, dpi = 300
   )
   ggsave(
     filename = file.path(output_dir, "fig_util_coef.png"),
     plot = fig_util_coef,
-    width = 14, height = 8, dpi = 300
+    width = 12, height = 8, dpi = 300
   )
   ggsave(
     filename = file.path(output_dir, "fig_util_coef.pdf"),
     plot = fig_util_coef,
-    width = 14, height = 8
+    width = 12, height = 8
   )
   message("Saved: fig_util_coef (.png and .pdf)")
 }
@@ -517,17 +543,17 @@ if (!is.null(fig_util_prev)) {
   ggsave(
     filename = file.path(output_dir, paste0("fig_util_prev_draft_", date_suffix, ".png")),
     plot = fig_util_prev,
-    width = 14, height = 8, dpi = 300
+    width = 12, height = 8, dpi = 300
   )
   ggsave(
     filename = file.path(output_dir, "fig_util_prev.png"),
     plot = fig_util_prev,
-    width = 14, height = 8, dpi = 300
+    width = 12, height = 8, dpi = 300
   )
   ggsave(
     filename = file.path(output_dir, "fig_util_prev.pdf"),
     plot = fig_util_prev,
-    width = 14, height = 8
+    width = 12, height = 8
   )
   message("Saved: fig_util_prev (.png and .pdf)")
 }
@@ -563,7 +589,16 @@ check_coef_summary <- function(df, name) {
   message("  ", name, ":")
   for (i in 1:nrow(summary_df)) {
     row <- summary_df[i, ]
-    direction <- ifelse(row$overall_mean < 0, "NEGATIVE (expected)", "POSITIVE (unexpected)")
+    # Negative is expected (better SRH -> less utilization)
+    # Exception: Usual Care may be positive (healthy people access preventive care)
+    is_usual_care <- grepl("Usual", row$category)
+    if (row$overall_mean < 0) {
+      direction <- "NEGATIVE (expected)"
+    } else if (is_usual_care) {
+      direction <- "POSITIVE (may be ok for Usual Care)"
+    } else {
+      direction <- "POSITIVE (unexpected!)"
+    }
     message("    ", row$category, ": mean coef = ", round(row$overall_mean, 3),
             " (", direction, "), ", row$n_age_groups, " age groups")
   }
@@ -592,7 +627,9 @@ check_prev_summary <- function(df, name) {
   }
 }
 
-message("\n--- Coefficient Check (should mostly be negative for utilization) ---")
+message("\n--- Coefficient Check ---")
+message("Expected: Negative coefficients (better SRH -> less utilization)")
+message("Exception: 'Usual Care' may be positive (better SRH -> more preventive care)")
 check_coef_summary(coef_nhis, "NHIS")
 
 message("\n--- Prevalence Check ---")
