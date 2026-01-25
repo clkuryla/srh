@@ -431,3 +431,136 @@ plot_event_counts <- function(results, window_length = NULL) {
     ) +
     theme_srh()
 }
+
+# ------------------------------------------------------------------------------
+# MORTALITY PREVALENCE PLOT
+# ------------------------------------------------------------------------------
+
+#' Plot mortality prevalence (death rate) by age group and window
+#'
+#' @description Shows mortality rate (deaths/N) over time by age group.
+#'   Provides context for the SRH-mortality hazard ratio plot.
+#'
+#' @param results Results from run_sliding_windows_by_age()
+#' @param window_length Filter to specific window length (optional)
+#' @param title Plot title
+#' @param subtitle Plot subtitle
+#' @param y_label Y-axis label
+#' @param x_label X-axis label
+#' @param point_size Size of points (default 2)
+#' @param line_width Width of lines (default 0.8)
+#' @param as_percent Show as percentage (default TRUE)
+#'
+#' @return A ggplot object
+#' @export
+plot_mortality_prevalence <- function(results,
+                                      window_length = NULL,
+                                      title = NULL,
+                                      subtitle = NULL,
+                                      y_label = "Mortality Rate (%)",
+                                      x_label = "Window Start Year",
+                                      point_size = 2,
+                                      line_width = 0.8,
+                                      as_percent = TRUE) {
+
+  plot_data <- results
+
+  if (!is.null(window_length)) {
+    plot_data <- plot_data %>%
+      filter(.data$window_length == .env$window_length)
+  }
+
+  if (nrow(plot_data) == 0) {
+    rlang::warn("No data to plot")
+    return(ggplot() + theme_void())
+  }
+
+  # Calculate death rate
+  plot_data <- plot_data %>%
+    mutate(
+      death_rate = n_events / n,
+      death_rate_display = if (as_percent) death_rate * 100 else death_rate
+    )
+
+  # Base plot
+  p <- ggplot(plot_data, aes(
+    x = start_year,
+    y = death_rate_display,
+    color = age_group,
+    group = age_group
+  )) +
+    geom_line(linewidth = line_width) +
+    geom_point(size = point_size)
+
+  # Apply theme and scales
+  p <- p +
+    scale_color_age() +
+    scale_x_year() +
+    labs(
+      x = x_label,
+      y = y_label,
+      color = "Age Group",
+      title = title,
+      subtitle = subtitle
+    ) +
+    theme_srh()
+
+  return(p)
+}
+
+# ------------------------------------------------------------------------------
+# FIGURE 5: COMBINED HR + MORTALITY PREVALENCE
+# ------------------------------------------------------------------------------
+
+#' Create Figure 5: Combined mortality figure
+#'
+#' @description Creates two-panel figure:
+#'   Panel A: Hazard ratio (SRH predictive ability)
+#'   Panel B: Mortality prevalence (death rate by age group)
+#'
+#' @param results Results from run_sliding_windows_by_age()
+#' @param window_length Window length to plot (default 15)
+#' @param title Overall figure title
+#' @param subtitle Overall figure subtitle
+#'
+#' @return A patchwork object
+#' @export
+plot_fig5_combined <- function(results,
+                               window_length = 15,
+                               title = NULL,
+                               subtitle = NULL) {
+
+  # Panel A: Hazard Ratios
+  p_hr <- plot_mortality_hr(
+    results,
+    window_length = window_length,
+    show_ci = TRUE,
+    log_scale = TRUE,
+    title = "A. SRH-Mortality Hazard Ratio",
+    y_label = "Hazard Ratio per 1-unit increase in SRH"
+  ) +
+    theme(legend.position = "none")
+
+  # Panel B: Mortality Prevalence
+  p_prev <- plot_mortality_prevalence(
+    results,
+    window_length = window_length,
+    title = "B. Mortality Prevalence",
+    y_label = "Mortality Rate (%)"
+  )
+
+  # Combine with patchwork
+  combined <- p_hr / p_prev +
+    plot_annotation(
+      title = title,
+      subtitle = subtitle,
+      theme = theme(
+        plot.title = element_text(size = 14, face = "bold"),
+        plot.subtitle = element_text(size = 11, color = "gray40")
+      )
+    ) +
+    plot_layout(guides = "collect") &
+    theme(legend.position = "bottom")
+
+  return(combined)
+}
