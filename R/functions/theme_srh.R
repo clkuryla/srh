@@ -49,7 +49,7 @@ age_colors_oi <- c(
 )
 
 # Default age palette
-age_colors <- age_colors_cb
+age_colors <- age_colors_oi
 
 # -----------------------------------------------------------------------------
 # SELF-RATED HEALTH COLORS (5 categories: Poor=1 to Excellent=5, except GSS remove Very Good)
