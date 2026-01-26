@@ -39,6 +39,32 @@ nhis_vars_comorb <- c(
   "STROKEV"       # Stroke ever
 )
 
+# Functional limitation variables (for NHIS functional limitation analysis)
+# See 06_nhis_functional_limitations_*.R scripts
+nhis_vars_func_limit <- c(
+  "FLCLIMB",         # Difficulty climbing stairs (1997-2024)
+  "LAMTWRK",         # Work limitation (1997-2024)
+  "WALKDIF1BL1",     # Difficulty walking 1 block (2010-2024)
+  "DISERRANDP",      # Difficulty doing errands (2008-2017, 2019-2024)
+  # Part 1: General Limitations
+  "LAWASHDRESDIF",   # ADL: washing/dressing difficulty
+  "LACOMDIFEGO",     # Communication difficulty
+  "LAMEMCONDIF",     # Memory condition difficulty
+  "LAWALKCLIMDIF",   # Walking/climbing difficulty
+  # Part 2: Physical Limitations (Washington Group questions)
+  "WALKDIF12ST1",    # Difficulty walking 12 steps
+  "LAHANDDIF",       # Difficulty using hands/fingers
+  "LARA2LITRDIF",    # Difficulty lifting/reaching
+  "WALKDIF5BL1",     # Walk five blocks difficulty
+  # Part 3: Memory & Other Limitations
+  "LAMEMORCON",      # Memory condition present
+  "LAMEMDIFOFT",     # Memory difficulty often
+  "LAMEMDIFAMT",     # Memory difficulty amount
+  "WALKDIF1BL2",     # Walk 1 block (alternate measure)
+  "LAWALKCLIMPER",   # Walk/climb period limitation
+  "LAWALKCLIMPERQ"   # Walk/climb period question
+)
+
 # Mental health variables
 nhis_vars_mental <- c(
   "ANXIETYEV",    # Anxiety ever (1=No, 2=Yes)
@@ -154,6 +180,205 @@ data_nhis <- data_nhis_raw %>%
            FLCLIMB == 40 ~ 4,
            TRUE ~ NA_real_
          ),
+
+         # =======================================================================
+         # Additional Functional Limitation Variables
+         # =======================================================================
+
+         # LAMTWRK: Work limitation (1997-2024)
+         # 0=NIU, 1=Not limited, 2=Limited in kind/amount, 3=Unable to work
+         # 7/8/9=Unknown/Refused/Not ascertained
+         lamtwrk = case_when(
+           LAMTWRK == 0 ~ NA_real_,          # NIU
+           LAMTWRK == 1 ~ 1,                  # Not limited
+           LAMTWRK == 2 ~ 2,                  # Limited in kind/amount
+           LAMTWRK == 3 ~ 3,                  # Unable to work
+           LAMTWRK %in% c(7, 8, 9) ~ NA_real_,
+           TRUE ~ NA_real_
+         ),
+
+         # WALKDIF1BL1: Difficulty walking 1 block (2010-2024)
+         # 0=NIU, 1=No difficulty, 2=Some difficulty, 3=A lot of difficulty,
+         # 4=Cannot do at all, 7/8/9=Unknown
+         # Note: For 2010-2017 was in Quality of Life supplement (SUPP1WT weight)
+         # For 2018+ uses SAMPWEIGHT - analysis should use 2018+ for consistency
+         walkdif1bl1 = case_when(
+           WALKDIF1BL1 == 0 ~ NA_real_,       # NIU
+           WALKDIF1BL1 == 1 ~ 1,              # No difficulty
+           WALKDIF1BL1 == 2 ~ 2,              # Some difficulty
+           WALKDIF1BL1 == 3 ~ 3,              # A lot of difficulty
+           WALKDIF1BL1 == 4 ~ 4,              # Cannot do at all
+           WALKDIF1BL1 %in% c(7, 8, 9) ~ NA_real_,
+           TRUE ~ NA_real_
+         ),
+
+         # DISERRANDP: Difficulty doing errands alone (2008-2017, 2019-2024)
+         # Pre-2019: 0=NIU, 1=No, 2=Yes
+         # Post-2019 (WG questions): 0=NIU, 1=No difficulty, 2=Some difficulty,
+         #                           3=A lot of difficulty, 4=Cannot do at all
+         # Harmonization: Pre-2019 1→1 (No), 2→2 (Yes/Some); Post-2019 ordinal
+         diserrandp = case_when(
+           DISERRANDP == 0 ~ NA_real_,        # NIU
+           DISERRANDP == 1 ~ 1,               # No / No difficulty
+           DISERRANDP == 2 ~ 2,               # Yes / Some difficulty (harmonized)
+           DISERRANDP == 3 ~ 3,               # A lot of difficulty (post-2019 only)
+           DISERRANDP == 4 ~ 4,               # Cannot do (post-2019 only)
+           DISERRANDP %in% c(7, 8, 9) ~ NA_real_,
+           TRUE ~ NA_real_
+         ),
+
+         # =======================================================================
+         # Additional Functional Limitation Variables (Part 1-3)
+         # =======================================================================
+
+         # Part 1: General Limitations
+
+         # LAWASHDRESDIF: ADL washing/dressing difficulty
+         # 0=NIU, 1=Not at all difficult, 2=Only a little, 3=Somewhat, 4=Very, 5=Cannot do
+         # 7/8/9=Unknown
+         lawashdresdif = case_when(
+           LAWASHDRESDIF == 0 ~ NA_real_,
+           LAWASHDRESDIF %in% 1:5 ~ as.numeric(LAWASHDRESDIF),
+           LAWASHDRESDIF %in% c(7, 8, 9) ~ NA_real_,
+           TRUE ~ NA_real_
+         ),
+
+         # LACOMDIFEGO: Communication difficulty
+         # 0=NIU, 1=No difficulty, 2=Some difficulty, 3=A lot of difficulty, 4=Cannot do
+         # 7/8/9=Unknown
+         lacomdifego = case_when(
+           LACOMDIFEGO == 0 ~ NA_real_,
+           LACOMDIFEGO %in% 1:4 ~ as.numeric(LACOMDIFEGO),
+           LACOMDIFEGO %in% c(7, 8, 9) ~ NA_real_,
+           TRUE ~ NA_real_
+         ),
+
+         # LAMEMCONDIF: Memory condition difficulty
+         # 0=NIU, 1=Not at all, 2=A little, 3=Somewhat, 4=A lot
+         # 7/8/9=Unknown
+         lamemcondif = case_when(
+           LAMEMCONDIF == 0 ~ NA_real_,
+           LAMEMCONDIF %in% 1:4 ~ as.numeric(LAMEMCONDIF),
+           LAMEMCONDIF %in% c(7, 8, 9) ~ NA_real_,
+           TRUE ~ NA_real_
+         ),
+
+         # LAWALKCLIMDIF: Walking/climbing difficulty
+         # 0=NIU, 1=Not at all difficult, 2=Only a little, 3=Somewhat, 4=Very, 5=Cannot do
+         # 7/8/9=Unknown
+         lawalkclimdif = case_when(
+           LAWALKCLIMDIF == 0 ~ NA_real_,
+           LAWALKCLIMDIF %in% 1:5 ~ as.numeric(LAWALKCLIMDIF),
+           LAWALKCLIMDIF %in% c(7, 8, 9) ~ NA_real_,
+           TRUE ~ NA_real_
+         ),
+
+         # Part 2: Physical Limitations (Washington Group questions)
+
+         # WALKDIF12ST1: Difficulty walking 12 steps
+         # 0=NIU, 1=No difficulty, 2=Some difficulty, 3=A lot of difficulty, 4=Cannot do
+         # 7/8/9=Unknown
+         walkdif12st1 = case_when(
+           WALKDIF12ST1 == 0 ~ NA_real_,
+           WALKDIF12ST1 %in% 1:4 ~ as.numeric(WALKDIF12ST1),
+           WALKDIF12ST1 %in% c(7, 8, 9) ~ NA_real_,
+           TRUE ~ NA_real_
+         ),
+
+         # LAHANDDIF: Difficulty using hands/fingers
+         # 0=NIU, 1=Not at all difficult, 2=Only a little, 3=Somewhat, 4=Very, 5=Cannot do
+         # 7/8/9=Unknown
+         lahanddif = case_when(
+           LAHANDDIF == 0 ~ NA_real_,
+           LAHANDDIF %in% 1:5 ~ as.numeric(LAHANDDIF),
+           LAHANDDIF %in% c(7, 8, 9) ~ NA_real_,
+           TRUE ~ NA_real_
+         ),
+
+         # LARA2LITRDIF: Difficulty lifting/reaching (lifting 25lbs, reaching overhead)
+         # 0=NIU, 1=Not at all difficult, 2=Only a little, 3=Somewhat, 4=Very, 5=Cannot do
+         # 7/8/9=Unknown
+         lara2litrdif = case_when(
+           LARA2LITRDIF == 0 ~ NA_real_,
+           LARA2LITRDIF %in% 1:5 ~ as.numeric(LARA2LITRDIF),
+           LARA2LITRDIF %in% c(7, 8, 9) ~ NA_real_,
+           TRUE ~ NA_real_
+         ),
+
+         # WALKDIF5BL1: Walk five blocks difficulty
+         # 0=NIU, 1=No difficulty, 2=Some difficulty, 3=A lot of difficulty, 4=Cannot do
+         # 7/8/9=Unknown
+         walkdif5bl1 = case_when(
+           WALKDIF5BL1 == 0 ~ NA_real_,
+           WALKDIF5BL1 %in% 1:4 ~ as.numeric(WALKDIF5BL1),
+           WALKDIF5BL1 %in% c(7, 8, 9) ~ NA_real_,
+           TRUE ~ NA_real_
+         ),
+
+         # Part 3: Memory & Other Limitations
+
+         # LAMEMORCON: Memory condition present
+         # 0=NIU, 1=No, 2=Yes
+         # 7/8/9=Unknown
+         lamemorcon = case_when(
+           LAMEMORCON == 0 ~ NA_real_,
+           LAMEMORCON == 1 ~ 0,               # No -> 0
+           LAMEMORCON == 2 ~ 1,               # Yes -> 1
+           LAMEMORCON %in% c(7, 8, 9) ~ NA_real_,
+           TRUE ~ NA_real_
+         ),
+
+         # LAMEMDIFOFT: Memory difficulty - how often
+         # 0=NIU, 1=Never, 2=Rarely, 3=Sometimes, 4=Often, 5=Very often
+         # 7/8/9=Unknown
+         lamemdifoft = case_when(
+           LAMEMDIFOFT == 0 ~ NA_real_,
+           LAMEMDIFOFT %in% 1:5 ~ as.numeric(LAMEMDIFOFT),
+           LAMEMDIFOFT %in% c(7, 8, 9) ~ NA_real_,
+           TRUE ~ NA_real_
+         ),
+
+         # LAMEMDIFAMT: Memory difficulty - amount
+         # 0=NIU, 1=None, 2=A little, 3=Some, 4=A lot
+         # 7/8/9=Unknown
+         lamemdifamt = case_when(
+           LAMEMDIFAMT == 0 ~ NA_real_,
+           LAMEMDIFAMT %in% 1:4 ~ as.numeric(LAMEMDIFAMT),
+           LAMEMDIFAMT %in% c(7, 8, 9) ~ NA_real_,
+           TRUE ~ NA_real_
+         ),
+
+         # WALKDIF1BL2: Walk 1 block (alternate measure)
+         # 0=NIU, 1=No difficulty, 2=Some difficulty, 3=A lot of difficulty, 4=Cannot do
+         # 7/8/9=Unknown
+         walkdif1bl2 = case_when(
+           WALKDIF1BL2 == 0 ~ NA_real_,
+           WALKDIF1BL2 %in% 1:4 ~ as.numeric(WALKDIF1BL2),
+           WALKDIF1BL2 %in% c(7, 8, 9) ~ NA_real_,
+           TRUE ~ NA_real_
+         ),
+
+         # LAWALKCLIMPER: Walk/climb period limitation
+         # 0=NIU, 1=Not at all, 2=For up to 3 months, 3=For 4-12 months, 4=For more than 1 year
+         # 7/8/9=Unknown
+         lawalkclimper = case_when(
+           LAWALKCLIMPER == 0 ~ NA_real_,
+           LAWALKCLIMPER %in% 1:4 ~ as.numeric(LAWALKCLIMPER),
+           LAWALKCLIMPER %in% c(7, 8, 9) ~ NA_real_,
+           TRUE ~ NA_real_
+         ),
+
+         # LAWALKCLIMPERQ: Walk/climb permanent limitation
+         # 0=NIU, 1=No, 2=Yes
+         # 7/8/9=Unknown
+         lawalkclimperq = case_when(
+           LAWALKCLIMPERQ == 0 ~ NA_real_,
+           LAWALKCLIMPERQ == 1 ~ 0,           # No -> 0
+           LAWALKCLIMPERQ == 2 ~ 1,           # Yes -> 1
+           LAWALKCLIMPERQ %in% c(7, 8, 9) ~ NA_real_,
+           TRUE ~ NA_real_
+         ),
+
          # K6 items: 0=none, 1=a little, 2=some, 3=most, 4=all of the time
          # 6=NIU, 7/8/9=unknown → NA
          aeffort = if_else(AEFFORT %in% 0:4, AEFFORT, NA_integer_),
