@@ -1,5 +1,5 @@
 # Wrangle MEPS Round-Level Data to Person-Year Format
-# Input: meps_00003_round.csv (round-level, ~2.3M rows)
+# Input: meps_00004_round.csv (round-level, includes PROXY variable)
 # Output: data_meps_round_personyear.rds (person-year level)
 #
 # Purpose: Harmonize person-level (P) and round-level (R) limitation variables
@@ -16,13 +16,47 @@ ensure_dirs()
 
 message("Loading round-level MEPS data...")
 data_raw <- read_csv(
-  depot_path("surveys", "MEPS", "ipums_extracts", "meps_00003_round.csv"),
+  depot_path("surveys", "MEPS", "ipums_extracts", "meps_00004_round.csv"),
   show_col_types = FALSE
 )
 
 message(sprintf("Loaded %s rows, %s columns",
                 format(nrow(data_raw), big.mark = ","),
                 ncol(data_raw)))
+
+# ------------------------------------------------------------------------------
+# FILTER TO SELF-RESPONDENTS ONLY (PROXY == 1)
+# ------------------------------------------------------------------------------
+# PROXY variable coding:
+#   1 = Respondent is RU member (self-report) <- KEEP
+#   2 = Respondent is a proxy <- EXCLUDE
+#
+# Rationale: Proxy responses introduce measurement error, especially for
+# subjective measures like mental health. Proxies (often family members)
+# systematically overreport mental health problems for elderly respondents.
+
+n_before_proxy <- nrow(data_raw)
+
+# Check PROXY variable distribution before filtering
+message("\n--- PROXY variable distribution (before filter) ---")
+proxy_dist <- data_raw %>%
+  count(PROXY) %>%
+  mutate(pct = round(100 * n / sum(n), 1))
+print(proxy_dist)
+
+# Filter to self-respondents only
+data_raw <- data_raw %>%
+  filter(PROXY == 1)
+
+n_after_proxy <- nrow(data_raw)
+n_excluded <- n_before_proxy - n_after_proxy
+
+message(sprintf("\nProxy filter: %s rows -> %s rows",
+                format(n_before_proxy, big.mark = ","),
+                format(n_after_proxy, big.mark = ",")))
+message(sprintf("Excluded %s proxy responses (%.1f%%)",
+                format(n_excluded, big.mark = ","),
+                100 * n_excluded / n_before_proxy))
 
 # Define missing codes (IPUMS convention)
 missing_codes <- c(-1, -7, -8, -9)

@@ -61,17 +61,17 @@ AGE_GROUPS <- c("18-29", "30-39", "40-49", "50-59", "60-69", "70-79", "80-89")
 # VARIABLE DEFINITIONS
 # ==============================================================================
 
-# Limitation variables to analyze (excluding high-missingness variables)
-# Note: mhlth_any_fairpoor excluded due to proxy response bias - household interview
-# allows one person to report mental health for all family members, and proxies
-# overreport mental health problems for elderly (see literature on proxy bias)
+# Limitation variables to analyze
+# Note: Data now filtered to self-respondents only (PROXY == 1) in wrangling,
+# so mhlth_any_fairpoor can be included without proxy response bias
 limitation_vars <- c(
   "ladl",              # ADL limitation
   "laiadl",            # IADL limitation
   "lmtphys",           # Physical limitation
   "lmtwork",           # Work limitation
   "lmtsoc",            # Social limitation
-  "lmtcog"             # Cognitive limitation
+  "lmtcog",            # Cognitive limitation
+  "mhlth_any_fairpoor" # Fair/poor mental health (self-report only)
 )
 
 # Human-readable labels for plots
@@ -81,7 +81,8 @@ var_labels <- c(
   lmtphys = "Physical Limitation",
   lmtwork = "Work Limitation",
   lmtsoc = "Social Limitation",
-  lmtcog = "Cognitive Limitation"
+  lmtcog = "Cognitive Limitation",
+  mhlth_any_fairpoor = "Fair/Poor Mental Health"
 )
 
 
@@ -305,7 +306,7 @@ create_faceted_plot <- function(
                         color = age_group, group = age_group)) +
     geom_line(linewidth = 0.7, alpha = 0.8) +
     geom_point(size = 1.2, alpha = 0.8) +
-    facet_wrap(~ category, scales = if (free_y) "free_y" else "fixed", ncol = 3) +
+    facet_wrap(~ category, scales = if (free_y) "free_y" else "fixed", ncol = 4) +
     scale_color_manual(values = age_colors_oi, name = "Age Group") +
     scale_x_continuous(limits = xlim, breaks = scales::pretty_breaks(n = 4)) +
     labs(
@@ -376,17 +377,17 @@ message("\n========== Saving figures ==========\n")
 ggsave(
   filename = file.path(output_dir, paste0("fig_lmt_coef_draft_", date_suffix, ".png")),
   plot = fig_coef,
-  width = 12, height = 7, dpi = 300
+  width = 14, height = 6, dpi = 300
 )
 ggsave(
   filename = file.path(output_dir, "fig_lmt_coef.png"),
   plot = fig_coef,
-  width = 12, height = 7, dpi = 300
+  width = 14, height = 6, dpi = 300
 )
 ggsave(
   filename = file.path(output_dir, "fig_lmt_coef.pdf"),
   plot = fig_coef,
-  width = 12, height = 7
+  width = 14, height = 6
 )
 message("Saved: fig_lmt_coef (.png and .pdf)")
 
@@ -394,17 +395,17 @@ message("Saved: fig_lmt_coef (.png and .pdf)")
 ggsave(
   filename = file.path(output_dir, paste0("fig_lmt_prev_draft_", date_suffix, ".png")),
   plot = fig_prev,
-  width = 12, height = 7, dpi = 300
+  width = 14, height = 6, dpi = 300
 )
 ggsave(
   filename = file.path(output_dir, "fig_lmt_prev.png"),
   plot = fig_prev,
-  width = 12, height = 7, dpi = 300
+  width = 14, height = 6, dpi = 300
 )
 ggsave(
   filename = file.path(output_dir, "fig_lmt_prev.pdf"),
   plot = fig_prev,
-  width = 12, height = 7
+  width = 14, height = 6
 )
 message("Saved: fig_lmt_prev (.png and .pdf)")
 
