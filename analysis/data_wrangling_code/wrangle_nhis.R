@@ -157,7 +157,11 @@ data_nhis <- data_nhis_raw %>%
     psu = PSU,
     wt = SAMPWEIGHT,
     strata = STRATA,
-    sex = SEX
+    sex = case_when(
+      SEX == 1 ~ "Male",
+      SEX == 2 ~ "Female",
+      TRUE ~ NA_character_
+    )
   ) %>%
   # Recode binary comorbidity variables: 1=No -> 0, 2=Yes -> 1
   mutate(across(
