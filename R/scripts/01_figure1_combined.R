@@ -5,7 +5,7 @@
 # Layout: 2 rows x 6 columns
 #   - Row 1: Weighted mean SRH by age group over time (6 surveys)
 #   - Row 2: Age coefficient on SRH over time (6 surveys)
-#   - Columns: BRFSS, MEPS, NHIS, GSS, CPS, NHANES
+#   - Columns: BRFSS, MEPS, NHIS, CPS, NHANES, GSS
 #
 # Author: Christine Lucille Kuryla
 # ==============================================================================
@@ -33,12 +33,12 @@ cat("Functions loaded.\n")
 # ------------------------------------------------------------------------------
 
 # Survey order for the figure
-survey_order <- c("BRFSS", "MEPS", "NHIS", "GSS", "CPS", "NHANES")
+survey_order <- c("BRFSS", "MEPS", "NHIS", "CPS", "NHANES", "GSS")
 
 # --- Panel A estimates (mean SRH by age group and year) ---
 estimates_list <- lapply(survey_order, function(svy) {
   path <- here::here("output", "tables",
-                     paste0("fig1a_estimates_", tolower(svy), "_20260118.rds"))
+                     paste0("fig1a_estimates_", tolower(svy), "_20260126.rds"))
   if (file.exists(path)) {
     readr::read_rds(path)
   } else {
@@ -51,7 +51,7 @@ cat("Loaded Panel A estimates.\n")
 # --- Panel B coefficients (age coefficient by year) ---
 coefficients_list <- lapply(survey_order, function(svy) {
   path <- here::here("output", "tables",
-                     paste0("fig1b_coefficients_", tolower(svy), "_20260118.rds"))
+                     paste0("fig1b_coefficients_", tolower(svy), "_20260126.rds"))
   if (file.exists(path)) {
     readr::read_rds(path)
   } else {

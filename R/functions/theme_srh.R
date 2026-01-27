@@ -48,7 +48,7 @@ age_colors_oi <- c(
   "80-89" = "#CC79A7"   # reddish purple
 )
 
-# Default age palette
+# Default age palette (Okabe-Ito for colorblind accessibility)
 age_colors <- age_colors_oi
 
 # -----------------------------------------------------------------------------

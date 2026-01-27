@@ -158,9 +158,9 @@ coefficients_list <- list(
   "BRFSS"  = coefficients_brfss,
   "MEPS"   = coefficients_meps,
   "NHIS"   = coefficients_nhis,
-  "GSS"    = coefficients_gss,
   "CPS"    = coefficients_cps,
-  "NHANES" = coefficients_nhanes
+  "NHANES" = coefficients_nhanes,
+  "GSS"    = coefficients_gss
 )
 
 meta_pooled <- run_pooled_metaregression(coefficients_list)
@@ -180,25 +180,25 @@ cat("Interpretation: ", meta_pooled$interpretation, "\n\n")
 # ==============================================================================
 # Order determines position in figure: left-to-right, top-to-bottom.
 # Top row:    BRFSS, MEPS, NHIS
-# Bottom row: GSS, CPS, NHANES
+# Bottom row: CPS, NHANES, GSS
 # ==============================================================================
 
 coefficients_list_ordered <- list(
   "BRFSS"  = coefficients_brfss,
   "MEPS"   = coefficients_meps,
   "NHIS"   = coefficients_nhis,
-  "GSS"    = coefficients_gss,
   "CPS"    = coefficients_cps,
-  "NHANES" = coefficients_nhanes
+  "NHANES" = coefficients_nhanes,
+  "GSS"    = coefficients_gss
 )
 
 meta_results_list_ordered <- list(
   "BRFSS"  = meta_brfss,
   "MEPS"   = meta_meps,
   "NHIS"   = meta_nhis,
-  "GSS"    = meta_gss,
   "CPS"    = meta_cps,
-  "NHANES" = meta_nhanes
+  "NHANES" = meta_nhanes,
+  "GSS"    = meta_gss
 )
 
 
