@@ -141,16 +141,16 @@ cat("Done.\n\n")
 # ==============================================================================
 # Order determines position in figure: left-to-right, top-to-bottom.
 # Top row:    BRFSS, MEPS, NHIS
-# Bottom row: GSS, CPS, NHANES
+# Bottom row: CPS, NHANES, GSS
 # ==============================================================================
 
 estimates_list <- list(
   "BRFSS"  = srh_means_brfss$estimates,
   "MEPS"   = srh_means_meps$estimates,
   "NHIS"   = srh_means_nhis$estimates,
-  "GSS"    = srh_means_gss$estimates,
   "CPS"    = srh_means_cps$estimates,
-  "NHANES" = srh_means_nhanes$estimates
+  "NHANES" = srh_means_nhanes$estimates,
+  "GSS"    = srh_means_gss$estimates
 )
 
 

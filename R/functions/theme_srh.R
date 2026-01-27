@@ -48,8 +48,8 @@ age_colors_oi <- c(
   "80-89" = "#CC79A7"   # reddish purple
 )
 
-# Default age palette
-age_colors <- age_colors_cb
+# Default age palette (Okabe-Ito for colorblind accessibility)
+age_colors <- age_colors_oi
 
 # -----------------------------------------------------------------------------
 # SELF-RATED HEALTH COLORS (5 categories: Poor=1 to Excellent=5, except GSS remove Very Good)
