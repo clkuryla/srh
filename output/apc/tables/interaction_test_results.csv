@@ -1,0 +1,13 @@
+survey,outcome,f_stat,p_value,p_value_sci,sig
+BRFSS,binary,1.33,3.5498061202828814e-5,3.5e-05,***
+BRFSS,continuous,1.44,1.261539625331627e-7,1.3e-07,***
+NHIS,binary,10.87,0,<1e-300,***
+NHIS,continuous,1.49,3.1504550017856885e-12,3.2e-12,***
+MEPS,binary,1.8,6.9040897901887525e-17,6.9e-17,***
+MEPS,continuous,2.37,5.827325680456713e-38,5.8e-38,***
+NHANES,binary,1.61,4.452644128335953e-6,4.5e-06,***
+NHANES,continuous,1.88,7.222364186265133e-10,7.2e-10,***
+GSS,binary,4,7.131018251154837e-152,7.1e-152,***
+GSS,continuous,2.83,1.0393711034188763e-75,1.0e-75,***
+CPS,binary,1.51,1.9915419416866e-10,2.0e-10,***
+CPS,continuous,2.29,6.711744307244054e-43,6.7e-43,***
