@@ -1,0 +1,209 @@
+── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
+✔ dplyr     1.1.4     ✔ readr     2.1.5
+✔ forcats   1.0.0     ✔ stringr   1.5.1
+✔ ggplot2   3.5.2     ✔ tibble    3.2.1
+✔ lubridate 1.9.3     ✔ tidyr     1.3.1
+✔ purrr     1.0.2     
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ dplyr::filter() masks stats::filter()
+✖ dplyr::lag()    masks stats::lag()
+ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
+here() starts at /Users/christinekuryla/Documents/_Research/SRH/self_rated_health/srh-apc-methods-and-figures
+Loading required package: Rcpp
+This is rstanarm version 2.32.1
+- See https://mc-stan.org/rstanarm/articles/priors for changes to default priors!
+- Default priors may change, so it's safest to specify priors, even if equivalent to the defaults.
+- For execution on a local, multicore CPU with excess RAM we recommend calling
+  options(mc.cores = parallel::detectCores())
+
+Attaching package: ‘srvyr’
+
+The following object is masked from ‘package:stats’:
+
+    filter
+
+
+======================================================================
+PART 1: DESCRIPTIVE AGE GRADIENTS BY PERIOD
+======================================================================
+
+Age Gradient by Period (survey-weighted):
+
+Period        Age 18-21    Age 80-84     Gradient          N
+------------------------------------------------------------
+1999              3.745        2.979        0.767     10,597
+2003              3.690        3.007        0.683     10,386
+2007              3.676        3.058        0.618     12,750
+2011              3.608        3.148        0.460     11,970
+2015              3.528        3.214        0.313     21,514
+2019              3.798        3.221        0.576      8,150
+------------------------------------------------------------
+
+Gradient in 1999: 0.767
+Gradient in 2019: 0.576
+Change: -0.190 (24.8% reduction)
+
+Saved: gradient_by_period_nhanes.csv
+Saved: age_period_means_nhanes.csv
+
+======================================================================
+PART 2: BHAPC MODEL WITH AGE × PERIOD INTERACTION
+======================================================================
+
+Centering age at mean = 47.7 years
+N = 75,367
+
+Fitting BHAPC model with age × period interaction...
+Model: srh ~ age_centered * period_4yr + (1|cohort_4yr)
+This may take 30-45 minutes...
+
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.032385 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 323.85 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+Chain 2: 
+Chain 2: Gradient evaluation took 0.010077 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 100.77 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 3).
+Chain 3: 
+Chain 3: Gradient evaluation took 0.00714 seconds
+Chain 3: 1000 transitions using 10 leapfrog steps per transition would take 71.4 seconds.
+Chain 3: Adjust your expectations accordingly!
+Chain 3: 
+Chain 3: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 4).
+Chain 4: 
+Chain 4: Gradient evaluation took 0.006197 seconds
+Chain 4: 1000 transitions using 10 leapfrog steps per transition would take 61.97 seconds.
+Chain 4: Adjust your expectations accordingly!
+Chain 4: 
+Chain 4: 
+Chain 1: Iteration:    1 / 2000 [  0%]  (Warmup)
+Chain 2: Iteration:    1 / 2000 [  0%]  (Warmup)
+Chain 4: Iteration:    1 / 2000 [  0%]  (Warmup)
+Chain 3: Iteration:    1 / 2000 [  0%]  (Warmup)
+Chain 3: Iteration:  200 / 2000 [ 10%]  (Warmup)
+Chain 3: Iteration:  400 / 2000 [ 20%]  (Warmup)
+Chain 3: Iteration:  600 / 2000 [ 30%]  (Warmup)
+Chain 3: Iteration:  800 / 2000 [ 40%]  (Warmup)
+Chain 3: Iteration: 1000 / 2000 [ 50%]  (Warmup)
+Chain 3: Iteration: 1001 / 2000 [ 50%]  (Sampling)
+Chain 2: Iteration:  200 / 2000 [ 10%]  (Warmup)
+Chain 3: Iteration: 1200 / 2000 [ 60%]  (Sampling)
+Chain 2: Iteration:  400 / 2000 [ 20%]  (Warmup)
+Chain 3: Iteration: 1400 / 2000 [ 70%]  (Sampling)
+Chain 3: Iteration: 1600 / 2000 [ 80%]  (Sampling)
+Chain 2: Iteration:  600 / 2000 [ 30%]  (Warmup)
+Chain 3: Iteration: 1800 / 2000 [ 90%]  (Sampling)
+Chain 2: Iteration:  800 / 2000 [ 40%]  (Warmup)
+Chain 3: Iteration: 2000 / 2000 [100%]  (Sampling)
+Chain 3: 
+Chain 3:  Elapsed Time: 544.222 seconds (Warm-up)
+Chain 3:                199.15 seconds (Sampling)
+Chain 3:                743.372 seconds (Total)
+Chain 3: 
+Chain 2: Iteration: 1000 / 2000 [ 50%]  (Warmup)
+Chain 2: Iteration: 1001 / 2000 [ 50%]  (Sampling)
+Chain 2: Iteration: 1200 / 2000 [ 60%]  (Sampling)
+Chain 4: Iteration:  200 / 2000 [ 10%]  (Warmup)
+Chain 2: Iteration: 1400 / 2000 [ 70%]  (Sampling)
+Chain 2: Iteration: 1600 / 2000 [ 80%]  (Sampling)
+Chain 4: Iteration:  400 / 2000 [ 20%]  (Warmup)
+Chain 2: Iteration: 1800 / 2000 [ 90%]  (Sampling)
+Chain 4: Iteration:  600 / 2000 [ 30%]  (Warmup)
+Chain 2: Iteration: 2000 / 2000 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 749.315 seconds (Warm-up)
+Chain 2:                114.057 seconds (Sampling)
+Chain 2:                863.372 seconds (Total)
+Chain 2: 
+Chain 4: Iteration:  800 / 2000 [ 40%]  (Warmup)
+Chain 4: Iteration: 1000 / 2000 [ 50%]  (Warmup)
+Chain 4: Iteration: 1001 / 2000 [ 50%]  (Sampling)
+Chain 4: Iteration: 1200 / 2000 [ 60%]  (Sampling)
+Chain 4: Iteration: 1400 / 2000 [ 70%]  (Sampling)
+Chain 4: Iteration: 1600 / 2000 [ 80%]  (Sampling)
+Chain 4: Iteration: 1800 / 2000 [ 90%]  (Sampling)
+Chain 4: Iteration: 2000 / 2000 [100%]  (Sampling)
+Chain 4: 
+Chain 4:  Elapsed Time: 893.228 seconds (Warm-up)
+Chain 4:                94.784 seconds (Sampling)
+Chain 4:                988.012 seconds (Total)
+Chain 4: 
+Chain 1: Iteration:  200 / 2000 [ 10%]  (Warmup)
+Chain 1: Iteration:  400 / 2000 [ 20%]  (Warmup)
+Chain 1: Iteration:  600 / 2000 [ 30%]  (Warmup)
+Chain 1: Iteration:  800 / 2000 [ 40%]  (Warmup)
+Chain 1: Iteration: 1000 / 2000 [ 50%]  (Warmup)
+Chain 1: Iteration: 1001 / 2000 [ 50%]  (Sampling)
+Chain 1: Iteration: 1200 / 2000 [ 60%]  (Sampling)
+Chain 1: Iteration: 1400 / 2000 [ 70%]  (Sampling)
+Chain 1: Iteration: 1600 / 2000 [ 80%]  (Sampling)
+Chain 1: Iteration: 1800 / 2000 [ 90%]  (Sampling)
+Chain 1: Iteration: 2000 / 2000 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 1231.31 seconds (Warm-up)
+Chain 1:                95.626 seconds (Sampling)
+Chain 1:                1326.94 seconds (Total)
+Chain 1: 
+
+Model fitting complete!
+
+--- Age × Period Interaction Effects ---
+(How much does the age slope change relative to reference period)
+
+Period         Estimate        10%        90%   Sig
+--------------------------------------------------
+1999 (ref)        0.000          -          -      
+2003             0.0020     0.0009     0.0030     *
+2007             0.0040     0.0029     0.0050     *
+2011             0.0046     0.0035     0.0056     *
+2015             0.0061     0.0051     0.0071     *
+2019             0.0075     0.0062     0.0088     *
+
+Main age effect (at period 1999): -0.0151 [-0.0162, -0.0141]
+
+--- Age Effect by Period (main + interaction) ---
+
+Period         Age Effect       Interpretation
+--------------------------------------------------
+1999              -0.0151     steepest decline
+2003              -0.0131 flatter (convergence)
+2007              -0.0112 flatter (convergence)
+2011              -0.0106 flatter (convergence)
+2015              -0.0091 flatter (convergence)
+2019              -0.0076 flatter (convergence)
+
+Saved: age_period_interaction_nhanes.csv
+Saved: nhanes_interaction_model.rds
+
+======================================================================
+SUMMARY: CONVERGENCE EVIDENCE
+======================================================================
+
+
+Period      Observed Gradient    Model Age Slope            vs 1999      Sig
+---------------------------------------------------------------------------
+1999                    0.767            -0.0151             0.0000      ref
+2003                    0.683            -0.0131             0.0020        *
+2007                    0.618            -0.0112             0.0040        *
+2011                    0.460            -0.0106             0.0046        *
+2015                    0.313            -0.0091             0.0061        *
+2019                    0.576            -0.0076             0.0075        *
+
+Saved: convergence_summary_nhanes.csv
+
+======================================================================
+ANALYSIS COMPLETE
+======================================================================
