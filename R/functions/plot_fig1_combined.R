@@ -112,7 +112,7 @@ create_panel_a_subplot <- function(
       legend.title = element_text(size = base_size, face = "bold"),
       legend.text = element_text(size = base_size - 1)
     ) +
-    guides(color = guide_legend(nrow = 1))
+    guides(color = guide_legend(nrow = 1, override.aes = list(size = 4, linewidth = 1.5)))
 
   return(p)
 }
@@ -656,7 +656,8 @@ plot_fig1_combined_3row <- function(
       legend.background = element_blank(),
       legend.title = element_text(size = base_size + 1, face = "bold"),
       legend.text = element_text(size = base_size),
-      legend.key.size = unit(1.2, "lines")
+      legend.key.size = unit(2, "lines"),
+      legend.key.width = unit(2.5, "lines")
     )
 
   # --- Add title/subtitle if provided ---

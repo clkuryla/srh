@@ -114,7 +114,7 @@ fig1_3row <- plot_fig1_combined_3row(
   meta_results_list = meta_results_list,
   colors = age_colors,
   title = NULL,
-  base_size = 14
+  base_size = 18
 )
 
 cat("  Figure generated.\n\n")
