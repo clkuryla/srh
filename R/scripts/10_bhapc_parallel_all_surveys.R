@@ -167,6 +167,34 @@ load_survey_data <- function(survey_name) {
 #' Run full BHAPC pipeline for a single survey
 run_survey_pipeline <- function(survey_name) {
 
+  # Load packages in worker process
+  suppressPackageStartupMessages({
+    library(tidyverse)
+    library(here)
+    library(rstanarm)
+    library(broom.mixed)
+    library(srvyr)
+    library(patchwork)
+    library(gridExtra)
+    library(grid)
+  })
+
+  # Set DATA_DEPOT in worker process
+  if (Sys.getenv("DATA_DEPOT") == "") {
+    Sys.setenv(DATA_DEPOT = "/home/ubuntu/data_depot")
+  }
+
+  # Source functions in worker process
+  source(here("R", "paths.R"))
+  source(here("R", "functions", "subsample_survey.R"))
+  source(here("R", "functions", "bhapc_data_prep.R"))
+  source(here("R", "functions", "bhapc_model_fitting.R"))
+  source(here("R", "functions", "bhapc_table_generation.R"))
+  source(here("R", "functions", "bhapc_figure_generation.R"))
+
+  # Null-coalescing operator
+  `%||%` <- function(x, y) if (is.null(x)) y else x
+
   config <- SURVEY_CONFIG[[survey_name]]
   survey_output_dir <- file.path(output_dir, survey_name)
   dir.create(survey_output_dir, recursive = TRUE, showWarnings = FALSE)
