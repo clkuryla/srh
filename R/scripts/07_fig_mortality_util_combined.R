@@ -93,21 +93,26 @@ panel_a <- plot_mortality_hr(
   title = NULL,
   y_label = "Hazard Ratio per 1-unit SRH",
   x_label = "Window Start Year",
-  point_size = 2.0,
-  line_width = 0.8,
+  point_size = 2.5,
+  line_width = 1.0,
   ci_alpha = 0.12
 ) +
   theme(
+    text = element_text(size = 16),
     legend.position = "bottom",
     legend.direction = "horizontal",
-    legend.title = element_text(face = "bold", size = 12),
-    legend.text = element_text(size = 11),
-    axis.title = element_text(size = 12),
-    axis.text = element_text(size = 11),
+    legend.title = element_text(face = "bold", size = 16),
+    legend.text = element_text(size = 15),
+    legend.key.size = unit(2, "lines"),
+    legend.key.width = unit(2.5, "lines"),
+    axis.title = element_text(size = 16),
+    axis.text = element_text(size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
     plot.margin = margin(t = 25, r = 10, b = 5, l = 5)
   ) +
   guides(
-    color = guide_legend(nrow = 1, title.position = "left"),
+    color = guide_legend(nrow = 2, byrow = TRUE, title.position = "left",
+                         override.aes = list(size = 4, linewidth = 1.5)),
     fill = "none"
   )
 
@@ -125,7 +130,7 @@ create_util_panel <- function(
     show_col_title = FALSE,
     col_title = NULL,
     row_label = NULL,
-    base_size = 12,
+    base_size = 16,
     xlim = NULL
 ) {
 
@@ -142,12 +147,12 @@ create_util_panel <- function(
                         color = age_group, group = age_group)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "gray50",
                linewidth = 0.4, alpha = 0.6) +
-    geom_line(linewidth = 0.7, alpha = 0.8) +
-    geom_point(size = 1.5, alpha = 0.8) +
+    geom_line(linewidth = 0.9, alpha = 0.8) +
+    geom_point(size = 2.0, alpha = 0.8) +
     scale_color_manual(values = age_colors_oi, name = "Age Group") +
     labs(
       x = NULL,
-      y = "Coef (SRH)",
+      y = "Coefficient (SRH)",
       title = if (show_col_title) col_title else NULL,
       tag = row_label
     )
@@ -172,6 +177,8 @@ create_util_panel <- function(
       plot.title = element_text(size = base_size, face = "bold", hjust = 0.5),
       axis.title.y = element_text(size = base_size),
       axis.text = element_text(size = base_size - 1, color = "gray30"),
+      axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+      axis.ticks.x = element_line(color = "gray50", linewidth = 0.3),
       plot.margin = margin(4, 6, 4, left_margin),
       legend.position = "none",
       plot.tag = element_text(size = base_size, face = "bold", angle = 90,
@@ -246,14 +253,18 @@ fig_combined <- (panel_a | panel_b) +
     legend.position = "bottom",
     legend.direction = "horizontal",
     legend.justification = "left",
-    legend.title = element_text(face = "bold", size = 12),
-    legend.text = element_text(size = 11),
+    legend.title = element_text(face = "bold", size = 16),
+    legend.text = element_text(size = 15),
+    legend.key.size = unit(2, "lines"),
+    legend.key.width = unit(2.5, "lines"),
     legend.box.margin = margin(t = 10),
-    plot.tag = element_text(size = 14, face = "bold"),
+    plot.tag = element_text(size = 18, face = "bold"),
     plot.tag.position = c(0, 1),
     plot.background = element_rect(fill = "white", color = NA)
   ) &
-  guides(color = guide_legend(nrow = 1, title.position = "left"), fill = "none")
+  guides(color = guide_legend(nrow = 2, byrow = TRUE, title.position = "left",
+                              override.aes = list(size = 4, linewidth = 1.5)),
+         fill = "none")
 
 
 # ==============================================================================
