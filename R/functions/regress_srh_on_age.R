@@ -666,6 +666,279 @@ run_metaregression_logistic <- function(coefficients, survey_name = NULL, use_ma
 }
 
 
+# ------------------------------------------------------------------------------
+# R-SQUARED COMPUTATION FUNCTION
+# ------------------------------------------------------------------------------
+
+#' Compute R² from survey-weighted regression of SRH on age for each year
+#'
+#' @description
+#' For each year in the dataset, fits a survey-weighted linear model:
+#'   SRH ~ age
+#' and computes the R² (proportion of variance in SRH explained by age).
+#'
+#' R² is computed as the squared weighted correlation between observed SRH
+#' and predicted SRH, which is equivalent to 1 - RSS/TSS for weighted regression.
+#'
+#' @param data Data frame with columns: srh, age, year, wt (and optional psu, strata)
+#' @param survey_name Character string for labeling output (e.g., "NHIS")
+#' @param srh_var Name of SRH variable (default "srh")
+#' @param age_var Name of age variable (default "age")
+#' @param year_var Name of year variable (default "year")
+#' @param psu_var Name of PSU variable (default "psu", NULL if not available)
+#' @param strata_var Name of strata variable (default "strata", NULL if not available)
+#' @param wt_var Name of weight variable (default "wt")
+#' @param lonely_psu How to handle single-PSU strata (default "adjust")
+#'
+#' @return Data frame with columns:
+#'   - survey: Survey name
+#'   - year: Survey year
+#'   - r_squared: R² (variance explained by age)
+#'   - n_unweighted: Unweighted sample size for that year
+#'
+#' @details
+#' The model is: SRH ~ age (simple linear regression, no covariates)
+#'
+#' R² interpretation:
+#' - Higher R²: Age explains more variance in SRH (stronger age gradient)
+#' - Lower R²: Age explains less variance (convergence)
+#' - R² trending toward zero over time supports the convergence hypothesis
+#'
+#' For survey-weighted regression, R² is computed using weighted correlation:
+#'   R² = cor(y, y_hat, weights)²
+#' This accounts for the survey design in the variance calculation.
+#'
+#' @examples
+#' # r2_results <- compute_r2_by_year(data_nhis, "NHIS")
+#'
+compute_r2_by_year <- function(
+    data,
+    survey_name,
+    srh_var = "srh",
+    age_var = "age",
+    year_var = "year",
+    psu_var = "psu",
+    strata_var = "strata",
+    wt_var = "wt",
+    lonely_psu = "adjust"
+) {
+
+  # --- Input validation ---
+  stopifnot(is.data.frame(data))
+  stopifnot(srh_var %in% names(data))
+  stopifnot(age_var %in% names(data))
+  stopifnot(year_var %in% names(data))
+  stopifnot(wt_var %in% names(data))
+
+  # --- Set survey options ---
+  old_lonely <- getOption("survey.lonely.psu")
+  options(survey.lonely.psu = lonely_psu)
+  on.exit(options(survey.lonely.psu = old_lonely), add = TRUE)
+
+  # --- Check which design elements are available ---
+  has_psu <- !is.null(psu_var) && psu_var %in% names(data)
+  has_strata <- !is.null(strata_var) && strata_var %in% names(data)
+
+  if (!has_psu || !has_strata) {
+    message("Note: ", survey_name, " - Using weights-only design for R². ",
+            "PSU: ", has_psu, ", Strata: ", has_strata)
+  }
+
+  # --- Get unique years ---
+  years <- sort(unique(data[[year_var]]))
+  message("Computing R² for ", survey_name, ": ", length(years), " years (",
+          min(years), "-", max(years), ")")
+
+  # --- Weighted correlation helper function ---
+  weighted_cor <- function(x, y, w) {
+    # Remove NAs
+    complete <- !is.na(x) & !is.na(y) & !is.na(w)
+    x <- x[complete]
+    y <- y[complete]
+    w <- w[complete]
+
+    # Weighted means
+    w <- w / sum(w)  # normalize weights
+    mean_x <- sum(w * x)
+    mean_y <- sum(w * y)
+
+    # Weighted covariance and variances
+    cov_xy <- sum(w * (x - mean_x) * (y - mean_y))
+    var_x <- sum(w * (x - mean_x)^2)
+    var_y <- sum(w * (y - mean_y)^2)
+
+    # Correlation
+    if (var_x > 0 && var_y > 0) {
+      return(cov_xy / sqrt(var_x * var_y))
+    } else {
+      return(NA_real_)
+    }
+  }
+
+  # --- Run regression for each year and compute R² ---
+  results_list <- vector("list", length(years))
+
+  for (i in seq_along(years)) {
+    yr <- years[i]
+
+    # Subset to this year
+    data_year <- data[data[[year_var]] == yr, , drop = FALSE]
+
+    # Filter to valid observations
+    valid_mask <- !is.na(data_year[[srh_var]]) &
+      !is.na(data_year[[age_var]]) &
+      !is.na(data_year[[wt_var]]) &
+      data_year[[wt_var]] > 0
+
+    if (has_psu) valid_mask <- valid_mask & !is.na(data_year[[psu_var]])
+    if (has_strata) valid_mask <- valid_mask & !is.na(data_year[[strata_var]])
+
+    data_year <- data_year[valid_mask, , drop = FALSE]
+    n_unweighted <- nrow(data_year)
+
+    # Skip if too few observations
+    if (n_unweighted < 30) {
+      warning("Year ", yr, " has only ", n_unweighted, " observations. Skipping.")
+      next
+    }
+
+    # --- Create survey design ---
+    tryCatch({
+      if (has_psu && has_strata) {
+        svy_design <- svydesign(
+          ids = as.formula(paste0("~", psu_var)),
+          strata = as.formula(paste0("~", strata_var)),
+          weights = as.formula(paste0("~", wt_var)),
+          data = data_year,
+          nest = TRUE
+        )
+      } else if (has_psu) {
+        svy_design <- svydesign(
+          ids = as.formula(paste0("~", psu_var)),
+          weights = as.formula(paste0("~", wt_var)),
+          data = data_year
+        )
+      } else if (has_strata) {
+        svy_design <- svydesign(
+          ids = ~1,
+          strata = as.formula(paste0("~", strata_var)),
+          weights = as.formula(paste0("~", wt_var)),
+          data = data_year
+        )
+      } else {
+        svy_design <- svydesign(
+          ids = ~1,
+          weights = as.formula(paste0("~", wt_var)),
+          data = data_year
+        )
+      }
+
+      # --- Fit the model: SRH ~ age ---
+      formula <- as.formula(paste0(srh_var, " ~ ", age_var))
+      model <- svyglm(formula, design = svy_design)
+
+      # --- Compute R² using weighted correlation ---
+      # Get observed and predicted values
+      y_obs <- data_year[[srh_var]]
+      y_pred <- predict(model, type = "response")
+      weights_vec <- weights(svy_design)
+
+      # R² = cor(y, y_hat)² for the weighted case
+      r <- weighted_cor(y_obs, as.numeric(y_pred), weights_vec)
+      r_squared <- r^2
+
+      results_list[[i]] <- data.frame(
+        survey = survey_name,
+        year = yr,
+        r_squared = r_squared,
+        n_unweighted = n_unweighted,
+        stringsAsFactors = FALSE
+      )
+
+    }, error = function(e) {
+      warning("Year ", yr, " failed: ", e$message)
+    })
+  }
+
+  # --- Combine results ---
+  r2_results <- dplyr::bind_rows(results_list)
+  rownames(r2_results) <- NULL
+
+  if (nrow(r2_results) == 0) {
+    stop("No valid R² results for ", survey_name)
+  }
+
+  message("  Completed: ", nrow(r2_results), " years with valid R² values")
+
+  return(r2_results)
+}
+
+
+#' Save R² table to CSV and RDS
+#'
+#' @param r2_results Data frame of R² values
+#' @param survey_name Character. Survey name for filename
+#' @param output_dir Character. Directory to save files.
+#' @param date_suffix Logical. Add date suffix to filename?
+#'
+save_r2_table <- function(
+    r2_results,
+    survey_name,
+    output_dir = here::here("output", "tables"),
+    date_suffix = TRUE
+) {
+
+  if (!dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE)
+  }
+
+  base_name <- paste0("fig1c_r2_", tolower(survey_name))
+  if (date_suffix) {
+    base_name <- paste0(base_name, "_", format(Sys.Date(), "%Y%m%d"))
+  }
+
+  # Round for CSV
+  r2_rounded <- r2_results %>%
+    mutate(across(where(is.numeric), ~ round(.x, 6)))
+
+  csv_path <- file.path(output_dir, paste0(base_name, ".csv"))
+  readr::write_csv(r2_rounded, csv_path)
+  message("Saved: ", csv_path)
+
+  rds_path <- file.path(output_dir, paste0(base_name, ".rds"))
+  readr::write_rds(r2_results, rds_path)
+  message("Saved: ", rds_path)
+
+  invisible(NULL)
+}
+
+
+#' Save all survey R² tables
+#'
+#' @param r2_list Named list of R² data frames (one per survey)
+#' @param output_dir Character. Directory to save files.
+#' @param date_suffix Logical. Add date suffix to filenames?
+#'
+save_all_r2_tables <- function(
+    r2_list,
+    output_dir = here::here("output", "tables"),
+    date_suffix = TRUE
+) {
+
+  for (svy in names(r2_list)) {
+    save_r2_table(
+      r2_results = r2_list[[svy]],
+      survey_name = svy,
+      output_dir = output_dir,
+      date_suffix = date_suffix
+    )
+  }
+
+  message("\nAll ", length(r2_list), " R² tables saved")
+  invisible(NULL)
+}
+
+
 #' Save metaregression results table
 #'
 #' @param meta_results Data frame of metaregression results (one row per survey)

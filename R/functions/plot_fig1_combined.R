@@ -396,6 +396,287 @@ plot_fig1_combined <- function(
 }
 
 
+# ------------------------------------------------------------------------------
+# PANEL C SUBPLOT (R-SQUARED)
+# ------------------------------------------------------------------------------
+
+#' Create a Panel C subplot for one survey (R² over time)
+#'
+#' @param r2_data Data frame with year, r_squared columns
+#' @param survey_name Survey name (not used as title in combined figure)
+#' @param show_title Show survey name as title? (FALSE for bottom row)
+#' @param show_ylabel Show y-axis label? (TRUE for leftmost column only)
+#' @param show_x_axis_title Show "Year" axis title? (FALSE, use shared label)
+#' @param show_x_tick_labels Show year numbers on x-axis? (TRUE)
+#' @param base_size Base font size for the plot
+#' @param tilt_x_labels Angle to tilt x-axis labels (0 = horizontal, 45 = tilted)
+#' @param point_color Color for points. Default "#3C5488" (dark blue)
+#' @param line_color Color for connecting line. Default "#3C5488"
+#' @param point_size Point size. Default 1.5
+#' @param line_width Line width. Default 0.6
+#'
+#' @return ggplot object
+#'
+create_panel_c_subplot <- function(
+    r2_data,
+    survey_name,
+    show_title = FALSE,
+    show_ylabel = FALSE,
+    show_x_axis_title = FALSE,
+    show_x_tick_labels = TRUE,
+    point_color = "#3C5488",
+    line_color = "#3C5488",
+    point_size = 1.5,
+    line_width = 0.6,
+    base_size = 12,
+    tilt_x_labels = 0
+) {
+
+  p <- ggplot(r2_data, aes(x = year, y = r_squared)) +
+    # Reference line at zero
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray50", linewidth = 0.4) +
+    # Line and points
+    geom_line(color = line_color, linewidth = line_width) +
+    geom_point(size = point_size, color = point_color)
+
+  # Labels (x-axis title controlled separately from tick labels)
+  p <- p + labs(
+    title = if (show_title) survey_name else NULL,
+    x = if (show_x_axis_title) "Year" else NULL,
+    y = if (show_ylabel) expression(R^2 ~ "(Age" %->% "SRH)") else NULL
+  )
+
+  # X-axis tick label styling (tilted or horizontal)
+  x_tick_style <- if (!show_x_tick_labels) {
+    element_blank()
+  } else if (tilt_x_labels != 0) {
+    element_text(size = base_size - 2, angle = tilt_x_labels, hjust = 1, vjust = 1)
+  } else {
+    element_text(size = base_size - 2)
+  }
+
+  # Theme
+  p <- p +
+    theme_minimal(base_size = base_size) +
+    theme(
+      panel.grid.minor = element_blank(),
+      panel.grid.major = element_line(color = "gray90", linewidth = 0.25),
+      plot.title = element_text(size = base_size + 1, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = base_size),
+      axis.text = element_text(size = base_size - 2, color = "gray30"),
+      axis.text.x = x_tick_style,
+      axis.ticks.x = if (!show_x_tick_labels) element_blank() else element_line(),
+      plot.margin = margin(2, 4, 2, 4)
+    )
+
+  return(p)
+}
+
+
+# ------------------------------------------------------------------------------
+# COMBINED 3x6 FIGURE (Panel A, Panel B, Panel C)
+# ------------------------------------------------------------------------------
+
+#' Create combined Figure 1 with Panel A, Panel B, and Panel C (3x6 layout)
+#'
+#' @description
+#' Creates a 3-row by 6-column figure where:
+#' - Row 1: Panel A content (weighted mean SRH by age group over time)
+#' - Row 2: Panel B content (age coefficient on SRH over time)
+#' - Row 3: Panel C content (R² from SRH ~ age over time)
+#' - Columns: Each survey (BRFSS, MEPS, NHIS, CPS, NHANES, GSS)
+#'
+#' @param estimates_list Named list of Panel A estimates (from summarize_srh_over_time)
+#' @param coefficients_list Named list of Panel B coefficients (from regress_age_coefficient_by_year)
+#' @param r2_list Named list of Panel C R² values (from compute_r2_by_year)
+#' @param meta_results_list Optional named list of metaregression results for Panel B
+#' @param colors Age group color palette for Panel A
+#' @param show_ci Show confidence intervals in Panel A? Default FALSE
+#' @param show_metareg Show metaregression lines in Panel B? Default TRUE
+#' @param title Overall figure title. Default NULL (no title)
+#' @param subtitle Overall figure subtitle. Default NULL
+#' @param base_size Base font size for all text. Default 12
+#' @param tilt_x_labels Angle to tilt x-axis labels (0 = horizontal, 45 = tilted). Default 45
+#' @param metareg_line_color Color for metaregression trend line. Default "#56B4E9" (sky blue)
+#'
+#' @return A patchwork object
+#'
+#' @details
+#' The surveys should be in the same order in all lists. The column order
+#' in the figure follows the order in the lists.
+#'
+#' Y-axis labels appear only on the leftmost column of each row.
+#' X-axis label "Year" appears only below the bottom row.
+#' Survey names appear as titles on the top row only.
+#' Age group legend appears at the bottom.
+#'
+#' @examples
+#' # fig1_3row <- plot_fig1_combined_3row(
+#' #   estimates_list = list(BRFSS = ..., MEPS = ..., ...),
+#' #   coefficients_list = list(BRFSS = ..., MEPS = ..., ...),
+#' #   r2_list = list(BRFSS = ..., MEPS = ..., ...),
+#' #   meta_results_list = list(BRFSS = ..., MEPS = ..., ...),
+#' #   title = "Self Rated Health and Age Over Time",
+#' #   base_size = 14,
+#' #   tilt_x_labels = 45
+#' # )
+#' # ggsave("fig1_combined_3row.png", fig1_3row, width = 16, height = 10)
+#'
+plot_fig1_combined_3row <- function(
+    estimates_list,
+    coefficients_list,
+    r2_list,
+    meta_results_list = NULL,
+    colors = NULL,
+    show_ci = FALSE,
+    show_metareg = TRUE,
+    title = NULL,
+    subtitle = NULL,
+    base_size = 12,
+    tilt_x_labels = 45,
+    metareg_line_color = "#56B4E9"
+) {
+
+  # --- Input validation ---
+  stopifnot(is.list(estimates_list), is.list(coefficients_list), is.list(r2_list))
+
+  if (is.null(names(estimates_list)) || is.null(names(coefficients_list)) ||
+      is.null(names(r2_list))) {
+    stop("All lists must be named (names = survey names)")
+  }
+
+  # Check that survey names match
+  if (!identical(names(estimates_list), names(coefficients_list)) ||
+      !identical(names(estimates_list), names(r2_list))) {
+    warning("Survey names in lists don't match exactly.")
+  }
+
+  # Use default colors if not provided
+  if (is.null(colors)) colors <- age_colors
+
+  # --- Get survey order ---
+  survey_names <- names(estimates_list)
+  n_surveys <- length(survey_names)
+
+  # --- Create Row 1: Panel A subplots ---
+  row1_plots <- lapply(seq_along(survey_names), function(i) {
+    svy <- survey_names[i]
+    create_panel_a_subplot(
+      estimates = estimates_list[[svy]],
+      survey_name = svy,
+      colors = colors,
+      show_title = TRUE,
+      show_ylabel = (i == 1),
+      show_x_axis_title = FALSE,
+      show_x_tick_labels = TRUE,
+      show_legend = TRUE,
+      show_ci = show_ci,
+      base_size = base_size,
+      tilt_x_labels = tilt_x_labels
+    )
+  })
+  names(row1_plots) <- survey_names
+
+  # --- Create Row 2: Panel B subplots ---
+  row2_plots <- lapply(seq_along(survey_names), function(i) {
+    svy <- survey_names[i]
+
+    meta_result <- if (!is.null(meta_results_list) && svy %in% names(meta_results_list)) {
+      meta_results_list[[svy]]
+    } else {
+      NULL
+    }
+
+    create_panel_b_subplot(
+      coefficients = coefficients_list[[svy]],
+      survey_name = svy,
+      meta_result = meta_result,
+      show_title = FALSE,
+      show_ylabel = (i == 1),
+      show_x_axis_title = FALSE,
+      show_x_tick_labels = TRUE,
+      show_metareg = show_metareg,
+      line_color = metareg_line_color,
+      base_size = base_size,
+      tilt_x_labels = tilt_x_labels
+    )
+  })
+  names(row2_plots) <- survey_names
+
+  # --- Create Row 3: Panel C subplots (R²) ---
+  row3_plots <- lapply(seq_along(survey_names), function(i) {
+    svy <- survey_names[i]
+
+    create_panel_c_subplot(
+      r2_data = r2_list[[svy]],
+      survey_name = svy,
+      show_title = FALSE,
+      show_ylabel = (i == 1),
+      show_x_axis_title = FALSE,
+      show_x_tick_labels = TRUE,
+      base_size = base_size,
+      tilt_x_labels = tilt_x_labels
+    )
+  })
+  names(row3_plots) <- survey_names
+
+  # --- Assemble the grid ---
+  # Row 1: Panel A plots side by side
+  row1 <- wrap_plots(row1_plots, ncol = n_surveys)
+
+  # Row 2: Panel B plots side by side
+  row2 <- wrap_plots(row2_plots, ncol = n_surveys)
+
+  # Row 3: Panel C plots side by side
+  row3 <- wrap_plots(row3_plots, ncol = n_surveys)
+
+  # --- Create shared x-axis label as a grob ---
+  x_label_grob <- wrap_elements(
+    grid::textGrob(
+      "Year",
+      gp = grid::gpar(fontsize = base_size + 2)
+    )
+  )
+
+  # Add spacing between rows B and C
+  spacer <- wrap_elements(grid::nullGrob())
+
+  # Stack rows: Panel A / Panel B / spacer / Panel C / x-label
+  combined <- row1 / row2 / spacer / row3 / x_label_grob +
+    plot_layout(heights = c(1, 0.8, 0.03, 0.8, 0.08))
+
+  # --- Configure layout ---
+  # Collect guides (legend) at bottom
+  combined <- combined +
+    plot_layout(guides = "collect") &
+    theme(
+      legend.position = "bottom",
+      legend.box = "horizontal",
+      legend.margin = margin(t = 10),
+      legend.background = element_blank(),
+      legend.title = element_text(size = base_size + 1, face = "bold"),
+      legend.text = element_text(size = base_size),
+      legend.key.size = unit(1.2, "lines")
+    )
+
+  # --- Add title/subtitle if provided ---
+  if (!is.null(title) || !is.null(subtitle)) {
+    combined <- combined +
+      plot_annotation(
+        title = title,
+        subtitle = subtitle,
+        theme = theme(
+          plot.title = element_text(size = base_size + 4, face = "bold", hjust = 0.5),
+          plot.subtitle = element_text(size = base_size + 1, color = "gray40", hjust = 0.5),
+          plot.margin = margin(10, 10, 5, 10)
+        )
+      )
+  }
+
+  return(combined)
+}
+
+
 # ==============================================================================
 # DICHOTOMIZED SRH PLOTTING FUNCTIONS
 # For supplementary materials showing Figure 1 analogs with binary outcomes
