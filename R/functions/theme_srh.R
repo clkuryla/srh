@@ -185,7 +185,7 @@ srh_cat_labels_gss <- c("Poor", "Fair", "Good", "Excellent")
 #' @param base_size Base font size (default 11)
 #' @param base_family Base font family (default "sans")
 #' @export
-theme_srh <- function(base_size = 11, base_family = "sans") {
+theme_srh <- function(base_size = 18, base_family = "sans") {
   theme_minimal(base_size = base_size, base_family = base_family) %+replace%
     theme(
       # Panel

@@ -316,7 +316,7 @@ run_sliding_windows_by_age <- function(data,
 #' @return Tibble combining results from all window lengths
 #' @export
 run_multiple_windows <- function(data,
-                                 window_lengths = c(1, 2, 3, 5, 10, 15),
+                                 window_lengths = c(2, 3, 5, 10, 15, 20),
                                  ...) {
 
   min_year <- min(data$survey_year, na.rm = TRUE)

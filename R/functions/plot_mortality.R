@@ -306,7 +306,7 @@ plot_mortality_multi_window <- function(results,
       strip.text = element_text(size = rel(0.9)),
       legend.position = "bottom"
     ) +
-    guides(fill = "none")
+    guides(fill = "none", color = guide_legend(nrow = 1))
 
   return(p)
 }
@@ -359,7 +359,8 @@ plot_mortality_combined <- function(results,
       )
     ) +
     plot_layout(guides = "collect") &
-    theme(legend.position = "bottom")
+    theme(legend.position = "bottom") &
+    guides(color = guide_legend(nrow = 1))
 
   return(combined)
 }
@@ -560,7 +561,8 @@ plot_fig5_combined <- function(results,
       )
     ) +
     plot_layout(guides = "collect") &
-    theme(legend.position = "bottom")
+    theme(legend.position = "bottom") &
+    guides(color = guide_legend(nrow = 1))
 
   return(combined)
 }

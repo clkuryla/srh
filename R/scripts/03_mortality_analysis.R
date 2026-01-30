@@ -128,7 +128,7 @@ write_csv(results_15yr, here("output", paste0("mortality_results_15yr_", analysi
 message("\n=== Running multiple window length analysis ===")
 
 # Window lengths to explore
-window_lengths_all <- c(1, 2, 3, 5, 10, 15)
+window_lengths_all <- c(2, 3, 5, 10, 15, 20)
 
 results_all_windows <- run_multiple_windows(
   nhis_mort,
@@ -244,7 +244,7 @@ fig_multiwindow <- plot_mortality_multi_window(
   plot_type = "coef",
   ncol = 3,
   title = "SRH-Mortality Association Across Window Lengths",
-  subtitle = "Comparing 1, 2, 3, 5, 10, and 15-year follow-up windows"
+  subtitle = "Comparing 2, 3, 5, 10, 15, and 20-year follow-up windows"
 )
 
 # --- Diagnostic plots ---
