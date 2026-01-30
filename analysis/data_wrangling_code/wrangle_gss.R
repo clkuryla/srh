@@ -154,4 +154,4 @@ svy_gss <- data_gss %>%
 # Strip all haven/Stata metadata (variable labels, format.stata attributes)
 data_gss <- labelled::remove_attributes(data_gss, c("label", "format.stata"))
 
-# readr::write_rds(data_gss, derived_path("data_gss.rds"))
+readr::write_rds(data_gss, derived_path("data_gss.rds"))

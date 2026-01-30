@@ -109,8 +109,8 @@ process_meps_sex <- function(df) {
 }
 
 process_nhis_sex <- function(df) {
-  # NHIS: sex is currently numeric (1, 2, 7, 9); SEX also exists
-  # Store numeric as sex_orig, convert to character
+  # NHIS: sex may be numeric (1, 2, 7, 9) or already character ("Male", "Female")
+  # Store numeric as sex_orig, ensure sex is character
   # Values 7 and 9 are coded as NA
 
   # Check if already processed
@@ -126,6 +126,15 @@ process_nhis_sex <- function(df) {
 
   stopifnot("sex" %in% names(df))
 
+  # Check if sex is already character (from wrangle_nhis.R)
+  if (is.character(df$sex)) {
+    # Sex is already character - reverse-map to get sex_orig
+    df <- df %>%
+      mutate(sex_orig = sex_char_to_numeric(sex))
+    return(df)
+  }
+
+  # Sex is numeric - convert to character
   df %>%
     mutate(
       # Store original numeric value; recode 7/9 to NA

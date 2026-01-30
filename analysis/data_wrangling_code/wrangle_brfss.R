@@ -202,14 +202,15 @@ data_brfss_raw <- bind_rows(all_dfs)
 
 ### Load from file, filter, add age groupings, recode IYEAR
 
-data_brfss <- data_brfss_raw %>% 
+data_brfss <- data_brfss_raw %>%
   select(   -SEATBELT, -CHILDREN, -SMOKE100, -MARITAL, -PREGNANT,
             -CTYCODE, -CTYCODE1, -CTYCODE2, -ZIPCODE, -ZIPCODE1,
-            -HISPANIC, -HISPANC2, -HISPANC3,
+            # Keep HISPANIC, HISPANC2, HISPANC3 for wrangle_race.R
             -INCOME, -INCOME2, -INCOME3, -INCOME95,
-            -`_FINALWT2`, 
+            -`_FINALWT2`,
             -`_RAWRAKE`, -`_WT2RAKE`, -`_DUALWT`, -`_LANDWT`, -`_CELLWT`,
-            -`_IMPRACE`, -`_CHISPNC`, -`_RACE`, -`_RACEG21`, -`_RACEGR3`, 
+            # Keep _IMPRACE and _RACE for wrangle_race.R
+            -`_CHISPNC`, -`_RACEG21`, -`_RACEGR3`,
             -`_MMSA`, -`_MMSAWT`, -`_MMSANAM`, -ADJMMSA, -EXERANY2
   )
 
@@ -474,8 +475,9 @@ data_brfss <- data_brfss %>%
 ### Recode and harmonize other variables
 
 
-data_brfss <- data_brfss %>% 
-  select(-c(MRACE, MRACE1, MRACE2, ORACE, ORACE2, ORACE3, ORACE4))
+data_brfss <- data_brfss %>%
+  # Keep ORACE for wrangle_race.R (needed for 1993-2000)
+  select(-c(MRACE, MRACE1, MRACE2, ORACE2, ORACE3, ORACE4))
 
 # Recode
 
@@ -984,7 +986,7 @@ df <- df %>% select(
   -PREDIAB, -PREDIAB1, -PREDIAB2,
   -USEEQUIP,
   -DIFFWALK,
-  -EDUCA,
+  # Keep EDUCA for wrangle_education.R
   # -HISPANIC, -HISPANC2, -HISPANC3,
   # -INCOME, -INCOME2, -INCOME3, -INCOME95,
   # -MRACE, -MRACE1, -MRACE2,

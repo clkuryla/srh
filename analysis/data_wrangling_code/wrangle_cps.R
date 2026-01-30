@@ -119,4 +119,4 @@ svy_cps <- data_cps %>%
 # Save wrangled data
 # ------------------------------------------------------------------------------
 
-# readr::write_rds(data_cps, derived_path("data_cps.rds"))
+readr::write_rds(data_cps, derived_path("data_cps.rds"))

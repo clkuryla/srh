@@ -68,7 +68,9 @@ process_cycle <- function(demo_file, huq_file, years_label, year_midpoint, weigh
   huq <- readRDS(huq_path)
 
   # Select and rename DEMO variables
-  demo_vars <- c("SEQN", "RIDAGEYR", "RIAGENDR", "SDMVSTRA", "SDMVPSU")
+  # Include race/ethnicity (RIDRETH1 or RIDRETH3) and education (DMDEDUC2)
+  demo_vars <- c("SEQN", "RIDAGEYR", "RIAGENDR", "SDMVSTRA", "SDMVPSU",
+                 "RIDRETH1", "RIDRETH3", "DMDEDUC2")
 
   # Add the appropriate weight variable
   if (weight_var %in% names(demo)) {
@@ -161,6 +163,65 @@ data_nhanes <- all_data %>%
   mutate(
     sex = as.character(RIAGENDR)
   ) %>%
+  # Race/ethnicity recode
+  # RIDRETH1/RIDRETH3: 1=Mexican American, 2=Other Hispanic, 3=NH White,
+  #                    4=NH Black, 5=Other (RIDRETH1) or 6=NH Asian, 7=Other (RIDRETH3)
+  mutate(
+    # Use RIDRETH3 if available (has separate Asian category), else RIDRETH1
+    race_eth_raw = coalesce(as.numeric(RIDRETH3), as.numeric(RIDRETH1)),
+    hispanic = case_when(
+      race_eth_raw %in% c(1, 2) ~ 1L,  # Mexican American, Other Hispanic
+      race_eth_raw %in% c(3, 4, 5, 6, 7) ~ 0L,  # NH categories
+      TRUE ~ NA_integer_
+    ),
+    race_5cat = case_when(
+      race_eth_raw == 3 ~ "White",   # NH White
+      race_eth_raw == 4 ~ "Black",   # NH Black
+      race_eth_raw == 6 ~ "Asian",   # NH Asian (RIDRETH3 only)
+      race_eth_raw %in% c(5, 7) ~ "Other",  # Other race including multiracial
+      race_eth_raw %in% c(1, 2) ~ NA_character_,  # Hispanic - underlying race not specified
+      TRUE ~ NA_character_
+    ),
+    race_includehisp = case_when(
+      hispanic == 1 ~ "Hispanic",
+      !is.na(race_5cat) ~ race_5cat,
+      TRUE ~ NA_character_
+    ),
+    # Factor versions
+    race_5cat_f = factor(
+      race_5cat,
+      levels = c("White", "Black", "AIAN", "Asian", "Other"),
+      labels = c("NH White", "NH Black", "NH AIAN", "NH Asian", "Other/Multi")
+    ),
+    hispanic_f = factor(
+      hispanic,
+      levels = c(0, 1),
+      labels = c("Not Hispanic", "Hispanic")
+    ),
+    race_includehisp_f = factor(
+      race_includehisp,
+      levels = c("White", "Black", "AIAN", "Asian", "Hispanic", "Other"),
+      labels = c("NH White", "NH Black", "NH AIAN", "NH Asian", "Hispanic", "Other/Multi")
+    )
+  ) %>%
+  # Education recode (adults 20+)
+  # DMDEDUC2: 1=Less than 9th grade, 2=9-11th grade, 3=HS/GED, 4=Some college/AA, 5=College+
+  mutate(
+    DMDEDUC2_num = as.numeric(DMDEDUC2),
+    educ_4cat = case_when(
+      DMDEDUC2_num %in% c(1, 2) ~ 1L,  # Less than HS
+      DMDEDUC2_num == 3 ~ 2L,           # HS graduate
+      DMDEDUC2_num == 4 ~ 3L,           # Some college
+      DMDEDUC2_num == 5 ~ 4L,           # College graduate
+      TRUE ~ NA_integer_
+    ),
+    educ_3cat = case_when(
+      educ_4cat == 1 ~ 1L,
+      educ_4cat %in% c(2, 3) ~ 2L,
+      educ_4cat == 4 ~ 3L,
+      TRUE ~ NA_integer_
+    )
+  ) %>%
   # Create age groups consistent with other surveys
   mutate(
     age_group = factor(
@@ -202,7 +263,21 @@ data_nhanes <- all_data %>%
     cohort,
     age_group,
     age_group_6,
-    weight_var_used
+    weight_var_used,
+    # Race/ethnicity
+    hispanic,
+    hispanic_f,
+    race_5cat,
+    race_5cat_f,
+    race_includehisp,
+    race_includehisp_f,
+    # Education
+    educ_3cat,
+    educ_4cat,
+    # Keep raw for debugging
+    RIDRETH1,
+    RIDRETH3,
+    DMDEDUC2
   )
 
 message("Total rows after filtering: ", nrow(data_nhanes))
@@ -236,6 +311,11 @@ print(range(data_nhanes$age, na.rm = TRUE))
 output_path <- derived_path("data_nhanes_source.rds")
 saveRDS(data_nhanes, output_path)
 message("\nSaved to: ", output_path)
+
+# Also save as data_nhanes.rds for pipeline compatibility
+output_path_main <- derived_path("data_nhanes.rds")
+saveRDS(data_nhanes, output_path_main)
+message("Also saved to: ", output_path_main, " (for pipeline compatibility)")
 
 # Also save a version with only 1999-2018 for comparison with Kamaryn's data
 data_nhanes_1999_2018 <- data_nhanes %>%
