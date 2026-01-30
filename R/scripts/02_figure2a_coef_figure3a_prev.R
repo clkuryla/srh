@@ -548,7 +548,7 @@ create_age_subplot <- function(
     show_title = FALSE,
     title = NULL,
     ylabel = NULL,
-    base_size = 13,
+    base_size = 18,
     xlim = NULL,
     show_hline = TRUE,
     row_label = NULL
@@ -573,8 +573,8 @@ create_age_subplot <- function(
 
   p <- ggplot(data, aes(x = year, y = .data[[y_var]],
                         color = age_group, group = age_group)) +
-    geom_line(linewidth = 0.7, alpha = 0.8) +
-    geom_point(size = 1.5, alpha = 0.8) +
+    geom_line(linewidth = 0.9, alpha = 0.8) +
+    geom_point(size = 2.0, alpha = 0.8) +
     scale_color_manual(values = age_colors, name = "Age Group") +
     labs(
       x = NULL,
@@ -602,7 +602,9 @@ create_age_subplot <- function(
       panel.grid.major = element_line(color = "gray92", linewidth = 0.25),
       plot.title = element_text(size = base_size + 1, face = "bold", hjust = 0.5),
       axis.title.y = element_text(size = base_size - 1),
-      axis.text = element_text(size = base_size - 1, color = "gray30"),
+      axis.text = element_text(size = base_size - 2, color = "gray30"),
+      axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+      axis.ticks.x = element_line(color = "gray50", linewidth = 0.3),
       plot.margin = margin(4, 12, 4, left_margin),
       legend.position = "none",
       plot.tag = element_text(size = base_size + 1, face = "bold", angle = 90, vjust = 0.5),
@@ -698,19 +700,19 @@ fig3_climbing <- (
   (p_nhis_chronic | p_nhis_mental | p_nhis_climbing) /
   guide_area()
 ) +
-  plot_layout(heights = c(1, 1, 1, 0.08), guides = "collect") +
+  plot_layout(heights = c(1, 1, 1, 0.12), guides = "collect") +
   plot_annotation(
-    title = "Coefficient Trends by Age Group",
     theme = theme(
-      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
       plot.background = element_rect(fill = "white", color = NA)
     )
   ) &
   theme(legend.position = "bottom",
         legend.direction = "horizontal",
-        legend.title = element_text(face = "bold", size = 13),
-        legend.text = element_text(size = 14)) &
-  guides(color = guide_legend(nrow = 1))
+        legend.title = element_text(face = "bold", size = 16),
+        legend.text = element_text(size = 15),
+        legend.key.size = unit(2, "lines"),
+        legend.key.width = unit(2.5, "lines")) &
+  guides(color = guide_legend(nrow = 1, override.aes = list(size = 4, linewidth = 1.5)))
 
 
 # ==============================================================================
@@ -795,19 +797,19 @@ fig3b_climbing <- (
   (p3b_nhis_chronic | p3b_nhis_mental | p3b_nhis_climbing) /
   guide_area()
 ) +
-  plot_layout(heights = c(1, 1, 1, 0.08), guides = "collect") +
+  plot_layout(heights = c(1, 1, 1, 0.12), guides = "collect") +
   plot_annotation(
-    title = "Health Trends by Age Group",
     theme = theme(
-      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
       plot.background = element_rect(fill = "white", color = NA)
     )
   ) &
   theme(legend.position = "bottom",
         legend.direction = "horizontal",
-        legend.title = element_text(face = "bold", size = 13),
-        legend.text = element_text(size = 14)) &
-  guides(color = guide_legend(nrow = 1))
+        legend.title = element_text(face = "bold", size = 16),
+        legend.text = element_text(size = 15),
+        legend.key.size = unit(2, "lines"),
+        legend.key.width = unit(2.5, "lines")) &
+  guides(color = guide_legend(nrow = 1, override.aes = list(size = 4, linewidth = 1.5)))
 
 
 # ==============================================================================

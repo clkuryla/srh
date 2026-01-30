@@ -20,7 +20,7 @@ all_year_col <- c( "_STATE",   "_STSTR",   "_PSU",     "IDATE" , "IYEAR"  ,  "DI
                    "MARITAL" ,# "EDUCA"  , 
                    "PREGNANT", "_AGEG5YR", # "EXEROFT1" "EXERHMM1" "EXEROFT2", "EXERHMM2",
                    # these are not in all years:
-                   "_AGE80", "AGE", "_AGE", "_IMPAGE", "_LLCPWT", "_MMSA", "_MMSAWT", "_MMSANAM", "ADJMMSA", "EXERANY2", "DECIDE", "DIFFALON", "EMTSUPRT",
+                   "_AGE80", "AGE", "_AGE", "_IMPAGE", "_LLCPWT", "_MMSA", "_MMSAWT", "_MMSANAM", "ADJMMSA", "EXERANY2", "DECIDE", "DIFFALON", "DIFFWALK", "EMTSUPRT",
                    # "_LLCPWT", "_PSU", 
                    "_STSTR",
                    "_FINALWT", "_STRWT", "_FINALWT2", "_RAWRAKE", "_WT2RAKE", "_DUALWT", "_LANDWT", "_CELLWT", 
@@ -799,7 +799,21 @@ df <- df %>% mutate(
 
 # with(df, table(prediab_any, year, useNA = "always"))
 
-# # 14) Special equipment (USEEQUIP) -> useequip (1/0)
+# 14) Difficulty walking or climbing stairs (DIFFWALK) -> diffwalk (1/0)
+# DIFFWALK: Do you have serious difficulty walking or climbing stairs?
+# 1=Yes, 2=No, 7=DK/NS, 9=Refused
+# Available from 2013 onwards
+df <- df %>% mutate(
+  diffwalk = case_when(
+    to_int(DIFFWALK) == 1L ~ 1L,
+    to_int(DIFFWALK) == 2L ~ 0L,
+    TRUE ~ NA_integer_
+  )
+)
+
+# with(df, table(diffwalk, year, useNA = "always"))
+
+# # 15) Special equipment (USEEQUIP) -> useequip (1/0)
 # df <- unify_one(df, "useequip_raw", c("USEEQUIP"))
 # df <- df %>% mutate(useequip = yn_1yes_2no(useequip_raw))
 # 
@@ -969,6 +983,7 @@ df <- df %>% select(
   -HAVARTH, -HAVARTH2, -HAVARTH3, -HAVARTH4, -HAVARTH5,
   -PREDIAB, -PREDIAB1, -PREDIAB2,
   -USEEQUIP,
+  -DIFFWALK,
   -EDUCA,
   # -HISPANIC, -HISPANC2, -HISPANC3,
   # -INCOME, -INCOME2, -INCOME3, -INCOME95,
