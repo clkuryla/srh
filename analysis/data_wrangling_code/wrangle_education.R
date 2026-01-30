@@ -86,42 +86,82 @@ crosswalk_ipums <- function(educ_orig) {
 # ------------------------------------------------------------------------------
 
 process_brfss <- function(df) {
-  # BRFSS already has 4-category educ; original is EDUCA
+  # BRFSS EDUCA coding (1993+):
+  #   1 = Never attended school or kindergarten only
+  #   2 = Grades 1 through 8 (Elementary)
+  #   3 = Grades 9 through 11 (Some high school)
+  #   4 = Grade 12 or GED (High school graduate)
+  #   5 = College 1 year to 3 years (Some college or technical school)
+  #   6 = College 4 years or more
+  #   9 = Refused
 
   # Check if already processed
-
   if ("educ_orig" %in% names(df)) {
-    message("  BRFSS: Already processed (educ_orig exists), skipping rename")
-    # Ensure educ_5cat exists
+    message("  BRFSS: Already processed (educ_orig exists), skipping")
     if (!"educ_5cat" %in% names(df)) {
       df <- df %>% mutate(educ_5cat = NA_integer_)
     }
     return(df)
   }
 
-  stopifnot("educ" %in% names(df), "EDUCA" %in% names(df))
+  stopifnot("EDUCA" %in% names(df))
 
   df %>%
-    rename(educ_4cat = educ, educ_orig = EDUCA) %>%
-    mutate(educ_5cat = NA_integer_)
+    rename(educ_orig = EDUCA) %>%
+    mutate(
+      educ_4cat = case_when(
+        educ_orig %in% c(1, 2, 3) ~ 1L,  # Less than HS
+        educ_orig == 4 ~ 2L,              # HS graduate
+        educ_orig == 5 ~ 3L,              # Some college
+        educ_orig == 6 ~ 4L,              # College 4+ years
+        TRUE ~ NA_integer_
+      ),
+      educ_5cat = NA_integer_  # BRFSS doesn't distinguish BA vs graduate degree
+    )
 }
 
 process_nhanes <- function(df) {
-  # NHANES already has 4-category educ; original is DMDEDUC2
+  # NHANES DMDEDUC2 coding (adults 20+):
+  #   1 = Less than 9th grade
+  #   2 = 9-11th grade (includes 12th grade with no diploma)
+  #   3 = High school graduate/GED or equivalent
+  #   4 = Some college or AA degree
+  #   5 = College graduate or above
+  #   7 = Refused, 9 = Don't know
+
   # Check if already processed
   if ("educ_orig" %in% names(df)) {
-    message("  NHANES: Already processed (educ_orig exists), skipping rename")
+    message("  NHANES: Already processed (educ_orig exists), skipping")
     if (!"educ_5cat" %in% names(df)) {
       df <- df %>% mutate(educ_5cat = NA_integer_)
     }
     return(df)
   }
 
-  stopifnot("educ" %in% names(df), "DMDEDUC2" %in% names(df))
+  # Check if DMDEDUC2 exists in data
+  if (!"DMDEDUC2" %in% names(df)) {
+    warning("NHANES: DMDEDUC2 not found, setting education to NA")
+    df <- df %>%
+      mutate(
+        educ_orig = NA_integer_,
+        educ_4cat = NA_integer_,
+        educ_5cat = NA_integer_
+      )
+    return(df)
+  }
 
   df %>%
-    rename(educ_4cat = educ, educ_orig = DMDEDUC2) %>%
-    mutate(educ_5cat = NA_integer_)
+    rename(educ_orig = DMDEDUC2) %>%
+    mutate(
+      educ_4cat = case_when(
+        educ_orig %in% c(1, 2) ~ 1L,  # Less than HS
+        educ_orig == 3 ~ 2L,           # HS graduate
+        educ_orig == 4 ~ 3L,           # Some college
+        educ_orig == 5 ~ 4L,           # College graduate
+        TRUE ~ NA_integer_
+      ),
+      educ_5cat = NA_integer_  # NHANES doesn't distinguish BA vs graduate degree
+    )
 }
 
 process_cps <- function(df) {
