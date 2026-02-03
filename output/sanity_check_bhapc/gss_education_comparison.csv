@@ -1,0 +1,3 @@
+variable,survey,n_obs,cohort_pct,period_pct,residual_pct
+SRH,GSS,57627,2.35,0.14,97.51
+Education,GSS,57471,6.414688002661971,10.034511670376364,83.55080032696166
