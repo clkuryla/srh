@@ -1,0 +1,53 @@
+
+====================================================================== 
+BHAPC PIPELINE: NHANES 
+Started at: 2026-01-29 03:59:42 
+====================================================================== 
+
+--- STEP 1: DATA LOADING & PREPARATION --- 
+
+ERROR: could not find function "drop_na" 
+
+====================================================================== 
+BHAPC PIPELINE: NHANES 
+Started at: 2026-01-29 04:03:01 
+====================================================================== 
+
+--- STEP 1: DATA LOADING & PREPARATION --- 
+  Original N: 76,989 
+  Final N: 76,989 
+  BHAPC N: 75,367 
+  Periods: 1999, 2003, 2007, 2011, 2015, 2019 
+  Cohorts: 22 
+
+--- STEP 2: MAIN BHAPC MODEL --- 
+  Formula: srh ~ age + scale(age_squared) + lnWt + (1|period_4yr) + (1|cohort_4yr) 
+  iter = 6000, adapt_delta = 0.998 
+  cores = 10 
+  Model completed in 1102.9 minutes 
+
+  Variance Decomposition: 
+    psu:strata: 0.0229 (2.1%) 
+    strata: 0.0035 (0.3%) 
+    cohort_4yr: 0.0028 (0.3%) 
+    period_4yr: 0.0165 (1.5%) 
+    Residual: 1.0535 (95.8%) 
+    Total: 1.0992 (100%) 
+
+--- STEP 3: INTERACTION MODEL (AGE × PERIOD) --- 
+  Formula: srh ~ age_centered * period_4yr + lnWt + (1|cohort_4yr) 
+  iter = 2000, adapt_delta = 0.95 
+  Interaction model completed in 71 minutes 
+
+--- STEP 4: GENERATING FIGURES --- 
+
+--- STEP 5: DIAGNOSTICS --- 
+  Max Rhat: 1.014 
+  Min n_eff: 366 
+  Converged: FALSE 
+
+====================================================================== 
+PIPELINE COMPLETE: NHANES 
+Total time: 1174.6 minutes 
+Finished at: 2026-01-29 23:37:38 
+====================================================================== 

@@ -1,0 +1,51 @@
+
+====================================================================== 
+BHAPC PIPELINE: GSS 
+Started at: 2026-01-29 03:59:42 
+====================================================================== 
+
+--- STEP 1: DATA LOADING & PREPARATION --- 
+
+ERROR: could not find function "drop_na" 
+
+====================================================================== 
+BHAPC PIPELINE: GSS 
+Started at: 2026-01-29 04:03:01 
+====================================================================== 
+
+--- STEP 1: DATA LOADING & PREPARATION --- 
+  Original N: 57,627 
+  Final N: 57,627 
+  BHAPC N: 57,627 
+  Periods: 1971, 1975, 1979, 1983, 1987, 1991, 1995, 1999, 2003, 2007, 2011, 2015, 2019, 2023 
+  Cohorts: 31 
+
+--- STEP 2: MAIN BHAPC MODEL --- 
+  Formula: srh ~ age + scale(age_squared) + lnWt + (1|period_4yr) + (1|cohort_4yr) 
+  iter = 6000, adapt_delta = 0.998 
+  cores = 10 
+  Model completed in 258.8 minutes 
+
+  Variance Decomposition: 
+    cohort_4yr: 0.0157 (2.3%) 
+    period_4yr: 9e-04 (0.1%) 
+    Residual: 0.6516 (97.5%) 
+    Total: 0.6682 (100%) 
+
+--- STEP 3: INTERACTION MODEL (AGE × PERIOD) --- 
+  Formula: srh ~ age_centered * period_4yr + lnWt + (1|cohort_4yr) 
+  iter = 2000, adapt_delta = 0.95 
+  Interaction model completed in 143.4 minutes 
+
+--- STEP 4: GENERATING FIGURES --- 
+
+--- STEP 5: DIAGNOSTICS --- 
+  Max Rhat: 1.002 
+  Min n_eff: 1709 
+  Converged: TRUE 
+
+====================================================================== 
+PIPELINE COMPLETE: GSS 
+Total time: 402.8 minutes 
+Finished at: 2026-01-29 10:45:53 
+====================================================================== 

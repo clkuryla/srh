@@ -1,0 +1,11 @@
+"survey","effect","estimate","ci_90"
+"MEPS","Fixed Effects",NA,NA
+"MEPS","Age (linear)",-0.0367,"[-0.0391, -0.0343]"
+"MEPS","Age (quadratic)",0.000198,"[0.000179, 0.000218]"
+"MEPS","Log weight",0.2072,"[0.2018, 0.2126]"
+"MEPS","",NA,NA
+"MEPS","Variance Components",NA,NA
+"MEPS","Period variance",0.0025,"(0.3%)"
+"MEPS","Cohort variance",0.0162,"(1.7%)"
+"MEPS","Residual variance",0.9274,"(98%)"
+"MEPS","Total variance",0.946,"(100%)"

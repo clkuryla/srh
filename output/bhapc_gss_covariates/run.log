@@ -1,0 +1,633 @@
+
+ ====================================================================== 
+BHAPC GSS WITH COVARIATES
+Started at: 2026-02-03 21:58:19 
+====================================================================== 
+
+
+Attaching package: ‘srvyr’
+
+The following object is masked from ‘package:stats’:
+
+    filter
+
+Cores: 10 
+Iterations: 6000 
+adapt_delta: 0.998 
+
+--- STEP 1: LOADING & WRANGLING GSS DATA ---
+  Raw GSS rows: 75,699 
+  Valid base observations (srh + age + year + wt): 57,659 
+  Year range: 1972 - 2024 
+  Mean SRH: 2.972 
+
+--- STEP 2: MISSINGNESS REPORT ---
+
+   variable n_total n_valid n_missing pct_missing
+        srh   75699   58448     17251        22.8
+        age   75699   74829       870         1.1
+       year   75699   75699         0         0.0
+         wt   75699   75699         0         0.0
+    happy_r   75699   70869      4830         6.4
+   satfin_r   75699   71013      4686         6.2
+   satjob_r   75699   54131     21568        28.5
+ absingle_r   75699   48103     27596        36.5
+     educ_f   75699   75500       199         0.3
+     race_f   75699   75527       172         0.2
+      sex_f   75699   75568       131         0.2
+
+--- STEP 3: BHAPC DATA PREPARATION ---
+Preparing BHAPC data for GSS
+  Initial rows: 57,659
+  Observed age range: 18 - 89
+  Using weight column: wt
+  Final rows: 57,659
+  Years: 1975-2024
+  Periods: 1971, 1975, 1979, 1983, 1987, 1991, 1995, 1999, 2003, 2007, 2011, 2015, 2019, 2023
+  Age groups: 15
+  Cohorts: 31
+  Mean SRH: 2.97
+
+  Sample diagnostics:
+            sample     n mean_srh mean_age year_min year_max n_periods
+        Full BHAPC 57659 2.971782 46.83291     1972     2024        14
+      Demographics 57347 2.972169 46.83823     1972     2024        14
+ All (excl satjob) 44264 2.983147 46.18424     1972     2024        14
+ All (incl satjob) 33680 3.077821 42.03937     1972     2024        14
+ n_cohorts
+        31
+        31
+        31
+        31
+
+--- STEP 4: MODEL 1 — DEMOGRAPHICS (educ + race + sex) ---
+  Formula: srh ~ age + scale(age_squared) + lnWt + educ_f + race_f + sex_f +      (1 | period_4yr) + (1 | cohort_4yr) 
+  N: 57,347 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.013153 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 131.53 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 2: 
+Chain 2: Gradient evaluation took 0.012968 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 129.68 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 3).
+Chain 3: 
+Chain 3: Gradient evaluation took 0.013182 seconds
+Chain 3: 1000 transitions using 10 leapfrog steps per transition would take 131.82 seconds.
+Chain 3: Adjust your expectations accordingly!
+Chain 3: 
+Chain 3: 
+Chain 1: Iteration:    1 / 6000 [  0%]  (Warmup)
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 4).
+Chain 4: 
+Chain 4: Gradient evaluation took 0.013283 seconds
+Chain 4: 1000 transitions using 10 leapfrog steps per transition would take 132.83 seconds.
+Chain 4: Adjust your expectations accordingly!
+Chain 4: 
+Chain 4: 
+Chain 2: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 3: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 4: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 4: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 2: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 4: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 2: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 4: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 2: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 4: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 2: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 4: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 4: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 2: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 2: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 4: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 2: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 2: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 4: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 1: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 2: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 4: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 1: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 2: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 4: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 1: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 2: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 3628.31 seconds (Warm-up)
+Chain 2:                2281.64 seconds (Sampling)
+Chain 2:                5909.94 seconds (Total)
+Chain 2: 
+Chain 3: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 1: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 4: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 4: 
+Chain 4:  Elapsed Time: 3397.12 seconds (Warm-up)
+Chain 4:                2966.73 seconds (Sampling)
+Chain 4:                6363.85 seconds (Total)
+Chain 4: 
+Chain 3: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 1: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 1: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 3: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 3: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 1: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 3: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 3: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 1: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 3: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 3: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 1: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 3: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 1: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 3: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 3: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 3: 
+Chain 3:  Elapsed Time: 7950.9 seconds (Warm-up)
+Chain 3:                2705.37 seconds (Sampling)
+Chain 3:                10656.3 seconds (Total)
+Chain 3: 
+Chain 1: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 6831.83 seconds (Warm-up)
+Chain 1:                4095.29 seconds (Sampling)
+Chain 1:                10927.1 seconds (Total)
+Chain 1: 
+  Completed in 182.2 minutes
+
+--- STEP 5: MODEL 2 — ALL (excl. satjob) ---
+  Formula: srh ~ age + scale(age_squared) + lnWt + happy_r + satfin_r +      absingle_r + educ_f + race_f + sex_f + (1 | period_4yr) +      (1 | cohort_4yr) 
+  N: 44,264 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.012042 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 120.42 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 2: 
+Chain 2: Gradient evaluation took 0.015142 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 151.42 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+Chain 1: Iteration:    1 / 6000 [  0%]  (Warmup)
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 3).
+Chain 3: 
+Chain 3: Gradient evaluation took 0.01189 seconds
+Chain 3: 1000 transitions using 10 leapfrog steps per transition would take 118.9 seconds.
+Chain 3: Adjust your expectations accordingly!
+Chain 3: 
+Chain 3: 
+Chain 2: Iteration:    1 / 6000 [  0%]  (Warmup)
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 4).
+Chain 4: 
+Chain 4: Gradient evaluation took 0.011919 seconds
+Chain 4: 1000 transitions using 10 leapfrog steps per transition would take 119.19 seconds.
+Chain 4: Adjust your expectations accordingly!
+Chain 4: 
+Chain 4: 
+Chain 3: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 4: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 1: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 1: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 4: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 3: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 1: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 2: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 4: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 3: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 1: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 2: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 4: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 3: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 2: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 1: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 1: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 4: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 3: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 2: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 4: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 4: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 3: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 3: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 1: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 2: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 2: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 3: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 2: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 4: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 3: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 2: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 1: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 2: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 3: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 4: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 2: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 3: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 1: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 2: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 3079.32 seconds (Warm-up)
+Chain 2:                1379.01 seconds (Sampling)
+Chain 2:                4458.33 seconds (Total)
+Chain 2: 
+Chain 3: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 3: 
+Chain 3:  Elapsed Time: 3023.17 seconds (Warm-up)
+Chain 3:                1506.06 seconds (Sampling)
+Chain 3:                4529.23 seconds (Total)
+Chain 3: 
+Chain 4: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 1: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 4: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 1: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 2398.56 seconds (Warm-up)
+Chain 1:                3136.85 seconds (Sampling)
+Chain 1:                5535.41 seconds (Total)
+Chain 1: 
+Chain 4: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 4: 
+Chain 4:  Elapsed Time: 2959.22 seconds (Warm-up)
+Chain 4:                2927.54 seconds (Sampling)
+Chain 4:                5886.76 seconds (Total)
+Chain 4: 
+  Completed in 98.2 minutes
+
+--- STEP 6: MODEL 3 — ALL (incl. satjob) ---
+  Formula: srh ~ age + scale(age_squared) + lnWt + happy_r + satfin_r +      satjob_r + absingle_r + educ_f + race_f + sex_f + (1 | period_4yr) +      (1 | cohort_4yr) 
+  N: 33,680 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.0113 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 113 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+Chain 1: Iteration:    1 / 6000 [  0%]  (Warmup)
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 2: 
+Chain 2: Gradient evaluation took 0.011308 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 113.08 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 3).
+Chain 3: 
+Chain 3: Gradient evaluation took 0.011097 seconds
+Chain 3: 1000 transitions using 10 leapfrog steps per transition would take 110.97 seconds.
+Chain 3: Adjust your expectations accordingly!
+Chain 3: 
+Chain 3: 
+Chain 2: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 3: Iteration:    1 / 6000 [  0%]  (Warmup)
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 4).
+Chain 4: 
+Chain 4: Gradient evaluation took 0.011359 seconds
+Chain 4: 1000 transitions using 10 leapfrog steps per transition would take 113.59 seconds.
+Chain 4: Adjust your expectations accordingly!
+Chain 4: 
+Chain 4: 
+Chain 4: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 4: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 1: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 3: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 4: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 1: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 3: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 4: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 1: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 3: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 4: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 1: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 3: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 4: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 4: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 1: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 1: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 3: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 3: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 4: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 1: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 3: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 4: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 1: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 3: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 4: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 1: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 3: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 4: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 1: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 3: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 4: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 4: 
+Chain 4:  Elapsed Time: 2000.69 seconds (Warm-up)
+Chain 4:                1121.2 seconds (Sampling)
+Chain 4:                3121.89 seconds (Total)
+Chain 4: 
+Chain 1: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 2093.98 seconds (Warm-up)
+Chain 1:                1076.47 seconds (Sampling)
+Chain 1:                3170.45 seconds (Total)
+Chain 1: 
+Chain 3: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 3: 
+Chain 3:  Elapsed Time: 2215.67 seconds (Warm-up)
+Chain 3:                964.396 seconds (Sampling)
+Chain 3:                3180.07 seconds (Total)
+Chain 3: 
+Chain 2: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 2: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 2: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 2: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 2: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 2: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 2: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 2: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 2: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 2: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 2: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 5327.28 seconds (Warm-up)
+Chain 2:                1509.65 seconds (Sampling)
+Chain 2:                6836.93 seconds (Total)
+Chain 2: 
+  Completed in 114 minutes
+
+--- STEP 7: LOADING UNADJUSTED BASELINE ---
+  Unadjusted cohort %: 2.35 
+  Unadjusted period %: 0.14 
+  Unadjusted N: 57,627 
+
+--- STEP 8: VARIANCE COMPONENTS ---
+
+  Variance % Comparison:
+ component unadjusted_pct demographics_pct all_excl_satjob_pct
+    Cohort   2.346420e+00         1.018544        1.375126e+00
+    Period   1.396303e-01         1.025561        2.820541e-01
+  Residual   9.751395e+01        97.955895        9.834282e+01
+         N   5.762700e+04     57347.000000        4.426400e+04
+ all_incl_satjob_pct
+        2.927575e+00
+        1.534689e-01
+        9.691896e+01
+        3.368000e+04
+
+--- STEP 9: FIXED EFFECTS ---
+
+  Fixed effects — Demographics model:
+               term      estimate   std_error   ci_lower_90   ci_upper_90 n_eff
+        (Intercept)  3.542825e+00 0.066645384  3.433902e+00  3.653752e+00  2699
+                age -1.950548e-02 0.001303416 -2.168530e-02 -1.740337e-02  3340
+ scale(age_squared)  1.828124e-01 0.020324652  1.493806e-01  2.163339e-01  5697
+               lnWt  3.958065e-02 0.006023820  2.976578e-02  4.953999e-02 17770
+           educ_fHS  3.270873e-01 0.009272858  3.119501e-01  3.423496e-01  9750
+ educ_fSome college  4.456884e-01 0.015610112  4.195739e-01  4.711962e-01 11823
+    educ_fBachelor+  6.405633e-01 0.010814769  6.228613e-01  6.583950e-01  9497
+        race_fBlack -1.229153e-01 0.009676575 -1.389887e-01 -1.071890e-01 18015
+        race_fOther -8.824453e-02 0.013886428 -1.110233e-01 -6.523842e-02 18829
+        sex_fFemale -2.271235e-02 0.006637804 -3.363830e-02 -1.184846e-02 18624
+              sigma  7.795412e-01 0.002328697  7.757320e-01  7.833640e-01 13963
+           mean_PPD  2.972214e+00 0.004628602  2.964674e+00  2.979856e+00 11877
+      log-posterior -6.717358e+04 7.157107952 -6.718601e+04 -6.716252e+04  2255
+      Rhat
+ 1.0006283
+ 1.0005145
+ 1.0004230
+ 0.9998495
+ 1.0000337
+ 0.9999013
+ 1.0002144
+ 0.9998802
+ 0.9999533
+ 0.9997684
+ 1.0001017
+ 0.9998153
+ 1.0031164
+
+  Fixed effects — All (excl. satjob):
+               term      estimate   std_error   ci_lower_90   ci_upper_90 n_eff
+        (Intercept)  2.670463e+00 0.072088971  2.550207e+00  2.790834e+00  3173
+                age -1.933398e-02 0.001461798 -2.177145e-02 -1.693450e-02  3699
+ scale(age_squared)  1.393328e-01 0.022745790  1.019362e-01  1.760683e-01  7076
+               lnWt  3.258116e-03 0.006944140 -8.207075e-03  1.484720e-02 20152
+            happy_r  2.839832e-01 0.005780856  2.744389e-01  2.935752e-01 18025
+           satfin_r  1.355767e-01 0.005249680  1.268784e-01  1.442359e-01 18633
+         absingle_r  5.788998e-02 0.007392863  4.588486e-02  7.002692e-02 19760
+           educ_fHS  2.816176e-01 0.010057513  2.653327e-01  2.984328e-01 11809
+ educ_fSome college  3.819515e-01 0.017912967  3.529764e-01  4.118919e-01 14350
+    educ_fBachelor+  5.057516e-01 0.012181979  4.859119e-01  5.259196e-01 11961
+        race_fBlack -5.833020e-02 0.010893617 -7.615894e-02 -4.083516e-02 20551
+        race_fOther -5.839315e-02 0.016634515 -8.587655e-02 -3.154017e-02 20720
+        sex_fFemale -3.355867e-02 0.007320952 -4.558579e-02 -2.152287e-02 21225
+              sigma  7.528738e-01 0.002504562  7.487569e-01  7.570126e-01 18339
+           mean_PPD  2.983135e+00 0.005048573  2.974819e+00  2.991426e+00 11770
+      log-posterior -5.032927e+04 7.169729088 -5.034137e+04 -5.031805e+04  2747
+      Rhat
+ 1.0015741
+ 1.0011506
+ 1.0003884
+ 0.9997840
+ 0.9998844
+ 0.9998182
+ 0.9997829
+ 1.0003767
+ 0.9998638
+ 1.0000204
+ 0.9998869
+ 0.9997393
+ 0.9998403
+ 0.9998571
+ 0.9998509
+ 1.0006010
+
+  Fixed effects — All (incl. satjob):
+               term      estimate   std_error   ci_lower_90   ci_upper_90 n_eff
+        (Intercept)  2.710803e+00 0.083074583  2.573121e+00  2.847842e+00  4396
+                age -2.212543e-02 0.001873221 -2.516036e-02 -1.898671e-02  5053
+ scale(age_squared)  1.667639e-01 0.025623814  1.249775e-01  2.089265e-01  6546
+               lnWt -2.596599e-03 0.007510984 -1.499955e-02  9.786249e-03 18939
+            happy_r  2.523512e-01 0.006579097  2.415156e-01  2.631616e-01 16205
+           satfin_r  1.016721e-01 0.005843585  9.206036e-02  1.112581e-01 18400
+           satjob_r  7.188514e-02 0.005144605  6.347396e-02  8.026419e-02 18945
+         absingle_r  5.585730e-02 0.008023707  4.271860e-02  6.912309e-02 20011
+           educ_fHS  2.568172e-01 0.011219526  2.383820e-01  2.752209e-01 10763
+ educ_fSome college  3.587789e-01 0.019044009  3.275538e-01  3.899191e-01 12957
+    educ_fBachelor+  4.656618e-01 0.013402764  4.436688e-01  4.874742e-01 10361
+        race_fBlack -4.442813e-02 0.011876609 -6.386174e-02 -2.483951e-02 19119
+        race_fOther -6.012213e-02 0.017307932 -8.892720e-02 -3.193353e-02 20045
+        sex_fFemale -6.428419e-02 0.007725440 -7.688650e-02 -5.151924e-02 18112
+              sigma  7.150367e-01 0.002767490  7.104726e-01  7.195994e-01 14356
+           mean_PPD  3.077843e+00 0.005593671  3.068630e+00  3.087060e+00 12076
+      log-posterior -3.657862e+04 7.449877435 -3.659142e+04 -3.656692e+04  2279
+      Rhat
+ 0.9998854
+ 1.0001938
+ 1.0000163
+ 0.9997870
+ 0.9997397
+ 0.9999258
+ 0.9998199
+ 0.9998268
+ 1.0002321
+ 0.9998511
+ 1.0000555
+ 0.9999197
+ 0.9998615
+ 0.9997728
+ 1.0000464
+ 0.9999594
+ 1.0029335
+
+--- STEP 10: RANDOM EFFECTS COMPARISON ---
+Warning messages:
+1: There was 1 warning in `mutate()`.
+ℹ In argument: `period = as.numeric(period)`.
+Caused by warning:
+! NAs introduced by coercion 
+2: There was 1 warning in `mutate()`.
+ℹ In argument: `cohort = as.numeric(cohort)`.
+Caused by warning:
+! NAs introduced by coercion 
+Warning messages:
+1: There was 1 warning in `mutate()`.
+ℹ In argument: `period = as.numeric(period)`.
+Caused by warning:
+! NAs introduced by coercion 
+2: There was 1 warning in `mutate()`.
+ℹ In argument: `cohort = as.numeric(cohort)`.
+Caused by warning:
+! NAs introduced by coercion 
+Warning messages:
+1: There was 1 warning in `mutate()`.
+ℹ In argument: `period = as.numeric(period)`.
+Caused by warning:
+! NAs introduced by coercion 
+2: There was 1 warning in `mutate()`.
+ℹ In argument: `cohort = as.numeric(cohort)`.
+Caused by warning:
+! NAs introduced by coercion 
+Warning messages:
+1: There was 1 warning in `mutate()`.
+ℹ In argument: `period = as.numeric(period)`.
+Caused by warning:
+! NAs introduced by coercion 
+2: There was 1 warning in `mutate()`.
+ℹ In argument: `cohort = as.numeric(cohort)`.
+Caused by warning:
+! NAs introduced by coercion 
+
+--- STEP 11: CONVERGENCE DIAGNOSTICS ---
+  Demographics               Rhat_max=1.0049  n_eff_min= 1991  OK
+  All (excl satjob)          Rhat_max=1.0035  n_eff_min= 1868  OK
+  All (incl satjob)          Rhat_max=1.0029  n_eff_min= 2279  OK
+
+--- STEP 12: GENERATING FIGURES ---
+  Saved variance_comparison.png
+Warning messages:
+1: Removed 4 rows containing missing values or values outside the scale range
+(`geom_line()`). 
+2: Removed 4 rows containing missing values or values outside the scale range
+(`geom_point()`). 
+  Saved cohort_effects_comparison.png
+Warning message:
+Removed 4 rows containing missing values or values outside the scale range
+(`geom_point()`). 
+  Saved period_effects_comparison.png
+Saved Figure 3 to: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_gss_covariates/figure3_model_demog.png
+Warning messages:
+1: There was 1 warning in `mutate()`.
+ℹ In argument: `period = as.numeric(period)`.
+Caused by warning:
+! NAs introduced by coercion 
+2: There was 1 warning in `mutate()`.
+ℹ In argument: `cohort = as.numeric(cohort)`.
+Caused by warning:
+! NAs introduced by coercion 
+3: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+4: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+Saved Figure 3 to: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_gss_covariates/figure3_model_all.png
+Warning messages:
+1: There was 1 warning in `mutate()`.
+ℹ In argument: `period = as.numeric(period)`.
+Caused by warning:
+! NAs introduced by coercion 
+2: There was 1 warning in `mutate()`.
+ℹ In argument: `cohort = as.numeric(cohort)`.
+Caused by warning:
+! NAs introduced by coercion 
+3: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+4: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+Saved Figure 3 to: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_gss_covariates/figure3_model_all_satjob.png
+Warning messages:
+1: There was 1 warning in `mutate()`.
+ℹ In argument: `period = as.numeric(period)`.
+Caused by warning:
+! NAs introduced by coercion 
+2: There was 1 warning in `mutate()`.
+ℹ In argument: `cohort = as.numeric(cohort)`.
+Caused by warning:
+! NAs introduced by coercion 
+3: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+4: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+  Saved figure3 APC panels
+
+ ====================================================================== 
+INTERPRETATION SUMMARY
+====================================================================== 
+
+Cohort variance %:
+  Unadjusted:          2.35%
+  + Demographics:      1.02%  (57% reduction)
+  + All (excl satjob): 1.38%  (41% reduction)
+  + All (incl satjob): 2.93%  (-25% reduction)
+
+Key covariate effects (All excl satjob model):
+  happy_r                    0.2840  [0.2744, 0.2936]
+  satfin_r                   0.1356  [0.1269, 0.1442]
+  absingle_r                 0.0579  [0.0459, 0.0700]
+  educ_fHS                   0.2816  [0.2653, 0.2984]
+  educ_fSome college         0.3820  [0.3530, 0.4119]
+  educ_fBachelor+            0.5058  [0.4859, 0.5259]
+  race_fBlack                -0.0583  [-0.0762, -0.0408]
+  race_fOther                -0.0584  [-0.0859, -0.0315]
+  sex_fFemale                -0.0336  [-0.0456, -0.0215]
+
+Sample sizes:
+  Unadjusted:          57,627
+  Demographics:        57,347
+  All (excl satjob):   44,264
+  All (incl satjob):   33,680
+
+ ====================================================================== 
+COMPLETE
+Output directory: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_gss_covariates 
+Finished at: 2026-02-04 04:33:17 
+====================================================================== 

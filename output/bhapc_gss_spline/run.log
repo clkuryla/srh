@@ -1,0 +1,311 @@
+
+ ================================================================================ 
+BHAPC GSS ANALYSIS WITH NATURAL SPLINES
+Started at:  2026-02-05 05:12:34 
+================================================================================ 
+
+Detected cores: 64 
+Configuration:
+  SRH scale: 1- 4 
+  Age range:  18 - 89 
+  Spline df:  6 
+  iter:  6000 , adapt_delta:  0.998 
+
+--- STEP 1: DATA LOADING & PREPARATION ---
+  Loaded GSS data:  57,627  rows
+Preparing BHAPC data for GSS
+  Initial rows: 57,627
+  Observed age range: 18 - 89
+  Using weight column: wt
+  Final rows: 57,627
+  Years: 1975-2024
+  Periods: 1971, 1975, 1979, 1983, 1987, 1991, 1995, 1999, 2003, 2007, 2011, 2015, 2019, 2023
+  Age groups: 15
+  Cohorts: 31
+  Mean SRH: 2.97
+  BHAPC N:  57,627 
+  Periods:  1971, 1975, 1979, 1983, 1987, 1991, 1995, 1999, 2003, 2007, 2011, 2015, 2019, 2023 
+  Cohorts:  31 
+
+--- STEP 2: MAIN BHAPC MODEL (SPLINE) ---
+  Formula: srh ~ ns(age, df= 6 ) + lnWt + (1|period_4yr) + (1|cohort_4yr)
+  iter =  6000 , adapt_delta =  0.998 
+  cores =  64 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.012011 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 120.11 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 3).
+Chain 2: 
+Chain 2: Gradient evaluation took 0.012192 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 121.92 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 4).
+Chain 3: 
+Chain 3: Gradient evaluation took 0.011801 seconds
+Chain 3: 1000 transitions using 10 leapfrog steps per transition would take 118.01 seconds.
+Chain 3: Adjust your expectations accordingly!
+Chain 3: 
+Chain 3: 
+Chain 4: 
+Chain 4: Gradient evaluation took 0.012387 seconds
+Chain 4: 1000 transitions using 10 leapfrog steps per transition would take 123.87 seconds.
+Chain 4: Adjust your expectations accordingly!
+Chain 4: 
+Chain 4: 
+Chain 2: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 3: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 1: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 4: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 4: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 1: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 2: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 4: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 1: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 2: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 1: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 4: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 3: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 2: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 1: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 4: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 3: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 2: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 1: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 1: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 3: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 4: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 4: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 2: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 2: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 4: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 1: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 3: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 4: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 2: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 1: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 4: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 3: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 3: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 1: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 2: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 4: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 3: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 1: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 4: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 4: 
+Chain 4:  Elapsed Time: 2711 seconds (Warm-up)
+Chain 4:                1425.45 seconds (Sampling)
+Chain 4:                4136.44 seconds (Total)
+Chain 4: 
+Chain 2: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 3: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 1: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 2678.95 seconds (Warm-up)
+Chain 1:                1708.6 seconds (Sampling)
+Chain 1:                4387.55 seconds (Total)
+Chain 1: 
+Chain 2: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 3: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 2: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 2901.89 seconds (Warm-up)
+Chain 2:                2092.58 seconds (Sampling)
+Chain 2:                4994.47 seconds (Total)
+Chain 2: 
+Chain 3: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 3: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 3: 
+Chain 3:  Elapsed Time: 3614.55 seconds (Warm-up)
+Chain 3:                1942.55 seconds (Sampling)
+Chain 3:                5557.1 seconds (Total)
+Chain 3: 
+  Model completed in  92.7  minutes
+
+  Diagnostics:
+    Max Rhat:  1.004 
+    Min n_eff:  1822 
+    Converged:  TRUE 
+
+  Variance Decomposition:
+     cohort_4yr :  0.0153  ( 2.3 %)
+     period_4yr :  8e-04  ( 0.1 %)
+     Residual :  0.6509  ( 97.6 %)
+     Total :  0.667  ( 100 %)
+
+--- STEP 3: INTERACTION MODEL (SPLINE x PERIOD) ---
+  Formula: srh ~ period_4yr * ns(age, df= 6 ) + lnWt + (1|cohort_4yr)
+  iter =  2000 , adapt_delta =  0.95 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 3).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.049341 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 493.41 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 4).
+Chain 2: 
+Chain 2: Gradient evaluation took 0.051392 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 513.92 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+Chain 3: 
+Chain 3: Gradient evaluation took 0.048503 seconds
+Chain 3: 1000 transitions using 10 leapfrog steps per transition would take 485.03 seconds.
+Chain 3: Adjust your expectations accordingly!
+Chain 3: 
+Chain 3: 
+Chain 4: 
+Chain 4: Gradient evaluation took 0.049938 seconds
+Chain 4: 1000 transitions using 10 leapfrog steps per transition would take 499.38 seconds.
+Chain 4: Adjust your expectations accordingly!
+Chain 4: 
+Chain 4: 
+Chain 1: Iteration:    1 / 2000 [  0%]  (Warmup)
+Chain 3: Iteration:    1 / 2000 [  0%]  (Warmup)
+Chain 2: Iteration:    1 / 2000 [  0%]  (Warmup)
+Chain 4: Iteration:    1 / 2000 [  0%]  (Warmup)
+Chain 1: Iteration:  200 / 2000 [ 10%]  (Warmup)
+Chain 1: Iteration:  400 / 2000 [ 20%]  (Warmup)
+Chain 1: Iteration:  600 / 2000 [ 30%]  (Warmup)
+Chain 1: Iteration:  800 / 2000 [ 40%]  (Warmup)
+Chain 1: Iteration: 1000 / 2000 [ 50%]  (Warmup)
+Chain 1: Iteration: 1001 / 2000 [ 50%]  (Sampling)
+Chain 1: Iteration: 1200 / 2000 [ 60%]  (Sampling)
+Chain 3: Iteration:  200 / 2000 [ 10%]  (Warmup)
+Chain 1: Iteration: 1400 / 2000 [ 70%]  (Sampling)
+Chain 3: Iteration:  400 / 2000 [ 20%]  (Warmup)
+Chain 1: Iteration: 1600 / 2000 [ 80%]  (Sampling)
+Chain 3: Iteration:  600 / 2000 [ 30%]  (Warmup)
+Chain 1: Iteration: 1800 / 2000 [ 90%]  (Sampling)
+Chain 3: Iteration:  800 / 2000 [ 40%]  (Warmup)
+Chain 1: Iteration: 2000 / 2000 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 8224.2 seconds (Warm-up)
+Chain 1:                2961.93 seconds (Sampling)
+Chain 1:                11186.1 seconds (Total)
+Chain 1: 
+Chain 3: Iteration: 1000 / 2000 [ 50%]  (Warmup)
+Chain 3: Iteration: 1001 / 2000 [ 50%]  (Sampling)
+Chain 3: Iteration: 1200 / 2000 [ 60%]  (Sampling)
+Chain 3: Iteration: 1400 / 2000 [ 70%]  (Sampling)
+Chain 3: Iteration: 1600 / 2000 [ 80%]  (Sampling)
+Chain 3: Iteration: 1800 / 2000 [ 90%]  (Sampling)
+Chain 3: Iteration: 2000 / 2000 [100%]  (Sampling)
+Chain 3: 
+Chain 3:  Elapsed Time: 11345.6 seconds (Warm-up)
+Chain 3:                2873.1 seconds (Sampling)
+Chain 3:                14218.7 seconds (Total)
+Chain 3: 
+Chain 2: Iteration:  200 / 2000 [ 10%]  (Warmup)
+Chain 4: Iteration:  200 / 2000 [ 10%]  (Warmup)
+Chain 2: Iteration:  400 / 2000 [ 20%]  (Warmup)
+Chain 4: Iteration:  400 / 2000 [ 20%]  (Warmup)
+Chain 2: Iteration:  600 / 2000 [ 30%]  (Warmup)
+Chain 4: Iteration:  600 / 2000 [ 30%]  (Warmup)
+Chain 2: Iteration:  800 / 2000 [ 40%]  (Warmup)
+Chain 4: Iteration:  800 / 2000 [ 40%]  (Warmup)
+Chain 2: Iteration: 1000 / 2000 [ 50%]  (Warmup)
+Chain 2: Iteration: 1001 / 2000 [ 50%]  (Sampling)
+Chain 4: Iteration: 1000 / 2000 [ 50%]  (Warmup)
+Chain 4: Iteration: 1001 / 2000 [ 50%]  (Sampling)
+Chain 2: Iteration: 1200 / 2000 [ 60%]  (Sampling)
+Chain 4: Iteration: 1200 / 2000 [ 60%]  (Sampling)
+Chain 2: Iteration: 1400 / 2000 [ 70%]  (Sampling)
+Chain 4: Iteration: 1400 / 2000 [ 70%]  (Sampling)
+Chain 2: Iteration: 1600 / 2000 [ 80%]  (Sampling)
+Chain 4: Iteration: 1600 / 2000 [ 80%]  (Sampling)
+Chain 2: Iteration: 1800 / 2000 [ 90%]  (Sampling)
+Chain 4: Iteration: 1800 / 2000 [ 90%]  (Sampling)
+Chain 2: Iteration: 2000 / 2000 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 17085.5 seconds (Warm-up)
+Chain 2:                2376.92 seconds (Sampling)
+Chain 2:                19462.4 seconds (Total)
+Chain 2: 
+Chain 4: Iteration: 2000 / 2000 [100%]  (Sampling)
+Chain 4: 
+Chain 4:  Elapsed Time: 17252.7 seconds (Warm-up)
+Chain 4:                2380.81 seconds (Sampling)
+Chain 4:                19633.5 seconds (Total)
+Chain 4: 
+  Interaction model completed in  327.3  minutes
+
+--- STEP 4: GENERATING FIGURES ---
+Warning messages:
+1: There was 1 warning in `mutate()`.
+ℹ In argument: `period = as.numeric(period)`.
+Caused by warning:
+! NAs introduced by coercion 
+2: There was 1 warning in `mutate()`.
+ℹ In argument: `cohort = as.numeric(cohort)`.
+Caused by warning:
+! NAs introduced by coercion 
+Warning messages:
+1: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+2: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+
+--- STEP 5: CREATING SUMMARY ONE-PAGER ---
+Warning messages:
+1: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+2: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+Warning messages:
+1: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+2: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+
+--- STEP 6: COMPARISON WITH QUADRATIC MODEL ---
+  Variance comparison:
+# A tibble: 3 × 3
+  component `Spline (df=6)` Quadratic
+  <chr>               <dbl>     <dbl>
+1 Cohort              2.29      2.35 
+2 Period              0.113     0.140
+3 Residual           97.6      97.5  
+
+ ================================================================================ 
+PIPELINE COMPLETE: GSS BHAPC WITH NATURAL SPLINES
+Total time:  420.2  minutes
+Finished at:  2026-02-05 12:12:52 
+================================================================================ 
+
+Key Results:
+  N observations:  57,627 
+  Max Rhat:  1.004 
+  Min n_eff:  1822 
+  Converged:  TRUE 
+  Period variance %:  0.1 
+  Cohort variance %:  2.3 
+
+Outputs saved to: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_gss_spline 
+  - gss_spline_main_model.rds
+  - gss_spline_interaction_model.rds
+  - gss_spline_variance_decomposition.csv
+  - gss_spline_age_effect.csv
+  - gss_spline_summary.png/pdf
+  - gss_spline_apc_effects.png
+
+ ================================================================================ 

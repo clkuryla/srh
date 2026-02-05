@@ -1,0 +1,9 @@
+"survey","effect","estimate","ci_90"
+"GSS_SPLINE","Fixed Effects",NA,NA
+"GSS_SPLINE","Log weight",0.0466,"[0.0351, 0.0581]"
+"GSS_SPLINE","",NA,NA
+"GSS_SPLINE","Variance Components",NA,NA
+"GSS_SPLINE","Period variance",8e-04,"(0.1%)"
+"GSS_SPLINE","Cohort variance",0.0153,"(2.3%)"
+"GSS_SPLINE","Residual variance",0.6509,"(97.6%)"
+"GSS_SPLINE","Total variance",0.667,"(100%)"
