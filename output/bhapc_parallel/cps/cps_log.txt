@@ -1,0 +1,51 @@
+
+====================================================================== 
+BHAPC PIPELINE: CPS 
+Started at: 2026-01-29 03:59:42 
+====================================================================== 
+
+--- STEP 1: DATA LOADING & PREPARATION --- 
+
+ERROR: could not find function "drop_na" 
+
+====================================================================== 
+BHAPC PIPELINE: CPS 
+Started at: 2026-01-29 04:03:01 
+====================================================================== 
+
+--- STEP 1: DATA LOADING & PREPARATION --- 
+  Original N: 3,896,528 
+  Final N: 200,029 
+  BHAPC N: 199,606 
+  Periods: 1995, 1999, 2003, 2007, 2011, 2015, 2019, 2023 
+  Cohorts: 25 
+
+--- STEP 2: MAIN BHAPC MODEL --- 
+  Formula: srh ~ age + scale(age_squared) + lnWt + (1|period_4yr) + (1|cohort_4yr) 
+  iter = 6000, adapt_delta = 0.998 
+  cores = 10 
+  Model completed in 4111.7 minutes 
+
+  Variance Decomposition: 
+    cohort_4yr: 0.0047 (0.4%) 
+    period_4yr: 4e-04 (0%) 
+    Residual: 1.0555 (99.5%) 
+    Total: 1.0605 (100%) 
+
+--- STEP 3: INTERACTION MODEL (AGE × PERIOD) --- 
+  Formula: srh ~ age_centered * period_4yr + lnWt + (1|cohort_4yr) 
+  iter = 2000, adapt_delta = 0.95 
+  Interaction model completed in 945.5 minutes 
+
+--- STEP 4: GENERATING FIGURES --- 
+
+--- STEP 5: DIAGNOSTICS --- 
+  Max Rhat: 1.002 
+  Min n_eff: 2045 
+  Converged: TRUE 
+
+====================================================================== 
+PIPELINE COMPLETE: CPS 
+Total time: 5057.7 minutes 
+Finished at: 2026-02-01 16:20:58 
+====================================================================== 

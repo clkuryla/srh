@@ -1,0 +1,5 @@
+"model","max_rhat","min_neff","converged"
+"M1: Base",1.00445354224,1822,TRUE
+"M2: Period Smooth",1.00342255807673,1508,TRUE
+"M3: Cohort Smooth",1.00349236103069,1983,TRUE
+"M4: Both Smooth",1.00601748334588,705,TRUE

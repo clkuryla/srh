@@ -1,0 +1,4 @@
+model,max_rhat,min_neff,converged
+Demographics,1.0048907216032459,1991,TRUE
+All (excl satjob),1.0035366797536727,1868,TRUE
+All (incl satjob),1.0029335038156826,2279,TRUE

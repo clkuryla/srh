@@ -1,0 +1,4 @@
+"prior","max_rhat","min_neff","converged"
+"Default",1.00199987128195,1709,TRUE
+"Concentrated",1.00200899310716,1718,TRUE
+"Diffuse",1.0026143233072,2158,TRUE

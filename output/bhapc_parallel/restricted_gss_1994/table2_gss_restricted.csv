@@ -1,0 +1,11 @@
+"survey","effect","estimate","ci_90"
+"GSS_RESTRICTED","Fixed Effects",NA,NA
+"GSS_RESTRICTED","Age (linear)",-0.0208,"[-0.0245, -0.0172]"
+"GSS_RESTRICTED","Age (quadratic)",0.00012,"[9e-05, 0.000151]"
+"GSS_RESTRICTED","Log weight",0.0352,"[0.0226, 0.0479]"
+"GSS_RESTRICTED","",NA,NA
+"GSS_RESTRICTED","Variance Components",NA,NA
+"GSS_RESTRICTED","Period variance",0.0031,"(0.5%)"
+"GSS_RESTRICTED","Cohort variance",0.0136,"(2.1%)"
+"GSS_RESTRICTED","Residual variance",0.6328,"(97.4%)"
+"GSS_RESTRICTED","Total variance",0.6495,"(100%)"

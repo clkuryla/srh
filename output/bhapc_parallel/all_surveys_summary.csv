@@ -1,0 +1,7 @@
+"survey","status","n_obs","elapsed_min","max_rhat","min_neff","converged","period_var_pct","cohort_var_pct"
+"nhanes","error",NA,NA,NA,NA,NA,NA,NA
+"gss","error",NA,NA,NA,NA,NA,NA,NA
+"meps","error",NA,NA,NA,NA,NA,NA,NA
+"nhis","error",NA,NA,NA,NA,NA,NA,NA
+"cps","error",NA,NA,NA,NA,NA,NA,NA
+"brfss","error",NA,NA,NA,NA,NA,NA,NA

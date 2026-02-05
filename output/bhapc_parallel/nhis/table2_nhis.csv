@@ -1,0 +1,11 @@
+"survey","effect","estimate","ci_90"
+"NHIS","Fixed Effects",NA,NA
+"NHIS","Age (linear)",-0.0213,"[-0.0229, -0.0197]"
+"NHIS","Age (quadratic)",2e-05,"[6e-06, 3.5e-05]"
+"NHIS","Log weight",-4e-04,"[-0.0011, 3e-04]"
+"NHIS","",NA,NA
+"NHIS","Variance Components",NA,NA
+"NHIS","Period variance",6e-04,"(0.1%)"
+"NHIS","Cohort variance",0.0042,"(0.4%)"
+"NHIS","Residual variance",1.0412,"(99.5%)"
+"NHIS","Total variance",1.0459,"(100%)"
