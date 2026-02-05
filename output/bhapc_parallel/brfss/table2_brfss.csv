@@ -1,0 +1,11 @@
+"survey","effect","estimate","ci_90"
+"BRFSS","Fixed Effects",NA,NA
+"BRFSS","Age (linear)",-0.0318,"[-0.0345, -0.0292]"
+"BRFSS","Age (quadratic)",0.00016,"[0.000143, 0.000178]"
+"BRFSS","Log weight",-0.017,"[-0.0206, -0.0134]"
+"BRFSS","",NA,NA
+"BRFSS","Variance Components",NA,NA
+"BRFSS","Period variance",0.0035,"(0.3%)"
+"BRFSS","Cohort variance",0.0221,"(2.1%)"
+"BRFSS","Residual variance",1.0456,"(97.6%)"
+"BRFSS","Total variance",1.0712,"(100%)"
