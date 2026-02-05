@@ -1,5 +1,5 @@
 survey,age_range,age_effect_at_80,n_periods,period_range,period_var_range,n_cohorts,cohort_range,cohort_var_range
-brfss,NA,NA,NA,NA,NA,NA,NA,NA
+brfss,21-89,-0.918,10,NA-NA,-0.045 to 0.0772,27,NA-NA,-0.3099 to 0.1791
 meps,18-85,-1.069,7,1999-2023,-0.0464 to 0.0537,24,1912-2004,-0.3377 to 0.129
 nhis,18-85,-1.19,11,1983-2023,-0.0243 to 0.0245,28,1896-2004,-0.071 to 0.114
 cps,18-85,-1.329,8,1995-2023,-0.0154 to 0.0206,25,1908-2004,-0.1235 to 0.0835
