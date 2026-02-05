@@ -1,0 +1,66 @@
+
+ ================================================================================ 
+BRFSS BHAPC RECOVERY - SUMMARY FIGURE
+Started at: 2026-02-05 06:01:17 
+================================================================================ 
+
+--- Loading data and model ---
+Data loaded: 200,034 observations
+Loading model (41GB - this takes a few minutes)...
+Model loaded in 5.6 minutes
+
+--- Generating summary figure ---
+Extracting subsampled posterior (1000 draws)...
+Full posterior has 12000 draws, 225004 parameters
+             used    (Mb)  gc trigger     (Mb)    max used     (Mb)
+Ncells    6114600   326.6     9756934    521.1     9756934    521.1
+Vcells 5705350766 43528.4 15672902320 119574.8 13806867183 105338.1
+Using 1000 draws for plotting
+Creating Lexis diagram...
+Creating descriptive means plot...
+Computing age effect curve...
+Extracting period effects...
+Extracting cohort effects...
+Creating tables...
+Combining panels...
+Saving summary figure...
+Saved: brfss_bhapc_summary.png
+Saved: brfss_bhapc_summary.pdf
+
+--- Saving compact model ---
+Warning messages:
+1: There was 1 warning in `mutate()`.
+ℹ In argument: `period = as.numeric(period)`.
+Caused by warning:
+! NAs introduced by coercion 
+2: There was 1 warning in `mutate()`.
+ℹ In argument: `cohort = as.numeric(cohort)`.
+Caused by warning:
+! NAs introduced by coercion 
+Saved: brfss_bhapc_compact.rds (1643.7 MB)
+
+--- VERIFICATION SUMMARY ---
+
+Generated outputs:
+  [OK] table2_brfss.csv ( 448 bytes )
+  [OK] brfss_diagnostics.csv ( 942 bytes )
+  [OK] gradient_by_period_brfss.csv ( 636 bytes )
+  [OK] figure2_brfss.png ( 442.1 KB )
+  [OK] figure3_brfss.png ( 269.9 KB )
+  [OK] variance_chart_brfss.png ( 56.2 KB )
+  [OK] brfss_bhapc_summary.png ( 811.9 KB )
+  [OK] brfss_bhapc_summary.pdf ( 24.5 KB )
+  [OK] brfss_bhapc_compact.rds ( 1643.7 MB )
+
+Model convergence:
+  Max Rhat: 1.6817 (WARNING: > 1.01) 
+  Min n_eff: 5 (WARNING: < 400) 
+
+WARNING: The BRFSS model shows convergence issues.
+Results should be interpreted with caution or the model may need to be re-run
+with more iterations or different settings.
+
+ ================================================================================ 
+RECOVERY COMPLETE
+Finished at: 2026-02-05 06:10:00 
+================================================================================ 

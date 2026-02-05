@@ -1,0 +1,82 @@
+
+ ================================================================================ 
+BRFSS BHAPC RECOVERY SCRIPT
+Started at: 2026-02-05 05:43:05 
+================================================================================ 
+
+--- STEP 1: LOADING PACKAGES AND FUNCTIONS ---
+  Output directory: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_parallel/brfss 
+  Model path: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_parallel/brfss/brfss_bhapc_model.rds 
+  Data path: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_parallel/brfss/brfss_bhapc_data.rds 
+
+--- STEP 2: LOADING MODEL AND DATA ---
+  Loading BHAPC data...
+  Data loaded:  200,034  observations
+  Periods: 1991, 1995, 1999, 2003, 2007, 2011, 2015, 2019, 2023 
+  Cohorts: 26 
+
+  Loading BHAPC model (41GB - this may take a few minutes)...
+  Model loaded in 5.6 minutes
+  Model class: stanreg 
+  Model formula: srh ~ age + scale(age_squared) + lnWt + (1|period_4yr) + (1|cohort_4yr) + (1|strata/psu) 
+
+  Variance decomposition (already saved):
+    psu:strata: 0.0723 (6.2%)
+    strata: 0.0276 (2.4%)
+    cohort_4yr: 0.0221 (1.9%)
+    period_4yr: 0.0035 (0.3%)
+    Residual: 1.0456 (89.3%)
+    Total: 1.171 (100%)
+
+--- STEP 3: GENERATING TABLE 2 ---
+Saved Table 2 to: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_parallel/brfss/table2_brfss.csv
+  Saved: table2_brfss.csv
+
+--- STEP 4: EXTRACTING DIAGNOSTICS ---
+  Max Rhat: 1.682 
+  Min n_eff: 5 
+  Converged: FALSE 
+  Saved: brfss_diagnostics.csv
+
+--- STEP 5: COMPUTING DESCRIPTIVE GRADIENTS ---
+  Youngest age group: 1 
+  Oldest age group: 15 
+  Saved: gradient_by_period_brfss.csv
+
+  Gradients by period:
+    1991: 1.006
+    1995: 0.94
+    1999: 0.761
+    2003: 0.844
+    2007: 0.763
+    2011: 0.745
+    2015: 0.733
+    2019: 0.66
+    2023: 0.511
+
+--- STEP 6: GENERATING FIGURE 2 (DESCRIPTIVE) ---
+Computing survey-weighted means using: wt
+Saved Figure 2 to: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_parallel/brfss/figure2_brfss.png
+  Saved: figure2_brfss.png
+
+--- STEP 7: GENERATING FIGURE 3 (APC EFFECTS) ---
+Saved Figure 3 to: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_parallel/brfss/figure3_brfss.png
+Warning messages:
+1: There was 1 warning in `mutate()`.
+ℹ In argument: `period = as.numeric(period)`.
+Caused by warning:
+! NAs introduced by coercion 
+2: There was 1 warning in `mutate()`.
+ℹ In argument: `cohort = as.numeric(cohort)`.
+Caused by warning:
+! NAs introduced by coercion 
+3: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+4: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+  Saved: figure3_brfss.png
+
+--- STEP 8: GENERATING VARIANCE CHART ---
+  Saved: variance_chart_brfss.png
+
+--- STEP 9: GENERATING SUMMARY FIGURE (WITHOUT INTERACTION) ---

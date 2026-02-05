@@ -1,0 +1,35 @@
+
+====================================================================== 
+BHAPC PIPELINE: BRFSS 
+Started at: 2026-01-29 03:59:42 
+====================================================================== 
+
+--- STEP 1: DATA LOADING & PREPARATION --- 
+
+ERROR: could not find function "drop_na" 
+
+====================================================================== 
+BHAPC PIPELINE: BRFSS 
+Started at: 2026-01-29 04:03:01 
+====================================================================== 
+
+--- STEP 1: DATA LOADING & PREPARATION --- 
+  Original N: 10,729,342 
+  Final N: 200,034 
+  BHAPC N: 200,034 
+  Periods: 1991, 1995, 1999, 2003, 2007, 2011, 2015, 2019, 2023 
+  Cohorts: 26 
+
+--- STEP 2: MAIN BHAPC MODEL --- 
+  Formula: srh ~ age + scale(age_squared) + lnWt + (1|period_4yr) + (1|cohort_4yr) 
+  iter = 6000, adapt_delta = 0.998 
+  cores = 10 
+  Model completed in 9546.8 minutes 
+
+  Variance Decomposition: 
+    psu:strata: 0.0723 (6.2%) 
+    strata: 0.0276 (2.4%) 
+    cohort_4yr: 0.0221 (1.9%) 
+    period_4yr: 0.0035 (0.3%) 
+    Residual: 1.0456 (89.3%) 
+    Total: 1.171 (100%) 
