@@ -1,0 +1,181 @@
+── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
+✔ dplyr     1.1.4     ✔ readr     2.1.6
+✔ forcats   1.0.1     ✔ stringr   1.6.0
+✔ ggplot2   4.0.1     ✔ tibble    3.3.1
+✔ lubridate 1.9.4     ✔ tidyr     1.3.2
+✔ purrr     1.2.1     
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ dplyr::filter() masks stats::filter()
+✖ dplyr::lag()    masks stats::lag()
+ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
+here() starts at /home/ubuntu/projects/srh/srh-bhapc
+
+Attaching package: ‘gridExtra’
+
+The following object is masked from ‘package:dplyr’:
+
+    combine
+
+
+Attaching package: ‘scales’
+
+The following object is masked from ‘package:purrr’:
+
+    discard
+
+The following object is masked from ‘package:readr’:
+
+    col_factor
+
+Loading required package: Rcpp
+This is rstanarm version 2.32.2
+- See https://mc-stan.org/rstanarm/articles/priors for changes to default priors!
+- Default priors may change, so it's safest to specify priors, even if equivalent to the defaults.
+- For execution on a local, multicore CPU with excess RAM we recommend calling
+  options(mc.cores = parallel::detectCores())
+
+========== Loading CSV data from all surveys ==========
+
+  Loaded table2 for BRFSS
+  Loaded table2 for MEPS
+  Loaded table2 for NHIS
+  Loaded table2 for CPS
+  Loaded table2 for NHANES
+  Loaded table2 for GSS
+  Loaded variance for BRFSS
+  Loaded variance for MEPS
+  Loaded variance for NHIS
+  Loaded variance for CPS
+  Loaded variance for NHANES
+  Loaded variance for GSS
+  Missing interaction for BRFSS
+  Loaded interaction for MEPS
+  Loaded interaction for NHIS
+  Loaded interaction for CPS
+  Loaded interaction for NHANES
+  Loaded interaction for GSS
+
+========== Creating Table2 One-Pager ==========
+
+Saved: onepager_table2.png/pdf
+
+========== Creating Table2 One-Pager (Alternative) ==========
+
+Saved: onepager_table2_alt.png/pdf
+
+========== Creating Variance Decomposition One-Pager ==========
+
+Saved: onepager_variance.png/pdf
+
+========== Creating Variance Decomposition One-Pager (Alternative) ==========
+
+Saved: onepager_variance_alt.png/pdf
+
+========== Creating Age×Period Interaction One-Pager ==========
+
+Saved: onepager_interaction.png/pdf
+
+========== Creating Figure 2 Combined One-Pager ==========
+
+Saved: onepager_figure2.png/pdf
+
+========== Creating Figure 3 Reshaped One-Pager ==========
+
+
+Will use cached effects where available (set BHAPC_FORCE_EXTRACT=TRUE to re-extract)
+
+Getting APC effects from all surveys...
+
+  Loading model for BRFSS...
+  Extracted effects for BRFSS
+  Saved effects to cache for BRFSS
+  Loading cached effects for MEPS
+  Loading cached effects for NHIS
+  Loading cached effects for CPS
+  Loading cached effects for NHANES
+  Loading cached effects for GSS
+Warning messages:
+1: There was 1 warning in `mutate()`.
+ℹ In argument: `period = as.numeric(period)`.
+Caused by warning:
+! NAs introduced by coercion 
+2: There was 1 warning in `mutate()`.
+ℹ In argument: `cohort = as.numeric(cohort)`.
+Caused by warning:
+! NAs introduced by coercion 
+
+Global axis limits:
+  Age X: 18 - 89
+  Age Y: -1.9 - 0
+  Period X: 1971 - 2023
+  Cohort X: 1884 - 2004
+
+Creating survey rows for Figure 3...
+
+Warning messages:
+1: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+2: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+Warning messages:
+1: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+2: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+Warning messages:
+1: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+2: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+Saved: onepager_figure3_apc.png/pdf
+
+========== Saving Combined Effect Summaries ==========
+
+Saved combined effect files:
+  all_surveys_age_effects.csv
+  all_surveys_period_effects.csv
+  all_surveys_cohort_effects.csv
+  all_surveys_apc_summary.csv
+
+========== One-Pager Generation Complete ==========
+
+Generated files in /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_parallel/onepagers:
+  onepager_figure2_20260201.png
+  onepager_figure2_20260205.png
+  onepager_figure2.pdf
+  onepager_figure2.png
+  onepager_figure3_apc_20260201.png
+  onepager_figure3_apc_20260205.png
+  onepager_figure3_apc.pdf
+  onepager_figure3_apc.png
+  onepager_interaction_20260201.png
+  onepager_interaction_20260205.png
+  onepager_interaction.pdf
+  onepager_interaction.png
+  onepager_table2_20260201.png
+  onepager_table2_20260205.png
+  onepager_table2_alt_20260201.png
+  onepager_table2_alt_20260205.png
+  onepager_table2_alt.pdf
+  onepager_table2_alt.png
+  onepager_table2.pdf
+  onepager_table2.png
+  onepager_variance_20260201.png
+  onepager_variance_20260205.png
+  onepager_variance_alt_20260201.png
+  onepager_variance_alt_20260205.png
+  onepager_variance_alt.pdf
+  onepager_variance_alt.png
+  onepager_variance.pdf
+  onepager_variance.png
+
+Data availability by survey:
+  BRFSS: Complete
+  MEPS: Complete
+  NHIS: Complete
+  CPS: Complete
+  NHANES: Complete
+  GSS*: Complete
+
+========== Done ==========
+
