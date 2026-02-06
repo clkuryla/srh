@@ -1,0 +1,547 @@
+
+ ====================================================================== 
+BHAPC SMOKE TEST - 10k samples per dataset
+Started at: 2026-01-29 03:25:19 
+====================================================================== 
+
+
+Attaching package: ‘srvyr’
+
+The following object is masked from ‘package:stats’:
+
+    filter
+
+
+ ------------------------------------------------------------ 
+TESTING: NHANES 
+------------------------------------------------------------ 
+  Original N: 76,989 
+  Sampled N: 10,000 
+Preparing BHAPC data for NHANES
+  Initial rows: 10,000
+  Observed age range: 18 - 85
+  Using weight column: wt
+  Final rows: 9,776
+  Years: Inf-2022
+  Periods: 1999, 2003, 2007, 2011, 2015, 2019
+  Age groups: 14
+  Cohorts: 22
+  Mean SRH: 3.29
+  BHAPC N: 9,776 
+  Periods: 2015, 2007, 2019, 2003, 2011, 1999 
+  Fitting main model (iter = 500 )...
+Fitting BHAPC model...
+  Outcome: srh
+  N observations: 9,776
+  N periods: 6
+  N cohorts: 22
+  adapt_delta: 0.95
+  iter: 500
+  chains: 2
+  cores: 4
+  Including strata/PSU random effects
+  Formula: srh ~ age + scale(age_squared) + lnWt + (1|period_4yr) + (1|cohort_4yr) + (1|strata/psu)
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.003496 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 34.96 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 2: 
+Chain 2: Gradient evaluation took 0.003494 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 34.94 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+Chain 1: Iteration:   1 / 500 [  0%]  (Warmup)
+Chain 2: Iteration:   1 / 500 [  0%]  (Warmup)
+Chain 2: Iteration:  50 / 500 [ 10%]  (Warmup)
+Chain 1: Iteration:  50 / 500 [ 10%]  (Warmup)
+Chain 2: Iteration: 100 / 500 [ 20%]  (Warmup)
+Chain 2: Iteration: 150 / 500 [ 30%]  (Warmup)
+Chain 2: Iteration: 200 / 500 [ 40%]  (Warmup)
+Chain 2: Iteration: 250 / 500 [ 50%]  (Warmup)
+Chain 2: Iteration: 251 / 500 [ 50%]  (Sampling)
+Chain 2: Iteration: 300 / 500 [ 60%]  (Sampling)
+Chain 2: Iteration: 350 / 500 [ 70%]  (Sampling)
+Chain 2: Iteration: 400 / 500 [ 80%]  (Sampling)
+Chain 2: Iteration: 450 / 500 [ 90%]  (Sampling)
+Chain 1: Iteration: 100 / 500 [ 20%]  (Warmup)
+Chain 2: Iteration: 500 / 500 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 138.926 seconds (Warm-up)
+Chain 2:                16.135 seconds (Sampling)
+Chain 2:                155.061 seconds (Total)
+Chain 2: 
+Chain 1: Iteration: 150 / 500 [ 30%]  (Warmup)
+Chain 1: Iteration: 200 / 500 [ 40%]  (Warmup)
+Chain 1: Iteration: 250 / 500 [ 50%]  (Warmup)
+Chain 1: Iteration: 251 / 500 [ 50%]  (Sampling)
+Chain 1: Iteration: 300 / 500 [ 60%]  (Sampling)
+Chain 1: Iteration: 350 / 500 [ 70%]  (Sampling)
+Chain 1: Iteration: 400 / 500 [ 80%]  (Sampling)
+Chain 1: Iteration: 450 / 500 [ 90%]  (Sampling)
+Chain 1: Iteration: 500 / 500 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 166.168 seconds (Warm-up)
+Chain 1:                16.079 seconds (Sampling)
+Chain 1:                182.247 seconds (Total)
+Chain 1: 
+  Model fitting completed in 3.1 minutes
+  Variance - Period: 1.8 %, Cohort: 0.1 %
+  Max Rhat: 1.055 , Min n_eff: 36 
+  Completed in: 3.1 minutes
+  STATUS: SUCCESS
+
+ ------------------------------------------------------------ 
+TESTING: GSS 
+------------------------------------------------------------ 
+  Original N: 57,627 
+  Sampled N: 10,000 
+Preparing BHAPC data for GSS
+  Initial rows: 10,000
+  Observed age range: 18 - 89
+  Using weight column: wt
+  Final rows: 10,000
+  Years: 1975-2024
+  Periods: 1971, 1975, 1979, 1983, 1987, 1991, 1995, 1999, 2003, 2007, 2011, 2015, 2019, 2023
+  Age groups: 15
+  Cohorts: 31
+  Mean SRH: 2.97
+  BHAPC N: 10,000 
+  Periods: 1999, 2003, 2019, 1979, 2007, 1983, 1991, 1987, 2011, 1971, 1975, 1995, 2023, 2015 
+  Fitting main model (iter = 500 )...
+Fitting BHAPC model...
+  Outcome: srh
+  N observations: 10,000
+  N periods: 14
+  N cohorts: 31
+  adapt_delta: 0.95
+  iter: 500
+  chains: 2
+  cores: 4
+  No strata/PSU random effects (not available)
+  Formula: srh ~ age + scale(age_squared) + lnWt + (1|period_4yr) + (1|cohort_4yr)
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.003023 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 30.23 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 2: 
+Chain 2: Gradient evaluation took 0.002936 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 29.36 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+Chain 1: Iteration:   1 / 500 [  0%]  (Warmup)
+Chain 2: Iteration:   1 / 500 [  0%]  (Warmup)
+Chain 1: Iteration:  50 / 500 [ 10%]  (Warmup)
+Chain 2: Iteration:  50 / 500 [ 10%]  (Warmup)
+Chain 1: Iteration: 100 / 500 [ 20%]  (Warmup)
+Chain 1: Iteration: 150 / 500 [ 30%]  (Warmup)
+Chain 1: Iteration: 200 / 500 [ 40%]  (Warmup)
+Chain 1: Iteration: 250 / 500 [ 50%]  (Warmup)
+Chain 1: Iteration: 251 / 500 [ 50%]  (Sampling)
+Chain 1: Iteration: 300 / 500 [ 60%]  (Sampling)
+Chain 1: Iteration: 350 / 500 [ 70%]  (Sampling)
+Chain 2: Iteration: 100 / 500 [ 20%]  (Warmup)
+Chain 1: Iteration: 400 / 500 [ 80%]  (Sampling)
+Chain 2: Iteration: 150 / 500 [ 30%]  (Warmup)
+Chain 1: Iteration: 450 / 500 [ 90%]  (Sampling)
+Chain 2: Iteration: 200 / 500 [ 40%]  (Warmup)
+Chain 1: Iteration: 500 / 500 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 70.174 seconds (Warm-up)
+Chain 1:                11.266 seconds (Sampling)
+Chain 1:                81.44 seconds (Total)
+Chain 1: 
+Chain 2: Iteration: 250 / 500 [ 50%]  (Warmup)
+Chain 2: Iteration: 251 / 500 [ 50%]  (Sampling)
+Chain 2: Iteration: 300 / 500 [ 60%]  (Sampling)
+Chain 2: Iteration: 350 / 500 [ 70%]  (Sampling)
+Chain 2: Iteration: 400 / 500 [ 80%]  (Sampling)
+Chain 2: Iteration: 450 / 500 [ 90%]  (Sampling)
+Chain 2: Iteration: 500 / 500 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 82.421 seconds (Warm-up)
+Chain 2:                6.462 seconds (Sampling)
+Chain 2:                88.883 seconds (Total)
+Chain 2: 
+  Model fitting completed in 1.5 minutes
+  Variance - Period: 0.2 %, Cohort: 2.6 %
+  Max Rhat: 1.017 , Min n_eff: 81 
+  Completed in: 1.5 minutes
+  STATUS: SUCCESS
+
+ ------------------------------------------------------------ 
+TESTING: MEPS 
+------------------------------------------------------------ 
+  Original N: 464,130 
+  Sampled N: 10,000 
+Preparing BHAPC data for MEPS
+  Initial rows: 10,000
+  Observed age range: 18 - 90
+  Using weight column: wt
+  Final rows: 9,994
+  Years: 2003-2023
+  Periods: 1999, 2003, 2007, 2011, 2015, 2019, 2023
+  Age groups: 15
+  Cohorts: 24
+  Mean SRH: 3.49
+  BHAPC N: 9,994 
+  Periods: 2007, 2011, 2003, 1999, 2015, 2019, 2023 
+  Fitting main model (iter = 500 )...
+Fitting BHAPC model...
+  Outcome: srh
+  N observations: 9,994
+  N periods: 7
+  N cohorts: 24
+  adapt_delta: 0.95
+  iter: 500
+  chains: 2
+  cores: 4
+  Including strata/PSU random effects
+  Formula: srh ~ age + scale(age_squared) + lnWt + (1|period_4yr) + (1|cohort_4yr) + (1|strata/psu)
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.004646 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 46.46 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+Chain 2: 
+Chain 2: Gradient evaluation took 0.004543 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 45.43 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+Chain 1: Iteration:   1 / 500 [  0%]  (Warmup)
+Chain 2: Iteration:   1 / 500 [  0%]  (Warmup)
+Chain 2: Iteration:  50 / 500 [ 10%]  (Warmup)
+Chain 1: Iteration:  50 / 500 [ 10%]  (Warmup)
+Chain 2: Iteration: 100 / 500 [ 20%]  (Warmup)
+Chain 2: Iteration: 150 / 500 [ 30%]  (Warmup)
+Chain 2: Iteration: 200 / 500 [ 40%]  (Warmup)
+Chain 2: Iteration: 250 / 500 [ 50%]  (Warmup)
+Chain 2: Iteration: 251 / 500 [ 50%]  (Sampling)
+Chain 2: Iteration: 300 / 500 [ 60%]  (Sampling)
+Chain 2: Iteration: 350 / 500 [ 70%]  (Sampling)
+Chain 2: Iteration: 400 / 500 [ 80%]  (Sampling)
+Chain 2: Iteration: 450 / 500 [ 90%]  (Sampling)
+Chain 2: Iteration: 500 / 500 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 278.883 seconds (Warm-up)
+Chain 2:                23.066 seconds (Sampling)
+Chain 2:                301.949 seconds (Total)
+Chain 2: 
+Chain 1: Iteration: 100 / 500 [ 20%]  (Warmup)
+Chain 1: Iteration: 150 / 500 [ 30%]  (Warmup)
+Chain 1: Iteration: 200 / 500 [ 40%]  (Warmup)
+Chain 1: Iteration: 250 / 500 [ 50%]  (Warmup)
+Chain 1: Iteration: 251 / 500 [ 50%]  (Sampling)
+Chain 1: Iteration: 300 / 500 [ 60%]  (Sampling)
+Chain 1: Iteration: 350 / 500 [ 70%]  (Sampling)
+Chain 1: Iteration: 400 / 500 [ 80%]  (Sampling)
+Chain 1: Iteration: 450 / 500 [ 90%]  (Sampling)
+Chain 1: Iteration: 500 / 500 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 383.241 seconds (Warm-up)
+Chain 1:                23.071 seconds (Sampling)
+Chain 1:                406.312 seconds (Total)
+Chain 1: 
+  Model fitting completed in 7.2 minutes
+  Variance - Period: 0.4 %, Cohort: 0.2 %
+  Max Rhat: 1.115 , Min n_eff: 23 
+  Completed in: 7.3 minutes
+  STATUS: SUCCESS
+
+ ------------------------------------------------------------ 
+TESTING: NHIS 
+------------------------------------------------------------ 
+  Original N: 2,509,273 
+  Sampled N: 10,000 
+Preparing BHAPC data for NHIS
+  Initial rows: 10,000
+  Observed age range: 18 - 95
+  Using weight column: wt
+  Final rows: 9,966
+  Years: 1983-2024
+  Periods: 1983, 1987, 1991, 1995, 1999, 2003, 2007, 2011, 2015, 2019, 2023
+  Age groups: 15
+  Cohorts: 28
+  Mean SRH: 3.74
+  BHAPC N: 9,966 
+  Periods: 1999, 2015, 1983, 2003, 1987, 2007, 1991, 2011, 2023, 2019, 1995 
+  Fitting main model (iter = 500 )...
+Fitting BHAPC model...
+  Outcome: srh
+  N observations: 9,966
+  N periods: 11
+  N cohorts: 28
+  adapt_delta: 0.95
+  iter: 500
+  chains: 2
+  cores: 4
+  Including strata/PSU random effects
+  Formula: srh ~ age + scale(age_squared) + lnWt + (1|period_4yr) + (1|cohort_4yr) + (1|strata/psu)
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.004475 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 44.75 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 2: 
+Chain 2: Gradient evaluation took 0.004431 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 44.31 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+Chain 1: Iteration:   1 / 500 [  0%]  (Warmup)
+Chain 2: Iteration:   1 / 500 [  0%]  (Warmup)
+Chain 2: Iteration:  50 / 500 [ 10%]  (Warmup)
+Chain 1: Iteration:  50 / 500 [ 10%]  (Warmup)
+Chain 2: Iteration: 100 / 500 [ 20%]  (Warmup)
+Chain 2: Iteration: 150 / 500 [ 30%]  (Warmup)
+Chain 2: Iteration: 200 / 500 [ 40%]  (Warmup)
+Chain 2: Iteration: 250 / 500 [ 50%]  (Warmup)
+Chain 2: Iteration: 251 / 500 [ 50%]  (Sampling)
+Chain 2: Iteration: 300 / 500 [ 60%]  (Sampling)
+Chain 2: Iteration: 350 / 500 [ 70%]  (Sampling)
+Chain 1: Iteration: 100 / 500 [ 20%]  (Warmup)
+Chain 2: Iteration: 400 / 500 [ 80%]  (Sampling)
+Chain 2: Iteration: 450 / 500 [ 90%]  (Sampling)
+Chain 1: Iteration: 150 / 500 [ 30%]  (Warmup)
+Chain 2: Iteration: 500 / 500 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 225.975 seconds (Warm-up)
+Chain 2:                19.271 seconds (Sampling)
+Chain 2:                245.246 seconds (Total)
+Chain 2: 
+Chain 1: Iteration: 200 / 500 [ 40%]  (Warmup)
+Chain 1: Iteration: 250 / 500 [ 50%]  (Warmup)
+Chain 1: Iteration: 251 / 500 [ 50%]  (Sampling)
+Chain 1: Iteration: 300 / 500 [ 60%]  (Sampling)
+Chain 1: Iteration: 350 / 500 [ 70%]  (Sampling)
+Chain 1: Iteration: 400 / 500 [ 80%]  (Sampling)
+Chain 1: Iteration: 450 / 500 [ 90%]  (Sampling)
+Chain 1: Iteration: 500 / 500 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 249.25 seconds (Warm-up)
+Chain 1:                18.94 seconds (Sampling)
+Chain 1:                268.19 seconds (Total)
+Chain 1: 
+  Model fitting completed in 4.7 minutes
+  Variance - Period: 0.1 %, Cohort: 0.2 %
+  Max Rhat: 1.006 , Min n_eff: 59 
+  Completed in: 4.7 minutes
+  STATUS: SUCCESS
+
+ ------------------------------------------------------------ 
+TESTING: CPS 
+------------------------------------------------------------ 
+  Original N: 3,896,528 
+  Sampled N: 10,000 
+Preparing BHAPC data for CPS
+  Initial rows: 10,000
+  Observed age range: 18 - 90
+  Using weight column: wt
+  Final rows: 9,982
+  Years: 1999-2025
+  Periods: 1995, 1999, 2003, 2007, 2011, 2015, 2019, 2023
+  Age groups: 15
+  Cohorts: 25
+  Mean SRH: 3.69
+  BHAPC N: 9,982 
+  Periods: 2019, 2003, 2011, 1995, 2015, 2007, 1999, 2023 
+  Fitting main model (iter = 500 )...
+Fitting BHAPC model...
+  Outcome: srh
+  N observations: 9,982
+  N periods: 8
+  N cohorts: 25
+  adapt_delta: 0.95
+  iter: 500
+  chains: 2
+  cores: 4
+  No strata/PSU random effects (not available)
+  Formula: srh ~ age + scale(age_squared) + lnWt + (1|period_4yr) + (1|cohort_4yr)
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.00294 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 29.4 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 2: 
+Chain 2: Gradient evaluation took 0.002962 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 29.62 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+Chain 1: Iteration:   1 / 500 [  0%]  (Warmup)
+Chain 2: Iteration:   1 / 500 [  0%]  (Warmup)
+Chain 1: Iteration:  50 / 500 [ 10%]  (Warmup)
+Chain 2: Iteration:  50 / 500 [ 10%]  (Warmup)
+Chain 1: Iteration: 100 / 500 [ 20%]  (Warmup)
+Chain 2: Iteration: 100 / 500 [ 20%]  (Warmup)
+Chain 1: Iteration: 150 / 500 [ 30%]  (Warmup)
+Chain 1: Iteration: 200 / 500 [ 40%]  (Warmup)
+Chain 2: Iteration: 150 / 500 [ 30%]  (Warmup)
+Chain 2: Iteration: 200 / 500 [ 40%]  (Warmup)
+Chain 1: Iteration: 250 / 500 [ 50%]  (Warmup)
+Chain 1: Iteration: 251 / 500 [ 50%]  (Sampling)
+Chain 1: Iteration: 300 / 500 [ 60%]  (Sampling)
+Chain 2: Iteration: 250 / 500 [ 50%]  (Warmup)
+Chain 2: Iteration: 251 / 500 [ 50%]  (Sampling)
+Chain 1: Iteration: 350 / 500 [ 70%]  (Sampling)
+Chain 2: Iteration: 300 / 500 [ 60%]  (Sampling)
+Chain 1: Iteration: 400 / 500 [ 80%]  (Sampling)
+Chain 2: Iteration: 350 / 500 [ 70%]  (Sampling)
+Chain 2: Iteration: 400 / 500 [ 80%]  (Sampling)
+Chain 1: Iteration: 450 / 500 [ 90%]  (Sampling)
+Chain 2: Iteration: 450 / 500 [ 90%]  (Sampling)
+Chain 1: Iteration: 500 / 500 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 79.023 seconds (Warm-up)
+Chain 1:                11.652 seconds (Sampling)
+Chain 1:                90.675 seconds (Total)
+Chain 1: 
+Chain 2: Iteration: 500 / 500 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 81.76 seconds (Warm-up)
+Chain 2:                10.669 seconds (Sampling)
+Chain 2:                92.429 seconds (Total)
+Chain 2: 
+  Model fitting completed in 1.6 minutes
+  Variance - Period: 0 %, Cohort: 0.2 %
+  Max Rhat: 1.008 , Min n_eff: 114 
+  Completed in: 1.6 minutes
+  STATUS: SUCCESS
+
+ ------------------------------------------------------------ 
+TESTING: BRFSS 
+------------------------------------------------------------ 
+  Original N: 10,729,342 
+  Sampled N: 10,000 
+Preparing BHAPC data for BRFSS
+  Initial rows: 10,000
+  Observed age range: 21 - 89
+  Using weight column: wt
+  Final rows: 10,000
+  Years: 1995-2025
+  Periods: 1991, 1995, 1999, 2003, 2007, 2011, 2015, 2019, 2023
+  Age groups: 13
+  Cohorts: 26
+  Mean SRH: 3.45
+  BHAPC N: 10,000 
+  Periods: 2007, 1999, 2019, 2023, 1995, 2011, 2015, 1991, 2003 
+  Fitting main model (iter = 500 )...
+Fitting BHAPC model...
+  Outcome: srh
+  N observations: 10,000
+  N periods: 9
+  N cohorts: 26
+  adapt_delta: 0.95
+  iter: 500
+  chains: 2
+  cores: 4
+  Including strata/PSU random effects
+  Formula: srh ~ age + scale(age_squared) + lnWt + (1|period_4yr) + (1|cohort_4yr) + (1|strata/psu)
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.005017 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 50.17 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+Chain 2: 
+Chain 2: Gradient evaluation took 0.004865 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 48.65 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+Chain 1: Iteration:   1 / 500 [  0%]  (Warmup)
+Chain 2: Iteration:   1 / 500 [  0%]  (Warmup)
+Chain 1: Iteration:  50 / 500 [ 10%]  (Warmup)
+Chain 2: Iteration:  50 / 500 [ 10%]  (Warmup)
+Chain 1: Iteration: 100 / 500 [ 20%]  (Warmup)
+Chain 2: Iteration: 100 / 500 [ 20%]  (Warmup)
+Chain 1: Iteration: 150 / 500 [ 30%]  (Warmup)
+Chain 1: Iteration: 200 / 500 [ 40%]  (Warmup)
+Chain 2: Iteration: 150 / 500 [ 30%]  (Warmup)
+Chain 2: Iteration: 200 / 500 [ 40%]  (Warmup)
+Chain 1: Iteration: 250 / 500 [ 50%]  (Warmup)
+Chain 1: Iteration: 251 / 500 [ 50%]  (Sampling)
+Chain 2: Iteration: 250 / 500 [ 50%]  (Warmup)
+Chain 2: Iteration: 251 / 500 [ 50%]  (Sampling)
+Chain 1: Iteration: 300 / 500 [ 60%]  (Sampling)
+Chain 2: Iteration: 300 / 500 [ 60%]  (Sampling)
+Chain 2: Iteration: 350 / 500 [ 70%]  (Sampling)
+Chain 1: Iteration: 350 / 500 [ 70%]  (Sampling)
+Chain 2: Iteration: 400 / 500 [ 80%]  (Sampling)
+Chain 2: Iteration: 450 / 500 [ 90%]  (Sampling)
+Chain 1: Iteration: 400 / 500 [ 80%]  (Sampling)
+Chain 2: Iteration: 500 / 500 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 412.56 seconds (Warm-up)
+Chain 2:                29.387 seconds (Sampling)
+Chain 2:                441.947 seconds (Total)
+Chain 2: 
+Chain 1: Iteration: 450 / 500 [ 90%]  (Sampling)
+Chain 1: Iteration: 500 / 500 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 403.541 seconds (Warm-up)
+Chain 1:                57.967 seconds (Sampling)
+Chain 1:                461.508 seconds (Total)
+Chain 1: 
+  Model fitting completed in 8.7 minutes
+  Variance - Period: 0.4 %, Cohort: 1 %
+  Max Rhat: 11.608 , Min n_eff: 1 
+  Completed in: 8.8 minutes
+  STATUS: SUCCESS
+There were 24 warnings (use warnings() to see them)
+
+
+ ====================================================================== 
+SMOKE TEST SUMMARY
+====================================================================== 
+
+# A tibble: 6 × 7
+  Survey Status      N `Time (min)` `Max Rhat` `Period %` `Cohort %`
+  <chr>  <chr>   <int>        <dbl>      <dbl>      <dbl>      <dbl>
+1 NHANES success  9776          3.1       1.06        1.8        0.1
+2 GSS    success 10000          1.5       1.02        0.2        2.6
+3 MEPS   success  9994          7.3       1.12        0.4        0.2
+4 NHIS   success  9966          4.7       1.01        0.1        0.2
+5 CPS    success  9982          1.6       1.01        0          0.2
+6 BRFSS  success 10000          8.8      11.6         0.4        1  
+
+Passed: 6 / 6 
+Failed: 0 / 6 
+
+ ====================================================================== 
+ALL SMOKE TESTS PASSED - Ready for full pipeline run
+Finished at: 2026-01-29 03:52:19 
+====================================================================== 

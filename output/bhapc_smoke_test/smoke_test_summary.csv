@@ -1,0 +1,7 @@
+"Survey","Status","N","Time (min)","Max Rhat","Period %","Cohort %"
+"NHANES","success",9776,3.1,1.055,1.8,0.1
+"GSS","success",10000,1.5,1.017,0.2,2.6
+"MEPS","success",9994,7.3,1.115,0.4,0.2
+"NHIS","success",9966,4.7,1.006,0.1,0.2
+"CPS","success",9982,1.6,1.008,0,0.2
+"BRFSS","success",10000,8.8,11.608,0.4,1

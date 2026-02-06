@@ -1,0 +1,11 @@
+"survey","effect","estimate","ci_90"
+"GSS_HAPPINESS","Fixed Effects",NA,NA
+"GSS_HAPPINESS","Age (linear)",0.006,"[0.0046, 0.0075]"
+"GSS_HAPPINESS","Age (quadratic)",-4e-05,"[-5.5e-05, -2.7e-05]"
+"GSS_HAPPINESS","Log weight",0.1482,"[0.1394, 0.1572]"
+"GSS_HAPPINESS","",NA,NA
+"GSS_HAPPINESS","Variance Components",NA,NA
+"GSS_HAPPINESS","Period variance",0.0061,"(1.5%)"
+"GSS_HAPPINESS","Cohort variance",2e-04,"(0.1%)"
+"GSS_HAPPINESS","Residual variance",0.4106,"(98.5%)"
+"GSS_HAPPINESS","Total variance",0.4169,"(100%)"

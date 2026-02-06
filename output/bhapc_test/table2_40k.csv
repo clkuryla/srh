@@ -1,0 +1,11 @@
+survey,effect,estimate,ci_90
+NHANES,Fixed Effects,NA,NA
+NHANES,Age (linear),-0.0256,"[-0.0293, -0.0221]"
+NHANES,Age (quadratic),1.48e-4,"[0.000114, 0.000184]"
+NHANES,Log weight,0.0153,"[0.0122, 0.0183]"
+NHANES,,NA,NA
+NHANES,Variance Components,NA,NA
+NHANES,Period variance,0.0157,(1.5%)
+NHANES,Cohort variance,0.001,(0.1%)
+NHANES,Residual variance,1.065,(98.5%)
+NHANES,Total variance,1.0817,(100%)
