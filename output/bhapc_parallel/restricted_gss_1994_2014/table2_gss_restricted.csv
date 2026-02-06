@@ -1,0 +1,11 @@
+"survey","effect","estimate","ci_90"
+"GSS_1994_2014","Fixed Effects",NA,NA
+"GSS_1994_2014","Age (linear)",-0.0037,"[-0.0074, -3e-04]"
+"GSS_1994_2014","Age (quadratic)",-5.9e-05,"[-9.3e-05, -2.3e-05]"
+"GSS_1994_2014","Log weight",0.0622,"[0.0423, 0.0816]"
+"GSS_1994_2014","",NA,NA
+"GSS_1994_2014","Variance Components",NA,NA
+"GSS_1994_2014","Period variance",0.0045,"(0.7%)"
+"GSS_1994_2014","Cohort variance",4e-04,"(0.1%)"
+"GSS_1994_2014","Residual variance",0.6535,"(99.3%)"
+"GSS_1994_2014","Total variance",0.6584,"(100%)"
