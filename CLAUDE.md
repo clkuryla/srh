@@ -2,19 +2,6 @@
 # Author: Christine Lucille Kuryla
 # Goal: Generate publication-ready figures for self rated health (SRH) manuscript
 
-## Paper Structure
-
-**Figure 1:** Convergence phenomenon (all 6 surveys)
-- Panel A: Mean SRH by age group over time
-- Panel B: Age coefficient trending toward zero
-
-**Figure 3:** Coefficient stability (BRFSS, MEPS, NHIS, NHANES as available)
-- Coefficients of covariates on SRH over time, cox regressions
-- Shows meaning of SRH isn't changing (if the coefficients are constant)
-
-**Figure 4:** Prevalence trends (BRFSS, MEPS, NHIS, NHANES as available)
-- Prevalence of covariates by age group over time
-- Shows what's actually changing (youth mental health, comorbidities)
 
 ## Key Principle: Visual Cohesion
 

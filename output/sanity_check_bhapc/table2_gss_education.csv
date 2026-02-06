@@ -1,0 +1,11 @@
+"survey","effect","estimate","ci_90"
+"GSS_EDUCATION","Fixed Effects",NA,NA
+"GSS_EDUCATION","Age (linear)",0.026,"[0.0166, 0.0358]"
+"GSS_EDUCATION","Age (quadratic)",-0.000527,"[-0.000598, -0.000456]"
+"GSS_EDUCATION","Log weight",-0.3667,"[-0.4084, -0.3258]"
+"GSS_EDUCATION","",NA,NA
+"GSS_EDUCATION","Variance Components",NA,NA
+"GSS_EDUCATION","Period variance",1.0467,"(10%)"
+"GSS_EDUCATION","Cohort variance",0.6691,"(6.4%)"
+"GSS_EDUCATION","Residual variance",8.7151,"(83.6%)"
+"GSS_EDUCATION","Total variance",10.4309,"(100%)"

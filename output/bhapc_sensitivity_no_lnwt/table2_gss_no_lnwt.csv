@@ -1,0 +1,10 @@
+"survey","effect","estimate","ci_90"
+"GSS","Fixed Effects",NA,NA
+"GSS","Age (linear)",-0.0170975948205563,"[-0.019201, -0.015]"
+"GSS","Age (quadratic)",0.115346057106559,"[0.080535, 0.150025]"
+"GSS","",NA,NA
+"GSS","Variance Components",NA,NA
+"GSS","Period variance",0.000960985567794497,"(0.1%)"
+"GSS","Cohort variance",0.0154208607892891,"(2.3%)"
+"GSS","Residual variance",0.652035149835563,"(97.5%)"
+"GSS","Total variance",0.668416996192647,"(100%)"
