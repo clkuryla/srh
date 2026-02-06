@@ -882,10 +882,10 @@ p_t_looic <- wrap_table(t_looic, "LOOIC Comparison")
 
 # Combine all panels
 summary_layout <- "
-AABBBCCC
-AABBBCCC
-DDDDEEE
-DDDDEEE
+AABBCCCC
+AABBCCCC
+DDDDEEEE
+DDDDEEEE
 "
 
 summary_fig <- p_t_looic + p_variance + p_age + p_period + p_cohort +

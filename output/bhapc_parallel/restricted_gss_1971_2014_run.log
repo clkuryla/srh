@@ -1,0 +1,310 @@
+
+ ====================================================================== 
+BHAPC GSS RESTRICTED (1971-2014)
+Started at: 2026-02-05 22:07:11 
+====================================================================== 
+
+Year restriction: 1971 - 2014 
+Iterations: 6000 
+Cores: 10 
+
+--- STEP 1: DATA LOADING & PREPARATION ---
+  Original GSS N (all years): 57,627 
+  Filtered N ( 1971 - 2014 ): 43,988 
+  Year range: 1972 - 2014 
+Preparing BHAPC data for GSS
+  Initial rows: 43,988
+  Observed age range: 18 - 89
+  Using weight column: wt
+  Final rows: 43,988
+  Years: 1975-2014
+  Periods: 1971, 1975, 1979, 1983, 1987, 1991, 1995, 1999, 2003, 2007, 2011
+  Age groups: 15
+  Cohorts: 28
+  Mean SRH: 3
+  BHAPC N: 43,988 
+  Periods: 1971, 1975, 1979, 1983, 1987, 1991, 1995, 1999, 2003, 2007, 2011 
+  Cohorts: 28 
+
+--- STEP 2: MAIN BHAPC MODEL ---
+  Formula: srh ~ age + scale(age_squared) + lnWt + (1|period_4yr) + (1|cohort_4yr)
+  iter = 6000 , adapt_delta = 0.998 
+Fitting BHAPC model...
+  Outcome: srh
+  N observations: 43,988
+  N periods: 11
+  N cohorts: 28
+  adapt_delta: 0.998
+  iter: 6000
+  chains: 4
+  cores: 10
+  No strata/PSU random effects (not available)
+  Formula: srh ~ age + scale(age_squared) + lnWt + (1|period_4yr) + (1|cohort_4yr)
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.011317 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 113.17 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 3).
+Chain 2: 
+Chain 2: Gradient evaluation took 0.011369 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 113.69 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+Chain 3: 
+Chain 3: Gradient evaluation took 0.011139 seconds
+Chain 3: 1000 transitions using 10 leapfrog steps per transition would take 111.39 seconds.
+Chain 3: Adjust your expectations accordingly!
+Chain 3: 
+Chain 3: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 4).
+Chain 4: 
+Chain 4: Gradient evaluation took 0.011439 seconds
+Chain 4: 1000 transitions using 10 leapfrog steps per transition would take 114.39 seconds.
+Chain 4: Adjust your expectations accordingly!
+Chain 4: 
+Chain 4: 
+Chain 1: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 2: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 3: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 4: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 2: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 3: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 4: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 2: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 3: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 4: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 2: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 3: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 4: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 2: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 3: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 4: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 2: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 2: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 3: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 3: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 4: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 4: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 2: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 2: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 3: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 4: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 2: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 2: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 3: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 4: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 2: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 1779.6 seconds (Warm-up)
+Chain 2:                1324.51 seconds (Sampling)
+Chain 2:                3104.11 seconds (Total)
+Chain 2: 
+Chain 1: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 1: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 3: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 4: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 1: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 1: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 3: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 4: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 1: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 1: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 1: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 3: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 3: 
+Chain 3:  Elapsed Time: 1897.13 seconds (Warm-up)
+Chain 3:                2737.99 seconds (Sampling)
+Chain 3:                4635.12 seconds (Total)
+Chain 3: 
+Chain 4: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 4: 
+Chain 4:  Elapsed Time: 1960.49 seconds (Warm-up)
+Chain 4:                2725.7 seconds (Sampling)
+Chain 4:                4686.18 seconds (Total)
+Chain 4: 
+Chain 1: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 1: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 1: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 1: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 4297.66 seconds (Warm-up)
+Chain 1:                1420.76 seconds (Sampling)
+Chain 1:                5718.42 seconds (Total)
+Chain 1: 
+  Model fitting completed in 95.4 minutes
+  Model completed in 95.4 minutes
+
+--- STEP 3: EXTRACTING RESULTS ---
+
+  Variance Decomposition:
+     cohort_4yr :  0.0076  ( 1.1 %)
+     period_4yr :  0.0011  ( 0.2 %)
+     Residual :  0.6673  ( 98.7 %)
+     Total :  0.6761  ( 100 %)
+
+  Diagnostics:
+    Max Rhat: 1.002 
+    Min n_eff: 2184 
+    Converged: TRUE 
+Saved Table 2 to: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_parallel/restricted_gss_1971_2014/table2_gss_restricted.csv
+
+--- STEP 4: INTERACTION MODEL (AGE × PERIOD) ---
+  Formula: srh ~ age_centered * period_4yr + lnWt + (1|cohort_4yr)
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.012804 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 128.04 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+
+Chain SAMPLING2 FOR MODEL ': continuous
+' NOW (CHAIN Chain 2: 3Gradient evaluation took 0.012463 seconds).
+
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 124.63 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+Chain 3: 
+Chain 3: Gradient evaluation took 0.012463 seconds
+Chain 3: 1000 transitions using 10 leapfrog steps per transition would take 124.63 seconds.
+Chain 3: Adjust your expectations accordingly!
+Chain 3: 
+Chain 3: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 4).
+Chain 4: 
+Chain 4: Gradient evaluation took 0.012457 seconds
+Chain 4: 1000 transitions using 10 leapfrog steps per transition would take 124.57 seconds.
+Chain 4: Adjust your expectations accordingly!
+Chain 4: 
+Chain 4: 
+Chain 1: Iteration:    1 / 2000 [  0%]  (Warmup)
+Chain 2: Iteration:    1 / 2000 [  0%]  (Warmup)
+Chain 3: Iteration:    1 / 2000 [  0%]  (Warmup)
+Chain 4: Iteration:    1 / 2000 [  0%]  (Warmup)
+Chain 3: Iteration:  200 / 2000 [ 10%]  (Warmup)
+Chain 3: Iteration:  400 / 2000 [ 20%]  (Warmup)
+Chain 3: Iteration:  600 / 2000 [ 30%]  (Warmup)
+Chain 4: Iteration:  200 / 2000 [ 10%]  (Warmup)
+Chain 3: Iteration:  800 / 2000 [ 40%]  (Warmup)
+Chain 4: Iteration:  400 / 2000 [ 20%]  (Warmup)
+Chain 3: Iteration: 1000 / 2000 [ 50%]  (Warmup)
+Chain 3: Iteration: 1001 / 2000 [ 50%]  (Sampling)
+Chain 4: Iteration:  600 / 2000 [ 30%]  (Warmup)
+Chain 3: Iteration: 1200 / 2000 [ 60%]  (Sampling)
+Chain 2: Iteration:  200 / 2000 [ 10%]  (Warmup)
+Chain 4: Iteration:  800 / 2000 [ 40%]  (Warmup)
+Chain 3: Iteration: 1400 / 2000 [ 70%]  (Sampling)
+Chain 4: Iteration: 1000 / 2000 [ 50%]  (Warmup)
+Chain 4: Iteration: 1001 / 2000 [ 50%]  (Sampling)
+Chain 2: Iteration:  400 / 2000 [ 20%]  (Warmup)
+Chain 3: Iteration: 1600 / 2000 [ 80%]  (Sampling)
+Chain 4: Iteration: 1200 / 2000 [ 60%]  (Sampling)
+Chain 3: Iteration: 1800 / 2000 [ 90%]  (Sampling)
+Chain 2: Iteration:  600 / 2000 [ 30%]  (Warmup)
+Chain 4: Iteration: 1400 / 2000 [ 70%]  (Sampling)
+Chain 3: Iteration: 2000 / 2000 [100%]  (Sampling)
+Chain 3: 
+Chain 3:  Elapsed Time: 516.033 seconds (Warm-up)
+Chain 3:                140.897 seconds (Sampling)
+Chain 3:                656.93 seconds (Total)
+Chain 3: 
+Chain 2: Iteration:  800 / 2000 [ 40%]  (Warmup)
+Chain 4: Iteration: 1600 / 2000 [ 80%]  (Sampling)
+Chain 4: Iteration: 1800 / 2000 [ 90%]  (Sampling)
+Chain 2: Iteration: 1000 / 2000 [ 50%]  (Warmup)
+Chain 2: Iteration: 1001 / 2000 [ 50%]  (Sampling)
+Chain 4: Iteration: 2000 / 2000 [100%]  (Sampling)
+Chain 4: 
+Chain 4:  Elapsed Time: 592.351 seconds (Warm-up)
+Chain 4:                113.697 seconds (Sampling)
+Chain 4:                706.048 seconds (Total)
+Chain 4: 
+Chain 2: Iteration: 1200 / 2000 [ 60%]  (Sampling)
+Chain 2: Iteration: 1400 / 2000 [ 70%]  (Sampling)
+Chain 2: Iteration: 1600 / 2000 [ 80%]  (Sampling)
+Chain 2: Iteration: 1800 / 2000 [ 90%]  (Sampling)
+Chain 2: Iteration: 2000 / 2000 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 690.333 seconds (Warm-up)
+Chain 2:                130.401 seconds (Sampling)
+Chain 2:                820.734 seconds (Total)
+Chain 2: 
+Chain 1: Iteration:  200 / 2000 [ 10%]  (Warmup)
+Chain 1: Iteration:  400 / 2000 [ 20%]  (Warmup)
+Chain 1: Iteration:  600 / 2000 [ 30%]  (Warmup)
+Chain 1: Iteration:  800 / 2000 [ 40%]  (Warmup)
+Chain 1: Iteration: 1000 / 2000 [ 50%]  (Warmup)
+Chain 1: Iteration: 1001 / 2000 [ 50%]  (Sampling)
+Chain 1: Iteration: 1200 / 2000 [ 60%]  (Sampling)
+Chain 1: Iteration: 1400 / 2000 [ 70%]  (Sampling)
+Chain 1: Iteration: 1600 / 2000 [ 80%]  (Sampling)
+Chain 1: Iteration: 1800 / 2000 [ 90%]  (Sampling)
+Chain 1: Iteration: 2000 / 2000 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 969.894 seconds (Warm-up)
+Chain 1:                109.734 seconds (Sampling)
+Chain 1:                1079.63 seconds (Total)
+Chain 1: 
+  Interaction model completed in 18 minutes
+
+  Age×Period Interaction Summary:
+   period    age_slope   interaction         ci_10        ci_90 significant
+1    1971 -0.013474011  0.0000000000 -0.0146859768 -0.012191016         ref
+2    1975 -0.013741488 -0.0002674766 -0.0015875046  0.001032529            
+3    1979 -0.012411470  0.0010625416 -0.0003385438  0.002486556            
+4    1983 -0.011427564  0.0020464474  0.0005590613  0.003565846           *
+5    1987 -0.012907164  0.0005668474 -0.0007638887  0.001922451            
+6    1991 -0.011178521  0.0022954900  0.0008008356  0.003729509           *
+7    1995 -0.010811071  0.0026629404  0.0011814195  0.004135710           *
+8    1999 -0.011018370  0.0024556415  0.0009274154  0.003972433           *
+9    2003 -0.010460553  0.0030134584  0.0014280002  0.004573686           *
+10   2007 -0.010135221  0.0033387908  0.0015429885  0.005072569           *
+11   2011 -0.009176353  0.0042976585  0.0024357974  0.006071007           *
+
+--- STEP 5: GENERATING FIGURES ---
+Computing survey-weighted means using: wt
+Saved Figure 2 to: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_parallel/restricted_gss_1971_2014/figure2_gss_restricted.png
+Saved Figure 3 to: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_parallel/restricted_gss_1971_2014/figure3_gss_restricted.png
+Warning messages:
+1: There was 1 warning in `mutate()`.
+ℹ In argument: `period = as.numeric(period)`.
+Caused by warning:
+! NAs introduced by coercion 
+2: There was 1 warning in `mutate()`.
+ℹ In argument: `cohort = as.numeric(cohort)`.
+Caused by warning:
+! NAs introduced by coercion 
+3: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+4: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+  Figures saved
+
+--- COMPARISON WITH FULL GSS ---
+
+  Variance % Comparison:
+ Component Full GSS (1971-2024) Restricted GSS (1971-2014)
+    Period            0.1396303                  0.1690491
+    Cohort            2.3464204                  1.1254208
+  Residual           97.5139492                 98.7055300
+
+ ====================================================================== 
+COMPLETE: GSS RESTRICTED (1971-2014)
+Total time: 113.5 minutes
+Output directory: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_parallel/restricted_gss_1971_2014 
+Finished at: 2026-02-06 00:00:49 
+====================================================================== 
