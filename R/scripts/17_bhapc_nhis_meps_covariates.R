@@ -90,16 +90,9 @@ data_meps <- data_meps_raw %>%
     # Create education factor
     educ_f = factor(educ_4cat, levels = 1:4,
                     labels = c("LT HS", "HS", "Some college", "Bachelor+")),
-    # Create race_includehisp_f from existing race + hispanic
-    race_includehisp_f = case_when(
-      hispanic == "Hispanic" ~ "Hispanic",
-      race == "White" ~ "NH-White",
-      race == "Black" ~ "NH-Black",
-      race == "AIAN" ~ "NH-AIAN",
-      race == "AAPI" ~ "NH-Asian/PI",
-      TRUE ~ "Other"
-    ) %>% factor(levels = c("NH-White", "NH-Black", "NH-AIAN",
-                            "NH-Asian/PI", "Hispanic", "Other")),
+    # Use existing race_includehisp_f (already harmonized in wrangle_meps.R)
+    # Rename for consistency in formulas
+    race_f = race_includehisp_f,
     # Sex factor
     sex_f = factor(sex)
   )
@@ -174,10 +167,10 @@ cat("\n--- STEP 2: MISSINGNESS REPORT ---\n\n")
 
 # MEPS missingness
 meps_missingness <- tibble(
-  variable = c("srh", "age", "year", "wt", "race_includehisp_f", "educ_f", "sex_f", "k6"),
+  variable = c("srh", "age", "year", "wt", "race_f", "educ_f", "sex_f", "k6"),
   n_total = nrow(data_meps),
   n_valid = sapply(
-    c("srh", "age", "year", "wt", "race_includehisp_f", "educ_f", "sex_f", "k6"),
+    c("srh", "age", "year", "wt", "race_f", "educ_f", "sex_f", "k6"),
     function(v) sum(!is.na(data_meps[[v]]))
   ),
   n_missing = n_total - n_valid,
@@ -225,7 +218,7 @@ cat("  M1 (base):", format(nrow(meps_m1), big.mark = ","), "\n")
 
 # M2: + demographics (race, educ, sex)
 meps_m2 <- data_meps %>%
-  drop_na(srh, age, year, wt, race_includehisp_f, educ_f, sex_f)
+  drop_na(srh, age, year, wt, race_f, educ_f, sex_f)
 cat("  M2 (+ demographics):", format(nrow(meps_m2), big.mark = ","), "\n")
 
 # M3: + K6 only
@@ -235,7 +228,7 @@ cat("  M3 (+ K6):", format(nrow(meps_m3), big.mark = ","), "\n")
 
 # M4: Full model
 meps_m4 <- data_meps %>%
-  drop_na(srh, age, year, wt, race_includehisp_f, educ_f, sex_f, k6)
+  drop_na(srh, age, year, wt, race_f, educ_f, sex_f, k6)
 cat("  M4 (full):", format(nrow(meps_m4), big.mark = ","), "\n")
 
 # ------------------------------------------------------------------------------
@@ -354,7 +347,7 @@ formula_m1 <- srh ~ age + scale(age_squared) + lnWt +
 
 # Demographics formula
 formula_m2 <- srh ~ age + scale(age_squared) + lnWt +
-  race_includehisp_f + educ_f + sex_f +
+  race_f + educ_f + sex_f +
   (1 | period_4yr) + (1 | cohort_4yr)
 
 # K6 formula
@@ -364,7 +357,7 @@ formula_m3 <- srh ~ age + scale(age_squared) + lnWt +
 
 # Full formula
 formula_m4 <- srh ~ age + scale(age_squared) + lnWt +
-  race_includehisp_f + educ_f + sex_f + k6 +
+  race_f + educ_f + sex_f + k6 +
   (1 | period_4yr) + (1 | cohort_4yr)
 
 # --- MEPS M1 ---
@@ -445,24 +438,10 @@ saveRDS(model_meps_m4, file.path(output_dir, "meps", "model_m4.rds"))
 
 cat("\n--- STEP 6: FITTING NHIS MODELS ---\n\n")
 
-# Formulas for NHIS (race_f instead of race_includehisp_f)
-if (nhis_has_race) {
-  formula_nhis_m2 <- srh ~ age + scale(age_squared) + lnWt +
-    race_f + educ_f + sex_f +
-    (1 | period_4yr) + (1 | cohort_4yr)
-
-  formula_nhis_m4 <- srh ~ age + scale(age_squared) + lnWt +
-    race_f + educ_f + sex_f + k6 +
-    (1 | period_4yr) + (1 | cohort_4yr)
-} else {
-  formula_nhis_m2 <- srh ~ age + scale(age_squared) + lnWt +
-    educ_f + sex_f +
-    (1 | period_4yr) + (1 | cohort_4yr)
-
-  formula_nhis_m4 <- srh ~ age + scale(age_squared) + lnWt +
-    educ_f + sex_f + k6 +
-    (1 | period_4yr) + (1 | cohort_4yr)
-}
+# Formulas for NHIS (same as MEPS since both use race_f)
+# Both surveys now have race_f column
+formula_nhis_m2 <- formula_m2
+formula_nhis_m4 <- formula_m4
 
 # --- NHIS M1 ---
 cat("NHIS M1 (base)...\n")

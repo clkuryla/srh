@@ -77,17 +77,25 @@ cat("\n--- STEP 2: CREATING HARMONIZED RACE VARIABLES ---\n")
 #
 # HISPETH: 0 = NIU/Unknown, 10-50 = Hispanic origin codes
 
-# Check if race columns already exist
-if ("race_includehisp_f" %in% names(data_nhis)) {
-  cat("  WARNING: race_includehisp_f already exists in data_nhis.rds\n")
-  cat("  Overwriting existing race columns...\n")
+# Check if race columns already exist and remove all of them
+race_cols_to_remove <- c("race_5cat", "race_5cat_f", "hispanic", "hispanic_f",
+                          "race_includehisp", "race_includehisp_f")
+existing_race_cols <- intersect(race_cols_to_remove, names(data_nhis))
+
+if (length(existing_race_cols) > 0) {
+  cat("  Removing existing race columns:", paste(existing_race_cols, collapse = ", "), "\n")
   data_nhis <- data_nhis %>%
-    select(-any_of(c("race_5cat", "hispanic", "race_includehisp", "race_includehisp_f")))
+    select(-any_of(existing_race_cols))
 }
 
 # Check if RACENEW column exists (for post-2019 data)
 has_racenew <- "RACENEW" %in% names(data_nhis)
 cat("  RACENEW column present:", has_racenew, "\n")
+
+# If RACENEW doesn't exist, create it with NA so the code works uniformly
+if (!has_racenew) {
+  data_nhis <- data_nhis %>% mutate(RACENEW = NA_integer_)
+}
 
 data_nhis <- data_nhis %>%
   mutate(
@@ -96,24 +104,19 @@ data_nhis <- data_nhis %>%
     race_5cat = case_when(
       # White
       RACEA == 100 ~ 1L,
-      has_racenew & is.na(RACEA) & RACENEW == 100 ~ 1L,
-      has_racenew & RACEA == 0 & RACENEW == 100 ~ 1L,
+      (is.na(RACEA) | RACEA == 0) & RACENEW == 100 ~ 1L,
       # Black
       RACEA == 200 ~ 2L,
-      has_racenew & is.na(RACEA) & RACENEW == 200 ~ 2L,
-      has_racenew & RACEA == 0 & RACENEW == 200 ~ 2L,
-      # AIAN
-      RACEA == 300 ~ 3L,
-      has_racenew & is.na(RACEA) & RACENEW == 300 ~ 3L,
-      has_racenew & RACEA == 0 & RACENEW == 300 ~ 3L,
-      # Asian/Pacific Islander (400-434)
+      (is.na(RACEA) | RACEA == 0) & RACENEW == 200 ~ 2L,
+      # AIAN (300-350 range for detailed AIAN codes)
+      RACEA >= 300 & RACEA < 400 ~ 3L,
+      (is.na(RACEA) | RACEA == 0) & RACENEW >= 300 & RACENEW < 400 ~ 3L,
+      # Asian/Pacific Islander (400-499 range)
       RACEA >= 400 & RACEA < 500 ~ 4L,
-      has_racenew & is.na(RACEA) & RACENEW >= 400 & RACENEW < 500 ~ 4L,
-      has_racenew & RACEA == 0 & RACENEW >= 400 & RACENEW < 500 ~ 4L,
-      # Multiple/Other (500+)
-      RACEA >= 500 ~ 5L,
-      has_racenew & is.na(RACEA) & RACENEW >= 500 ~ 5L,
-      has_racenew & RACEA == 0 & RACENEW >= 500 ~ 5L,
+      (is.na(RACEA) | RACEA == 0) & RACENEW >= 400 & RACENEW < 500 ~ 4L,
+      # Multiple/Other (500+, excluding unknown codes 997-999)
+      RACEA >= 500 & RACEA < 900 ~ 5L,
+      (is.na(RACEA) | RACEA == 0) & RACENEW >= 500 & RACENEW < 900 ~ 5L,
       TRUE ~ NA_integer_
     ),
 
@@ -170,14 +173,22 @@ cat("  Records with race data:", format(n_with_race, big.mark = ","),
     "(", pct_with_race, "%)\n")
 
 # Validate race variable ranges
-stopifnot("race_5cat values in 1-5", all(na.omit(data_nhis$race_5cat) %in% 1:5))
-stopifnot("hispanic values in 0-1", all(na.omit(data_nhis$hispanic) %in% 0:1))
-stopifnot("race_includehisp values in 1-6", all(na.omit(data_nhis$race_includehisp) %in% 1:6))
+race5_vals <- na.omit(data_nhis$race_5cat)
+is_valid_race5 <- min(race5_vals) >= 1 & max(race5_vals) <= 5
+stopifnot("race_5cat values in 1-5" = is_valid_race5)
+
+hisp_vals <- na.omit(data_nhis$hispanic)
+is_valid_hisp <- all(hisp_vals %in% 0:1)
+stopifnot("hispanic values in 0-1" = is_valid_hisp)
+
+race_ih_vals <- na.omit(data_nhis$race_includehisp)
+is_valid_race_ih <- all(race_ih_vals %in% 1:6)
+stopifnot("race_includehisp values in 1-6" = is_valid_race_ih)
 
 # Check that race_includehisp_f has correct levels
 expected_levels <- c("NH-White", "NH-Black", "NH-AIAN", "NH-Asian/PI", "Hispanic", "Other")
 actual_levels <- levels(data_nhis$race_includehisp_f)
-stopifnot("race_includehisp_f has correct levels", identical(actual_levels, expected_levels))
+stopifnot("race_includehisp_f has correct levels" = identical(actual_levels, expected_levels))
 
 cat("  Validation passed\n")
 

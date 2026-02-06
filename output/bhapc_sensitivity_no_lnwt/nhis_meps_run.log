@@ -1,0 +1,75 @@
+
+ ================================================================================ 
+BHAPC SENSITIVITY ANALYSIS - NO lnWt (NHIS & MEPS SEQUENTIAL)
+Started at:  2026-02-06 01:11:20 
+================================================================================ 
+
+
+ ====================================================================== 
+SENSITIVITY ANALYSIS: NHIS (NO lnWt)
+Started at: 01:11:28 
+====================================================================== 
+  Original N: 2,509,273 
+  Subsampling to 1e+05 ...
+
+=== Subsampling Summary ===
+  Original n:     2,509,273
+  Target n:       1e+05
+  Final n:        100,576
+  Sampling frac:  0.0401
+  Max |diff| in year proportions: 0.00201
+  Weighted mean SRH: original = 3.7382, subsampled = 3.7317
+===========================
+
+  Final N: 100,576 
+Preparing BHAPC data for NHIS
+  Initial rows: 100,576
+  Observed age range: 18 - 99
+  Using weight column: wt
+  Final rows: 99,742
+  Years: 1983-2024
+  Periods: 1983, 1987, 1991, 1995, 1999, 2003, 2007, 2011, 2015, 2019, 2023
+  Age groups: 15
+  Cohorts: 28
+  Mean SRH: 3.73
+  BHAPC N: 99,742 
+
+  Fitting model (NO lnWt)...
+  Formula: srh ~ age + scale(age_squared) + (1|period_4yr) + (1|cohort_4yr)
+  iter = 4000 , cores = 64 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.04101 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 410.1 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+Chain 2: 
+Chain 2: Gradient evaluation took 0.041241 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 412.41 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 3).
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 4).
+Chain 3: 
+Chain 3: Gradient evaluation took 0.054153 seconds
+Chain 3: 1000 transitions using 10 leapfrog steps per transition would take 541.53 seconds.
+Chain 3: Adjust your expectations accordingly!
+Chain 3: 
+Chain 3: 
+Chain 4: 
+Chain 4: Gradient evaluation took 0.058601 seconds
+Chain 4: 1000 transitions using 10 leapfrog steps per transition would take 586.01 seconds.
+Chain 4: Adjust your expectations accordingly!
+Chain 4: 
+Chain 4: 
+Chain 2: Iteration:    1 / 4000 [  0%]  (Warmup)
+Chain 1: Iteration:    1 / 4000 [  0%]  (Warmup)
+Chain 3: Iteration:    1 / 4000 [  0%]  (Warmup)
+Chain 4: Iteration:    1 / 4000 [  0%]  (Warmup)
