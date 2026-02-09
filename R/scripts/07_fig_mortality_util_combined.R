@@ -90,7 +90,7 @@ panel_a <- plot_mortality_hr(
   window_length = 10,
   show_ci = TRUE,
   log_scale = TRUE,
-  title = NULL,
+  title = "Mortality",
   y_label = "Hazard Ratio per 1-unit SRH",
   x_label = "Window Start Year",
   point_size = 2.5,
@@ -99,6 +99,7 @@ panel_a <- plot_mortality_hr(
 ) +
   theme(
     text = element_text(size = 16),
+    plot.title = element_text(size = 19, face = "bold", hjust = 0.5),
     legend.position = "bottom",
     legend.direction = "horizontal",
     legend.title = element_text(face = "bold", size = 16),
@@ -108,7 +109,7 @@ panel_a <- plot_mortality_hr(
     axis.title = element_text(size = 16),
     axis.text = element_text(size = 14),
     axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
-    plot.margin = margin(t = 25, r = 10, b = 5, l = 5)
+    plot.margin = margin(t = 5, r = 10, b = 5, l = 5)
   ) +
   guides(
     color = guide_legend(nrow = 2, byrow = TRUE, title.position = "left",
@@ -130,7 +131,7 @@ create_util_panel <- function(
     show_col_title = FALSE,
     col_title = NULL,
     row_label = NULL,
-    base_size = 16,
+    base_size = 18,
     xlim = NULL
 ) {
 
@@ -174,14 +175,14 @@ create_util_panel <- function(
       plot.background = element_rect(fill = "white", color = NA),
       panel.grid.minor = element_blank(),
       panel.grid.major = element_line(color = "gray92", linewidth = 0.25),
-      plot.title = element_text(size = base_size, face = "bold", hjust = 0.5),
+      plot.title = element_text(size = base_size + 1, face = "bold", hjust = 0.5),
       axis.title.y = element_text(size = base_size),
       axis.text = element_text(size = base_size - 1, color = "gray30"),
       axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
       axis.ticks.x = element_line(color = "gray50", linewidth = 0.3),
       plot.margin = margin(4, 6, 4, left_margin),
       legend.position = "none",
-      plot.tag = element_text(size = base_size, face = "bold", angle = 90,
+      plot.tag = element_text(size = base_size + 1, face = "bold", angle = 90,
                               vjust = 0.5, hjust = 0.5),
       plot.tag.position = c(-0.06, 0.5)
     )
@@ -277,7 +278,7 @@ message("\n========== Saving figure ==========\n")
 ggsave(
   filename = file.path(output_dir, paste0("fig_mortality_util_combined_draft_", date_suffix, ".png")),
   plot = fig_combined,
-  width = 14, height = 7, dpi = 300,
+  width = 16, height = 8, dpi = 300,
   bg = "white"
 )
 message("Saved: fig_mortality_util_combined_draft_", date_suffix, ".png")
@@ -286,7 +287,7 @@ message("Saved: fig_mortality_util_combined_draft_", date_suffix, ".png")
 ggsave(
   filename = file.path(output_dir, "fig_mortality_util_combined.png"),
   plot = fig_combined,
-  width = 14, height = 7, dpi = 300,
+  width = 16, height = 8, dpi = 300,
   bg = "white"
 )
 message("Saved: fig_mortality_util_combined.png")
@@ -294,7 +295,7 @@ message("Saved: fig_mortality_util_combined.png")
 ggsave(
   filename = file.path(output_dir, "fig_mortality_util_combined.pdf"),
   plot = fig_combined,
-  width = 14, height = 7,
+  width = 16, height = 8,
   bg = "white"
 )
 message("Saved: fig_mortality_util_combined.pdf")
