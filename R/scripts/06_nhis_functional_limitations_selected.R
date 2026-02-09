@@ -8,7 +8,7 @@
 #   3. Hand/Finger Difficulty (lahanddif)
 #   4. Lift/Carry 25lbs Difficulty (lara2litrdif)
 #   5. Walk 1 Block Difficulty (walkdif1bl1)
-#   6. Walk/Climb Permanent Limitation (lawalkclimperq)
+#   6. Walk 5 Blocks Difficulty (walkdif5bl1)
 #
 # Author: Christine Lucille Kuryla
 # ==============================================================================
@@ -47,7 +47,7 @@ selected_vars_prev <- c(
   "lahanddif_prev"      = "Hand/Finger Difficulty",
   "lara2litrdif_prev"   = "Lift/Carry 25lbs Difficulty",
   "walkdif1bl1_prev"    = "Walk 1 Block Difficulty",
-  "lawalkclimperq_prev" = "Walk/Climb Permanent Limitation"
+  "walkdif5bl1_prev"    = "Walk 5 Blocks Difficulty"
 )
 
 # Ordinal mean versions
@@ -57,7 +57,7 @@ selected_vars_mean <- c(
   "lahanddif"      = "Hand/Finger Difficulty",
   "lara2litrdif"   = "Lift/Carry 25lbs Difficulty",
   "walkdif1bl1"    = "Walk 1 Block Difficulty",
-  "lawalkclimperq" = "Walk/Climb Permanent Limitation"
+  "walkdif5bl1"    = "Walk 5 Blocks Difficulty"
 )
 
 # ------------------------------------------------------------------------------
@@ -88,7 +88,7 @@ message("\n========== Creating binary versions for prevalence ==========\n")
 
 # Ordinal variables: 1 = No difficulty, >1 = Any difficulty
 ordinal_vars <- c("lawashdresdif", "walkdif12st1", "lahanddif",
-                  "lara2litrdif", "walkdif1bl1")
+                  "lara2litrdif", "walkdif1bl1", "walkdif5bl1")
 
 for (v in ordinal_vars) {
   if (v %in% names(data_nhis)) {
@@ -98,12 +98,6 @@ for (v in ordinal_vars) {
     n_valid <- sum(!is.na(data_nhis[[new_var]]))
     message("  Created ", new_var, ": ", n_valid, " valid obs")
   }
-}
-
-# lawalkclimperq is already binary (0/1)
-if ("lawalkclimperq" %in% names(data_nhis)) {
-  data_nhis$lawalkclimperq_prev <- data_nhis$lawalkclimperq
-  message("  Copied lawalkclimperq_prev (already binary)")
 }
 
 # ------------------------------------------------------------------------------

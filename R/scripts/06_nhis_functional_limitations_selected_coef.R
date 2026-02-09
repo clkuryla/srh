@@ -12,7 +12,7 @@
 #   3. Hand/Finger Difficulty (lahanddif)
 #   4. Lift/Carry 25lbs Difficulty (lara2litrdif)
 #   5. Walk 1 Block Difficulty (walkdif1bl1)
-#   6. Walk/Climb Permanent Limitation (lawalkclimperq)
+#   6. Walk 5 Blocks Difficulty (walkdif5bl1)
 #
 # Author: Christine Lucille Kuryla
 # ==============================================================================
@@ -52,7 +52,7 @@ selected_vars <- c(
   "lahanddif"      = "Hand/Finger Difficulty",
   "lara2litrdif"   = "Lift/Carry 25lbs Difficulty",
   "walkdif1bl1"    = "Walk 1 Block Difficulty",
-  "lawalkclimperq" = "Walk/Climb Permanent Limitation"
+  "walkdif5bl1"    = "Walk 5 Blocks Difficulty"
 )
 
 # ------------------------------------------------------------------------------
