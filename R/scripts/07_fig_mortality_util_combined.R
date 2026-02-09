@@ -109,7 +109,7 @@ panel_a <- plot_mortality_hr(
     axis.title = element_text(size = 16),
     axis.text = element_text(size = 14),
     axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
-    plot.margin = margin(t = 5, r = 10, b = 5, l = 5)
+    plot.margin = margin(t = 15, r = 10, b = 5, l = 5)
   ) +
   guides(
     color = guide_legend(nrow = 2, byrow = TRUE, title.position = "left",
@@ -172,6 +172,7 @@ create_util_panel <- function(
     theme_minimal(base_size = base_size) +
     theme(
       panel.background = element_rect(fill = "white", color = NA),
+      panel.border = element_rect(color = "gray70", fill = NA, linewidth = 0.5),
       plot.background = element_rect(fill = "white", color = NA),
       panel.grid.minor = element_blank(),
       panel.grid.major = element_line(color = "gray92", linewidth = 0.25),
