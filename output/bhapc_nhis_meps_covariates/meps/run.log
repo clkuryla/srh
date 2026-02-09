@@ -1,0 +1,576 @@
+
+ ====================================================================== 
+BHAPC COVARIATE ANALYSIS: MEPS
+Started at: 2026-02-06 02:30:31 
+====================================================================== 
+
+
+Attaching package: ‘srvyr’
+
+The following object is masked from ‘package:stats’:
+
+    filter
+
+Configuration:
+  Cores: 8 
+  Iterations: 6000 
+  Subsample N: 1e+05 
+
+--- STEP 1: LOADING MEPS DATA ---
+  Raw rows: 464,130 
+  After base filtering: 464,130 
+  After subsampling: 100,000 
+           used  (Mb) gc trigger  (Mb) max used  (Mb)
+Ncells  3134022 167.4    5410482 289.0  5410482 289.0
+Vcells 14548397 111.0   96363560 735.2 99536020 759.4
+
+--- STEP 2: MISSINGNESS ---
+ variable n_total n_valid n_missing pct_missing
+      srh  100000  100000         0         0.0
+      age  100000  100000         0         0.0
+     year  100000  100000         0         0.0
+       wt  100000  100000         0         0.0
+   race_f  100000  100000         0         0.0
+   educ_f  100000   99331       669         0.7
+    sex_f  100000  100000         0         0.0
+       k6  100000   74078     25922        25.9
+
+--- STEP 3: SAMPLES ---
+  M1: 100000   M2: 99331   M3: 74078   M4: 73580 
+
+--- STEP 4: BHAPC PREP ---
+Preparing BHAPC data for MEPS
+  Initial rows: 100,000
+  Observed age range: 18 - 90
+  Using weight column: wt
+  Final rows: 99,984
+  Years: 2003-2023
+  Periods: 1999, 2003, 2007, 2011, 2015, 2019, 2023
+  Age groups: 15
+  Cohorts: 24
+  Mean SRH: 3.5
+Preparing BHAPC data for MEPS
+  Initial rows: 99,331
+  Observed age range: 18 - 90
+  Using weight column: wt
+  Final rows: 99,318
+  Years: 2003-2023
+  Periods: 1999, 2003, 2007, 2011, 2015, 2019, 2023
+  Age groups: 15
+  Cohorts: 24
+  Mean SRH: 3.51
+Preparing BHAPC data for MEPS
+  Initial rows: 74,078
+  Observed age range: 18 - 85
+  NOTE: Survey age cap detected. Using max age = 85
+  Using weight column: wt
+  Final rows: 74,078
+  Years: 2007-2023
+  Periods: 2003, 2007, 2011, 2015, 2019, 2023
+  Age groups: 15
+  Cohorts: 23
+  Mean SRH: 3.56
+Preparing BHAPC data for MEPS
+  Initial rows: 73,580
+  Observed age range: 18 - 85
+  NOTE: Survey age cap detected. Using max age = 85
+  Using weight column: wt
+  Final rows: 73,580
+  Years: 2007-2023
+  Periods: 2003, 2007, 2011, 2015, 2019, 2023
+  Age groups: 15
+  Cohorts: 23
+  Mean SRH: 3.56
+
+--- STEP 5: FITTING MODELS ---
+
+  Fitting m1 - N: 99984 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.053729 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 537.29 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 3).
+Chain 2: 
+Chain 2: Gradient evaluation took 0.053999 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 539.99 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 4).
+Chain 3: 
+Chain 3: Gradient evaluation took 0.057464 seconds
+Chain 3: 1000 transitions using 10 leapfrog steps per transition would take 574.64 seconds.
+Chain 3: Adjust your expectations accordingly!
+Chain 3: 
+Chain 3: 
+Chain 4: 
+Chain 4: Gradient evaluation took 0.058459 seconds
+Chain 4: 1000 transitions using 10 leapfrog steps per transition would take 584.59 seconds.
+Chain 4: Adjust your expectations accordingly!
+Chain 4: 
+Chain 4: 
+Chain 1: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 2: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 4: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 3: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 3: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 2: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 1: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 4: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 3: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 2: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 1: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 4: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 3: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 2: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 1: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 4: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 3: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 1: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 2: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 4: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 1: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 1: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 3: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 3: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 4: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 4: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 2: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 2: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 1: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 3: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 2: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 4: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 1: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 3: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 2: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 1: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 3: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 4: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 1: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 3: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 2: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 4: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 1: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 26390.8 seconds (Warm-up)
+Chain 1:                8516.07 seconds (Sampling)
+Chain 1:                34906.8 seconds (Total)
+Chain 1: 
+Chain 3: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 3: 
+Chain 3:  Elapsed Time: 26499.4 seconds (Warm-up)
+Chain 3:                8478.32 seconds (Sampling)
+Chain 3:                34977.7 seconds (Total)
+Chain 3: 
+Chain 2: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 4: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 2: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 27173.8 seconds (Warm-up)
+Chain 2:                9909.33 seconds (Sampling)
+Chain 2:                37083.1 seconds (Total)
+Chain 2: 
+Chain 4: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 4: 
+Chain 4:  Elapsed Time: 27079.6 seconds (Warm-up)
+Chain 4:                11049.1 seconds (Sampling)
+Chain 4:                38128.6 seconds (Total)
+Chain 4: 
+    Completed in 635.6 minutes
+
+  Fitting m2 - N: 99318 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.029007 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 290.07 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 2: 
+Chain 2: Gradient evaluation took 0.029486 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 294.86 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 3).
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 4).
+Chain 3: 
+Chain 3: Gradient evaluation took 0.032747 seconds
+Chain 3: 1000 transitions using 10 leapfrog steps per transition would take 327.47 seconds.
+Chain 3: Adjust your expectations accordingly!
+Chain 3: 
+Chain 3: 
+Chain 4: 
+Chain 4: Gradient evaluation took 0.031474 seconds
+Chain 4: 1000 transitions using 10 leapfrog steps per transition would take 314.74 seconds.
+Chain 4: Adjust your expectations accordingly!
+Chain 4: 
+Chain 4: 
+Chain 1: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 2: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 4: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 3: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 3: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 3: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 3: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 3: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 3: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 3: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 3: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 1: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 3: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 1: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 3: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 1: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 3: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 1: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 1: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 1: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 3: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 3: 
+Chain 3:  Elapsed Time: 11490.7 seconds (Warm-up)
+Chain 3:                10706.9 seconds (Sampling)
+Chain 3:                22197.7 seconds (Total)
+Chain 3: 
+Chain 1: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 1: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 1: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 1: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 1: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 22086.4 seconds (Warm-up)
+Chain 1:                5735.37 seconds (Sampling)
+Chain 1:                27821.8 seconds (Total)
+Chain 1: 
+Chain 4: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 4: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 2: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 4: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 2: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 4: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 2: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 4: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 4: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 2: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 4: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 2: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 2: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 4: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 2: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 4: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 2: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 4: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 2: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 4: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 4: 
+Chain 4:  Elapsed Time: 36645.2 seconds (Warm-up)
+Chain 4:                8648.28 seconds (Sampling)
+Chain 4:                45293.5 seconds (Total)
+Chain 4: 
+Chain 2: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 2: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 39122.4 seconds (Warm-up)
+Chain 2:                9557.95 seconds (Sampling)
+Chain 2:                48680.3 seconds (Total)
+Chain 2: 
+    Completed in 811.4 minutes
+
+  Fitting m3 - N: 74078 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.019366 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 193.66 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 2: 
+Chain 2: Gradient evaluation took 0.019243 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 192.43 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 3).
+Chain 3: 
+Chain 3: Gradient evaluation took 0.019352 seconds
+Chain 3: 1000 transitions using 10 leapfrog steps per transition would take 193.52 seconds.
+Chain 3: Adjust your expectations accordingly!
+Chain 3: 
+Chain 3: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 4).
+Chain 4: 
+Chain 4: Gradient evaluation took 0.019381 seconds
+Chain 4: 1000 transitions using 10 leapfrog steps per transition would take 193.81 seconds.
+Chain 4: Adjust your expectations accordingly!
+Chain 4: 
+Chain 4: 
+Chain 1: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 2: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 3: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 4: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 4: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 4: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 2: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 3: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 4: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 2: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 3: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 4: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 2: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 3: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 4: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 4: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 3: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 2: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 4: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 4: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 3: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 3: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 2: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 2: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 4: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 3: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 4: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 3: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 4: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 4: 
+Chain 4:  Elapsed Time: 4955.83 seconds (Warm-up)
+Chain 4:                2765.74 seconds (Sampling)
+Chain 4:                7721.57 seconds (Total)
+Chain 4: 
+Chain 2: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 3: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 3: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 3: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 3: 
+Chain 3:  Elapsed Time: 6226.57 seconds (Warm-up)
+Chain 3:                2805.95 seconds (Sampling)
+Chain 3:                9032.52 seconds (Total)
+Chain 3: 
+Chain 2: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 2: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 2: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 1: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 2: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 6376.6 seconds (Warm-up)
+Chain 2:                7444.3 seconds (Sampling)
+Chain 2:                13820.9 seconds (Total)
+Chain 2: 
+Chain 1: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 1: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 1: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 1: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 1: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 1: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 1: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 1: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 1: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 1: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 17000.3 seconds (Warm-up)
+Chain 1:                3517.62 seconds (Sampling)
+Chain 1:                20517.9 seconds (Total)
+Chain 1: 
+    Completed in 342 minutes
+
+  Fitting m4 - N: 73580 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.022572 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 225.72 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 2: 
+Chain 2: Gradient evaluation took 0.022958 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 229.58 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 3).
+Chain 3: 
+Chain 3: Gradient evaluation took 0.023293 seconds
+Chain 3: 1000 transitions using 10 leapfrog steps per transition would take 232.93 seconds.
+Chain 3: Adjust your expectations accordingly!
+Chain 3: 
+Chain 3: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 4).
+Chain 4: 
+Chain 4: Gradient evaluation took 0.022834 seconds
+Chain 4: 1000 transitions using 10 leapfrog steps per transition would take 228.34 seconds.
+Chain 4: Adjust your expectations accordingly!
+Chain 4: 
+Chain 4: 
+Chain 1: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 2: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 3: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 4: Iteration:    1 / 6000 [  0%]  (Warmup)
+Chain 4: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 2: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 4: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 2: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 4: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 2: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 2: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 4: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 2: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 2: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 4: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 4: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 2: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 4: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 4: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 2: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 4: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 2: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 4: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 2: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 4: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 4: 
+Chain 4:  Elapsed Time: 7292.9 seconds (Warm-up)
+Chain 4:                5467.39 seconds (Sampling)
+Chain 4:                12760.3 seconds (Total)
+Chain 4: 
+Chain 2: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 7047.58 seconds (Warm-up)
+Chain 2:                6707.77 seconds (Sampling)
+Chain 2:                13755.3 seconds (Total)
+Chain 2: 
+Chain 3: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 3: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 3: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 3: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 1: Iteration:  600 / 6000 [ 10%]  (Warmup)
+Chain 3: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 3: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 1: Iteration: 1200 / 6000 [ 20%]  (Warmup)
+Chain 3: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 1: Iteration: 1800 / 6000 [ 30%]  (Warmup)
+Chain 3: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 3: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 1: Iteration: 2400 / 6000 [ 40%]  (Warmup)
+Chain 3: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 3: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 3: 
+Chain 3:  Elapsed Time: 25315.2 seconds (Warm-up)
+Chain 3:                2795.78 seconds (Sampling)
+Chain 3:                28111 seconds (Total)
+Chain 3: 
+Chain 1: Iteration: 3000 / 6000 [ 50%]  (Warmup)
+Chain 1: Iteration: 3001 / 6000 [ 50%]  (Sampling)
+Chain 1: Iteration: 3600 / 6000 [ 60%]  (Sampling)
+Chain 1: Iteration: 4200 / 6000 [ 70%]  (Sampling)
+Chain 1: Iteration: 4800 / 6000 [ 80%]  (Sampling)
+Chain 1: Iteration: 5400 / 6000 [ 90%]  (Sampling)
+Chain 1: Iteration: 6000 / 6000 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 28277.9 seconds (Warm-up)
+Chain 1:                2953.02 seconds (Sampling)
+Chain 1:                31230.9 seconds (Total)
+Chain 1: 
+    Completed in 520.6 minutes
+
+--- STEP 6: EXTRACTING RESULTS ---
+
+Variance Comparison (%):
+ component    M1_base   M2_demog       M3_k6     M4_full
+    Cohort  1.4528293  0.8400192  0.44616953  0.36114002
+    Period  0.4440505  0.2954328  0.09246232  0.05433247
+  Residual 98.1031202 98.8645480 99.46136814 99.58452751
+
+Convergence:
+ model max_rhat min_neff converged
+    M1 1.002779     2208      TRUE
+    M2 1.001766     2311      TRUE
+    M3 1.001936     1816      TRUE
+    M4 1.003248     2033      TRUE
+
+--- STEP 7: FIGURES ---
+Warning messages:
+1: There was 1 warning in `mutate()`.
+ℹ In argument: `period = as.numeric(period)`.
+Caused by warning:
+! NAs introduced by coercion 
+2: There was 1 warning in `mutate()`.
+ℹ In argument: `cohort = as.numeric(cohort)`.
+Caused by warning:
+! NAs introduced by coercion 
+Warning messages:
+1: There was 1 warning in `mutate()`.
+ℹ In argument: `period = as.numeric(period)`.
+Caused by warning:
+! NAs introduced by coercion 
+2: There was 1 warning in `mutate()`.
+ℹ In argument: `cohort = as.numeric(cohort)`.
+Caused by warning:
+! NAs introduced by coercion 
+Warning messages:
+1: There was 1 warning in `mutate()`.
+ℹ In argument: `period = as.numeric(period)`.
+Caused by warning:
+! NAs introduced by coercion 
+2: There was 1 warning in `mutate()`.
+ℹ In argument: `cohort = as.numeric(cohort)`.
+Caused by warning:
+! NAs introduced by coercion 
+Warning messages:
+1: There was 1 warning in `mutate()`.
+ℹ In argument: `period = as.numeric(period)`.
+Caused by warning:
+! NAs introduced by coercion 
+2: There was 1 warning in `mutate()`.
+ℹ In argument: `cohort = as.numeric(cohort)`.
+Caused by warning:
+! NAs introduced by coercion 
+Warning messages:
+1: Removed 4 rows containing missing values or values outside the scale range
+(`geom_line()`). 
+2: Removed 4 rows containing missing values or values outside the scale range
+(`geom_point()`). 
+Saved Figure 3 to: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_nhis_meps_covariates/meps/figure3_m4.png
+Warning messages:
+1: There was 1 warning in `mutate()`.
+ℹ In argument: `period = as.numeric(period)`.
+Caused by warning:
+! NAs introduced by coercion 
+2: There was 1 warning in `mutate()`.
+ℹ In argument: `cohort = as.numeric(cohort)`.
+Caused by warning:
+! NAs introduced by coercion 
+3: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+4: Removed 1 row containing missing values or values outside the scale range
+(`geom_point()`). 
+  Figures saved
+
+ ====================================================================== 
+MEPS COMPLETE
+Cohort variance: M1=1.45% -> M4=0.36% (75% reduction)
+Finished at: 2026-02-07 17:01:01 
+====================================================================== 
