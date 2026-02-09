@@ -131,8 +131,11 @@ for (i in seq_along(gss_models)) {
   model_result <- readRDS(analysis$model_file)
   bhapc_df <- readRDS(analysis$data_file)
 
-  # Handle model structure (some are lists, some are direct model objects)
-  if (is.list(model_result) && "model" %in% names(model_result)) {
+  # Handle model structure (some are wrapped in lists, some are direct stanreg objects)
+  # Check for stanreg first since stanreg objects are also lists with a "model" element
+  if (inherits(model_result, "stanreg")) {
+    model <- model_result
+  } else if (is.list(model_result) && "model" %in% names(model_result)) {
     model <- model_result$model
   } else {
     model <- model_result
@@ -156,8 +159,20 @@ get_pct <- function(var_df, comp) {
   round(var_df$pct_of_total[var_df$component == comp], 1)
 }
 
+# Model descriptions for caption
+model_descriptions <- paste0(
+
+  "Model specifications:\n",
+  "Unadjusted: age + age² + log(weight)\n",
+  "Demographics: + education + race + sex\n",
+  "All (excl satjob): + happiness + financial satisfaction + single status + demographics\n",
+  "All (incl satjob): + job satisfaction (employed subsample only)\n\n"
+)
+
 var_caption <- paste0(
-  "Variance decomposition (Period / Cohort / Residual):\n",
+  model_descriptions,
+  "Variance decomposition (Period / Cohort / Residual):
+",
   "Unadjusted: ", get_pct(variance_info[["Unadjusted"]], "period_4yr"), "% / ",
   get_pct(variance_info[["Unadjusted"]], "cohort_4yr"), "% / ",
   get_pct(variance_info[["Unadjusted"]], "Residual"), "%  |  ",
@@ -183,22 +198,23 @@ combined_fig <- (
   all_panels$age_4 | all_panels$period_4 | all_panels$cohort_4
 ) +
   plot_annotation(
-    title = "GSS BHAPC: Effect of Covariate Adjustment",
-    subtitle = "Age, Period, and Cohort effects across models (90% credible intervals)",
+    title = "GSS BHAPC: Effect of Covariate Adjustment on APC Decomposition",
+    subtitle = "Testing whether compositional changes in demographics and well-being explain cohort effects (90% credible intervals)",
     caption = var_caption,
     theme = theme(
-      plot.title = element_text(size = 14, face = "bold"),
-      plot.subtitle = element_text(size = 11, color = "gray40"),
-      plot.caption = element_text(size = 8, hjust = 0, color = "gray30")
+      plot.title = element_text(size = 16, face = "bold"),
+      plot.subtitle = element_text(size = 12, color = "gray40"),
+      plot.caption = element_text(size = 10, hjust = 0, color = "gray30", lineheight = 1.3),
+      plot.margin = margin(10, 10, 20, 10)
     )
   )
 
 # Save
 output_path <- file.path(output_dir, "figure3_covariates_combined.png")
-ggsave(output_path, combined_fig, width = 14, height = 16, dpi = 300)
+ggsave(output_path, combined_fig, width = 14, height = 18, dpi = 300)
 cat("\nSaved combined figure to:", output_path, "\n")
 
 # Also save PDF
 output_pdf <- file.path(output_dir, "figure3_covariates_combined.pdf")
-ggsave(output_pdf, combined_fig, width = 14, height = 16)
+ggsave(output_pdf, combined_fig, width = 14, height = 18)
 cat("Saved PDF to:", output_pdf, "\n")
