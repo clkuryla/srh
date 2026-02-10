@@ -1055,3 +1055,181 @@ plot_medpolish_all_surveys <- function(all_effects, dimension) {
       plot.title  = element_text(color = color)
     )
 }
+
+
+# ==============================================================================
+# Combined Grid Figure (3 rows × 6 surveys)
+# ==============================================================================
+
+#' Create a single medpolish subplot for the combined grid
+#'
+#' Plots direct row/column effects from two medpolish slices, overlaid
+#' with different shapes and linetypes per source slice.
+#'
+#' @param df Data frame with value, effect, source_slice columns
+#' @param color Character: line/point color (hex)
+#' @param show_title Show survey name above plot? (TRUE for row 1 only)
+#' @param title_text Survey name text
+#' @param show_ylabel Show y-axis label? (TRUE for column 1 only)
+#' @param ylabel_text Y-axis label text
+#' @param y_limits Numeric vector c(lo, hi) for shared y-axis, or NULL for free
+#' @param base_size Base font size
+#' @return ggplot object
+create_medpolish_subplot <- function(df, color,
+                                     show_title = FALSE, title_text = "",
+                                     show_ylabel = FALSE, ylabel_text = "",
+                                     y_limits = NULL,
+                                     base_size = 20) {
+
+  df <- df |> filter(!is.na(value), !is.na(effect))
+
+  p <- ggplot(df, aes(x = value, y = effect,
+                       shape = source_slice, linetype = source_slice)) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray60",
+               linewidth = 0.3) +
+    geom_line(color = color, linewidth = 0.6) +
+    geom_point(color = color, size = 2) +
+    scale_shape_manual(values = c("AP" = 16, "AC" = 17, "PC" = 15),
+                       name = "Source") +
+    scale_linetype_manual(values = c("AP" = "solid", "AC" = "dashed",
+                                      "PC" = "dotted"),
+                          name = "Source")
+
+  if (!is.null(y_limits)) {
+    p <- p + coord_cartesian(ylim = y_limits)
+  }
+
+  p <- p + labs(
+    title = if (show_title) title_text else NULL,
+    x = NULL,
+    y = if (show_ylabel) ylabel_text else NULL
+  )
+
+  # Compact theme (matches APCI grid subplot style)
+  p <- p +
+    theme_minimal(base_size = base_size) +
+    theme(
+      panel.grid.minor = element_blank(),
+      panel.grid.major = element_line(color = "gray90", linewidth = 0.25),
+      plot.title = element_text(size = base_size + 2, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = base_size),
+      axis.text = element_text(size = base_size - 1, color = "gray30"),
+      axis.text.x = element_text(size = base_size - 1, color = "gray30",
+                                  angle = 45, hjust = 1),
+      plot.margin = margin(3, 5, 3, 5),
+      legend.position = "none"
+    )
+
+  p
+}
+
+
+#' Combined 3-row x 6-column medpolish grid figure
+#'
+#' Creates a publication-ready figure with direct medpolish effects in a grid:
+#'   Row 1: Age effects (from AP and AC slices)
+#'   Row 2: Period effects (from AP and PC slices)
+#'   Row 3: Cohort effects (from AC and PC slices)
+#'
+#' Rows 1-2 share the same y-axis (Age and Period main effects).
+#' Row 3 has a free y-axis (Cohort effects may differ in scale).
+#'
+#' @param all_direct_effects Tibble from medpolish_direct_effects_all_surveys.csv
+#' @param survey_order Character vector for column ordering
+#' @param base_size Base font size (default 20)
+#' @return patchwork object
+plot_medpolish_combined_grid <- function(all_direct_effects,
+                                         survey_order = c("BRFSS", "MEPS", "NHIS",
+                                                           "CPS", "NHANES", "GSS"),
+                                         base_size = 20) {
+
+  n_surveys <- length(survey_order)
+
+  # --- Shared y-limits for Age and Period rows ---
+  ap_data <- all_direct_effects |>
+    filter(dimension %in% c("Age", "Period"), !is.na(effect))
+  shared_ylim <- range(ap_data$effect)
+  pad <- diff(shared_ylim) * 0.05
+  shared_ylim <- shared_ylim + c(-pad, pad)
+
+  # --- Build 3 x n_surveys subplot lists ---
+  row1_plots <- row2_plots <- row3_plots <- vector("list", n_surveys)
+
+  for (i in seq_along(survey_order)) {
+    svy <- survey_order[i]
+    is_first <- (i == 1)
+
+    df_age    <- all_direct_effects |> filter(survey == svy, dimension == "Age")
+    df_period <- all_direct_effects |> filter(survey == svy, dimension == "Period")
+    df_cohort <- all_direct_effects |> filter(survey == svy, dimension == "Cohort")
+
+    # Row 1: Age effects (shared y-axis)
+    row1_plots[[i]] <- create_medpolish_subplot(
+      df = df_age, color = APC_COLORS[["Age"]],
+      show_title = TRUE, title_text = svy,
+      show_ylabel = is_first, ylabel_text = "Age Effect (SRH units)",
+      y_limits = shared_ylim, base_size = base_size
+    )
+
+    # Row 2: Period effects (shared y-axis)
+    row2_plots[[i]] <- create_medpolish_subplot(
+      df = df_period, color = APC_COLORS[["Period"]],
+      show_ylabel = is_first, ylabel_text = "Period Effect (SRH units)",
+      y_limits = shared_ylim, base_size = base_size
+    )
+
+    # Row 3: Cohort effects (free y-axis)
+    row3_plots[[i]] <- create_medpolish_subplot(
+      df = df_cohort, color = APC_COLORS[["Cohort"]],
+      show_ylabel = is_first, ylabel_text = "Cohort Effect (SRH units)",
+      base_size = base_size
+    )
+  }
+
+  # --- Section labels ---
+  label_main <- wrap_elements(full = grid::textGrob(
+    "Age and Period\nMain Effects", rot = 90,
+    gp = grid::gpar(fontsize = base_size + 4, fontface = "bold")
+  ))
+  label_cohort <- wrap_elements(full = grid::textGrob(
+    "Cohort\nEffects", rot = 90,
+    gp = grid::gpar(fontsize = base_size + 4, fontface = "bold")
+  ))
+
+  # --- Assemble rows ---
+  row1 <- wrap_plots(row1_plots, ncol = n_surveys)
+  row2 <- wrap_plots(row2_plots, ncol = n_surveys)
+  row3 <- wrap_plots(row3_plots, ncol = n_surveys)
+
+  # --- Combine: label | content rows for each section ---
+  main_section <- (label_main | (row1 / row2)) +
+    plot_layout(widths = c(0.04, 1))
+  cohort_section <- (label_cohort | row3) +
+    plot_layout(widths = c(0.04, 1))
+
+  spacer <- plot_spacer()
+
+  combined <- main_section / spacer / cohort_section +
+    plot_layout(heights = c(1, 0.02, 0.5))
+
+  # --- Title and subtitle ---
+  combined <- combined +
+    plot_annotation(
+      title = "Median Polish APC Decomposition",
+      subtitle = paste0(
+        "Direct row/column effects from medpolish | ",
+        "Shapes: circle = AP, triangle = AC, square = PC"
+      ),
+      theme = theme(
+        plot.title = element_text(
+          size = base_size + 8, face = "bold", hjust = 0.5
+        ),
+        plot.subtitle = element_text(
+          size = base_size + 2, color = "gray40", hjust = 0.5
+        ),
+        plot.margin = margin(10, 10, 5, 10)
+      )
+    )
+
+  combined
+}
