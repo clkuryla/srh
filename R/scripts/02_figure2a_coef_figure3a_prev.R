@@ -625,6 +625,12 @@ xlim_brfss <- get_year_range(coef_brfss)
 xlim_meps <- get_year_range(coef_meps)
 xlim_nhis <- get_year_range(coef_nhis)
 
+# Global x-axis range so all panels align across surveys
+xlim_global <- c(
+  min(xlim_brfss[1], xlim_meps[1], xlim_nhis[1], na.rm = TRUE),
+  max(xlim_brfss[2], xlim_meps[2], xlim_nhis[2], na.rm = TRUE)
+)
+
 
 # ==============================================================================
 # FIGURE 3: COEFFICIENTS (TRANSPOSED)
@@ -638,59 +644,59 @@ p_brfss_chronic <- create_age_subplot(
   coef_brfss %>% filter(category == "Comorbidity Count", !year %in% brfss_comorb_exclude_years),
   show_title = TRUE, title = "Comorbidity Coefficient",
   ylabel = var_descriptions$BRFSS_chronic,
-  xlim = xlim_brfss, row_label = "BRFSS"
+  xlim = xlim_global, row_label = "BRFSS"
 )
 
 p_brfss_mental <- create_age_subplot(
   coef_brfss %>% filter(category == "Mental Health"),
   show_title = TRUE, title = "Mental Health Coefficient",
   ylabel = var_descriptions$BRFSS_mental,
-  xlim = xlim_brfss
+  xlim = xlim_global
 )
 
 p_brfss_climbing <- create_age_subplot(
   coef_brfss %>% filter(category == "Difficulty Climbing Stairs"),
   show_title = TRUE, title = "Climbing Stairs Coefficient",
   ylabel = var_descriptions$BRFSS_climbing,
-  xlim = xlim_brfss
+  xlim = xlim_global
 )
 
 # --- Row 2: MEPS (with row label) ---
 p_meps_chronic <- create_age_subplot(
   coef_meps %>% filter(category == "Comorbidity Count"),
   ylabel = var_descriptions$MEPS_chronic,
-  xlim = xlim_meps, row_label = "MEPS"
+  xlim = xlim_global, row_label = "MEPS"
 )
 
 p_meps_mental <- create_age_subplot(
   coef_meps %>% filter(category == "Mental Health"),
   ylabel = var_descriptions$MEPS_mental,
-  xlim = xlim_meps
+  xlim = xlim_global
 )
 
 p_meps_climbing <- create_age_subplot(
   coef_meps %>% filter(category == "Difficulty Climbing Stairs"),
   ylabel = var_descriptions$MEPS_climbing,
-  xlim = xlim_meps
+  xlim = xlim_global
 )
 
 # --- Row 3: NHIS (with row label) ---
 p_nhis_chronic <- create_age_subplot(
   coef_nhis %>% filter(category == "Comorbidity Count"),
   ylabel = var_descriptions$NHIS_chronic,
-  xlim = xlim_nhis, row_label = "NHIS"
+  xlim = xlim_global, row_label = "NHIS"
 )
 
 p_nhis_mental <- create_age_subplot(
   coef_nhis %>% filter(category == "Mental Health"),
   ylabel = var_descriptions$NHIS_mental,
-  xlim = xlim_nhis
+  xlim = xlim_global
 )
 
 p_nhis_climbing <- create_age_subplot(
   coef_nhis %>% filter(category == "Difficulty Climbing Stairs"),
   ylabel = var_descriptions$NHIS_climbing,
-  xlim = xlim_nhis
+  xlim = xlim_global
 )
 
 # --- Assemble Figure 3 (transposed: rows=surveys, cols=categories) ---
@@ -727,7 +733,7 @@ p3b_brfss_chronic <- create_age_subplot(
   y_var = "mean",
   show_title = TRUE, title = "Comorbidity Count",
   ylabel = var_descriptions$BRFSS_chronic,
-  xlim = xlim_brfss, show_hline = FALSE, row_label = "BRFSS"
+  xlim = xlim_global, show_hline = FALSE, row_label = "BRFSS"
 )
 
 p3b_brfss_mental <- create_age_subplot(
@@ -735,7 +741,7 @@ p3b_brfss_mental <- create_age_subplot(
   y_var = "mean",
   show_title = TRUE, title = "Mental Health",
   ylabel = var_descriptions$BRFSS_mental,
-  xlim = xlim_brfss, show_hline = FALSE
+  xlim = xlim_global, show_hline = FALSE
 )
 
 p3b_brfss_climbing <- create_age_subplot(
@@ -743,7 +749,7 @@ p3b_brfss_climbing <- create_age_subplot(
   y_var = "mean",
   show_title = TRUE, title = "Difficulty Climbing Stairs",
   ylabel = var_descriptions$BRFSS_climbing,
-  xlim = xlim_brfss, show_hline = FALSE
+  xlim = xlim_global, show_hline = FALSE
 )
 
 # --- Row 2: MEPS (with row label) ---
@@ -751,21 +757,21 @@ p3b_meps_chronic <- create_age_subplot(
   prev_meps %>% filter(category == "Comorbidity Count"),
   y_var = "mean",
   ylabel = var_descriptions$MEPS_chronic,
-  xlim = xlim_meps, show_hline = FALSE, row_label = "MEPS"
+  xlim = xlim_global, show_hline = FALSE, row_label = "MEPS"
 )
 
 p3b_meps_mental <- create_age_subplot(
   prev_meps %>% filter(category == "Mental Health"),
   y_var = "mean",
   ylabel = var_descriptions$MEPS_mental,
-  xlim = xlim_meps, show_hline = FALSE
+  xlim = xlim_global, show_hline = FALSE
 )
 
 p3b_meps_climbing <- create_age_subplot(
   prev_meps %>% filter(category == "Difficulty Climbing Stairs"),
   y_var = "mean",
   ylabel = var_descriptions$MEPS_climbing,
-  xlim = xlim_meps, show_hline = FALSE
+  xlim = xlim_global, show_hline = FALSE
 )
 
 # --- Row 3: NHIS (with row label) ---
@@ -773,21 +779,21 @@ p3b_nhis_chronic <- create_age_subplot(
   prev_nhis %>% filter(category == "Comorbidity Count"),
   y_var = "mean",
   ylabel = var_descriptions$NHIS_chronic,
-  xlim = xlim_nhis, show_hline = FALSE, row_label = "NHIS"
+  xlim = xlim_global, show_hline = FALSE, row_label = "NHIS"
 )
 
 p3b_nhis_mental <- create_age_subplot(
   prev_nhis %>% filter(category == "Mental Health"),
   y_var = "mean",
   ylabel = var_descriptions$NHIS_mental,
-  xlim = xlim_nhis, show_hline = FALSE
+  xlim = xlim_global, show_hline = FALSE
 )
 
 p3b_nhis_climbing <- create_age_subplot(
   prev_nhis %>% filter(category == "Difficulty Climbing Stairs"),
   y_var = "mean",
   ylabel = var_descriptions$NHIS_climbing,
-  xlim = xlim_nhis, show_hline = FALSE
+  xlim = xlim_global, show_hline = FALSE
 )
 
 # --- Assemble Figure 3B (transposed: rows=surveys, cols=categories) ---
