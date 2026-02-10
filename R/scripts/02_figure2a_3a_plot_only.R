@@ -54,125 +54,146 @@ brfss_comorb_exclude_years <- c(2006, 2008, 2010)
 
 
 # ==============================================================================
-# PART 1: LOAD AND PREPARE DATA
+# PART 1: LOAD DATA (cached results or recompute)
 # ==============================================================================
 
-message("\n========== Loading survey data ==========\n")
+# Cache file paths for pre-computed results
+cache_coef_brfss <- file.path(tables_dir, "fig2a_coef_brfss.rds")
+cache_coef_meps  <- file.path(tables_dir, "fig2a_coef_meps.rds")
+cache_coef_nhis  <- file.path(tables_dir, "fig2a_coef_nhis.rds")
+cache_prev_brfss <- file.path(tables_dir, "fig3a_prev_brfss.rds")
+cache_prev_meps  <- file.path(tables_dir, "fig3a_prev_meps.rds")
+cache_prev_nhis  <- file.path(tables_dir, "fig3a_prev_nhis.rds")
 
-# --- Load BRFSS ---
-data_brfss <- read_rds(derived_path("data_brfss.rds")) %>%
-  filter(year >= brfss_start_year) %>%
-  add_age_group(age_var = age, scheme = "B")
+all_cached <- all(file.exists(
+  cache_coef_brfss, cache_coef_meps, cache_coef_nhis,
+  cache_prev_brfss, cache_prev_meps, cache_prev_nhis
+))
 
-brfss_comorb_vars <- c("diabetes_dx", "chd_dx", "stroke_dx", "arthritis_dx")
-brfss_comorb_vars <- intersect(brfss_comorb_vars, names(data_brfss))
-data_brfss <- data_brfss %>%
-  mutate(comorb_count = rowSums(across(all_of(brfss_comorb_vars), ~ as.numeric(.x == 1)), na.rm = TRUE))
+if (all_cached) {
+  # --- Fast path: load pre-computed tables ---
+  message("\n========== Loading cached results ==========\n")
+  coef_brfss <- read_rds(cache_coef_brfss)
+  coef_meps  <- read_rds(cache_coef_meps)
+  coef_nhis  <- read_rds(cache_coef_nhis)
+  prev_brfss <- read_rds(cache_prev_brfss)
+  prev_meps  <- read_rds(cache_prev_meps)
+  prev_nhis  <- read_rds(cache_prev_nhis)
+  message("Loaded cached coef & prev tables from ", tables_dir)
 
-message("BRFSS: ", nrow(data_brfss), " rows, years ", min(data_brfss$year), "-", max(data_brfss$year))
+} else {
+  # --- Slow path: load raw data, run regressions, compute prevalence ---
+  message("\n========== Loading survey data (no cache found) ==========\n")
 
-# --- Load MEPS ---
-data_meps <- read_rds(derived_path("data_meps.rds")) %>%
-  filter(year >= meps_start_year) %>%
-  add_age_group(age_var = age, scheme = "B")
+  # --- Load BRFSS ---
+  data_brfss <- read_rds(derived_path("data_brfss.rds")) %>%
+    filter(year >= brfss_start_year) %>%
+    add_age_group(age_var = age, scheme = "B")
 
-meps_comorb_vars <- c("DIABETICEV", "HYPERTENEV", "CHEARTDIEV", "STROKEV", "ARTHGLUPEV", "CANCEREV", "ASTHMAEV")
-meps_comorb_vars <- intersect(meps_comorb_vars, names(data_meps))
-data_meps <- data_meps %>%
-  mutate(
-    comorb_count = rowSums(across(all_of(meps_comorb_vars), ~ as.numeric(.x == 1)), na.rm = TRUE),
-    K6SUM_scaled = rescale_01(K6SUM, min_val = 0, max_val = 24) * 6
+  brfss_comorb_vars <- c("diabetes_dx", "chd_dx", "stroke_dx", "arthritis_dx")
+  brfss_comorb_vars <- intersect(brfss_comorb_vars, names(data_brfss))
+  data_brfss <- data_brfss %>%
+    mutate(comorb_count = rowSums(across(all_of(brfss_comorb_vars), ~ as.numeric(.x == 1)), na.rm = TRUE))
+
+  message("BRFSS: ", nrow(data_brfss), " rows, years ", min(data_brfss$year), "-", max(data_brfss$year))
+
+  # --- Load MEPS ---
+  data_meps <- read_rds(derived_path("data_meps.rds")) %>%
+    filter(year >= meps_start_year) %>%
+    add_age_group(age_var = age, scheme = "B")
+
+  meps_comorb_vars <- c("DIABETICEV", "HYPERTENEV", "CHEARTDIEV", "STROKEV", "ARTHGLUPEV", "CANCEREV", "ASTHMAEV")
+  meps_comorb_vars <- intersect(meps_comorb_vars, names(data_meps))
+  data_meps <- data_meps %>%
+    mutate(
+      comorb_count = rowSums(across(all_of(meps_comorb_vars), ~ as.numeric(.x == 1)), na.rm = TRUE),
+      K6SUM_scaled = rescale_01(K6SUM, min_val = 0, max_val = 24) * 6
+    )
+
+  message("MEPS: ", nrow(data_meps), " rows, years ", min(data_meps$year), "-", max(data_meps$year))
+
+  # --- Load NHIS ---
+  data_nhis <- read_rds(derived_path("data_nhis.rds")) %>%
+    filter(year >= nhis_start_year) %>%
+    add_age_group(age_var = age, scheme = "B")
+
+  nhis_comorb_vars <- c("DIABETICEV", "HYPERTENEV", "CHEARTDIEV", "STROKEV", "ARTHGLUPEV", "COPDEV", "CANCEREV", "ASTHMAEV")
+  nhis_comorb_vars <- intersect(nhis_comorb_vars, names(data_nhis))
+  data_nhis <- data_nhis %>%
+    mutate(
+      comorb_count = rowSums(across(all_of(nhis_comorb_vars), ~ as.numeric(.x == 1)), na.rm = TRUE),
+      k6_scaled = rescale_01(k6, min_val = 0, max_val = 24) * 6
+    )
+
+  message("NHIS: ", nrow(data_nhis), " rows, years ", min(data_nhis$year), "-", max(data_nhis$year))
+
+  # --- Run regressions ---
+  message("\n========== Running regressions ==========\n")
+
+  safe_bind <- function(...) {
+    dfs <- list(...)
+    dfs <- dfs[!sapply(dfs, is.null)]
+    if (length(dfs) == 0) return(NULL)
+    bind_rows(dfs)
+  }
+
+  message("BRFSS regressions...")
+  coef_brfss <- safe_bind(
+    regress_covariate_by_age_year(data_brfss, "comorb_count", "Comorbidity Count", "BRFSS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Comorbidity Count"),
+    regress_covariate_by_age_year(data_brfss, "ment_bad", "Mental Days (0-30)", "BRFSS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Mental Health"),
+    regress_covariate_by_age_year(data_brfss, "diffwalk", "Difficulty Climbing (0/1)", "BRFSS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Difficulty Climbing Stairs")
   )
 
-message("MEPS: ", nrow(data_meps), " rows, years ", min(data_meps$year), "-", max(data_meps$year))
-
-# --- Load NHIS ---
-data_nhis <- read_rds(derived_path("data_nhis.rds")) %>%
-  filter(year >= nhis_start_year) %>%
-  add_age_group(age_var = age, scheme = "B")
-
-nhis_comorb_vars <- c("DIABETICEV", "HYPERTENEV", "CHEARTDIEV", "STROKEV", "ARTHGLUPEV", "COPDEV", "CANCEREV", "ASTHMAEV")
-nhis_comorb_vars <- intersect(nhis_comorb_vars, names(data_nhis))
-data_nhis <- data_nhis %>%
-  mutate(
-    comorb_count = rowSums(across(all_of(nhis_comorb_vars), ~ as.numeric(.x == 1)), na.rm = TRUE),
-    k6_scaled = rescale_01(k6, min_val = 0, max_val = 24) * 6
+  message("MEPS regressions...")
+  coef_meps <- safe_bind(
+    regress_covariate_by_age_year(data_meps, "comorb_count", "Comorbidity Count", "MEPS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Comorbidity Count"),
+    regress_covariate_by_age_year(data_meps, "K6SUM_scaled", "K6 (0-6)", "MEPS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Mental Health"),
+    regress_covariate_by_age_year(data_meps, "ADCLIM", "Difficulty Climbing (0-2)", "MEPS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Difficulty Climbing Stairs")
   )
 
-message("NHIS: ", nrow(data_nhis), " rows, years ", min(data_nhis$year), "-", max(data_nhis$year))
+  message("NHIS regressions...")
+  coef_nhis <- safe_bind(
+    regress_covariate_by_age_year(data_nhis, "comorb_count", "Comorbidity Count", "NHIS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Comorbidity Count"),
+    regress_covariate_by_age_year(data_nhis, "k6_scaled", "K6 (0-6)", "NHIS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Mental Health"),
+    regress_covariate_by_age_year(data_nhis, "lawalkclimdif", "Difficulty Climbing (1-4)", "NHIS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Difficulty Climbing Stairs")
+  )
 
+  # --- Compute prevalence/means ---
+  message("\n========== Computing prevalence/means ==========\n")
 
-# ==============================================================================
-# PART 2: RUN REGRESSIONS (COEFFICIENTS)
-# ==============================================================================
+  message("BRFSS prevalence...")
+  prev_brfss <- safe_bind(
+    mean_by_age_year(data_brfss, "comorb_count", "Comorbidity Count", "BRFSS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Comorbidity Count"),
+    mean_by_age_year(data_brfss, "ment_bad", "Mental Days (0-30)", "BRFSS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Mental Health"),
+    mean_by_age_year(data_brfss, "diffwalk", "Difficulty Climbing (0/1)", "BRFSS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Difficulty Climbing Stairs")
+  )
 
-message("\n========== Running regressions ==========\n")
+  message("MEPS prevalence...")
+  prev_meps <- safe_bind(
+    mean_by_age_year(data_meps, "comorb_count", "Comorbidity Count", "MEPS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Comorbidity Count"),
+    mean_by_age_year(data_meps, "K6SUM_scaled", "K6 (0-6)", "MEPS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Mental Health"),
+    mean_by_age_year(data_meps, "ADCLIM", "Difficulty Climbing (0-2)", "MEPS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Difficulty Climbing Stairs")
+  )
 
-# Helper to safely combine results
-safe_bind <- function(...) {
-  dfs <- list(...)
-  dfs <- dfs[!sapply(dfs, is.null)]
-  if (length(dfs) == 0) return(NULL)
-  bind_rows(dfs)
+  message("NHIS prevalence...")
+  prev_nhis <- safe_bind(
+    mean_by_age_year(data_nhis, "comorb_count", "Comorbidity Count", "NHIS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Comorbidity Count"),
+    mean_by_age_year(data_nhis, "k6_scaled", "K6 (0-6)", "NHIS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Mental Health"),
+    mean_by_age_year(data_nhis, "lawalkclimdif", "Difficulty Climbing (1-4)", "NHIS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Difficulty Climbing Stairs")
+  )
+
+  # Free memory
+  rm(data_brfss, data_meps, data_nhis); gc()
+
+  # --- Save cached results ---
+  message("\nSaving cached results to ", tables_dir)
+  write_rds(coef_brfss, cache_coef_brfss)
+  write_rds(coef_meps,  cache_coef_meps)
+  write_rds(coef_nhis,  cache_coef_nhis)
+  write_rds(prev_brfss, cache_prev_brfss)
+  write_rds(prev_meps,  cache_prev_meps)
+  write_rds(prev_nhis,  cache_prev_nhis)
 }
-
-# --- BRFSS ---
-message("BRFSS regressions...")
-coef_brfss <- safe_bind(
-  regress_covariate_by_age_year(data_brfss, "comorb_count", "Comorbidity Count", "BRFSS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Comorbidity Count"),
-  regress_covariate_by_age_year(data_brfss, "ment_bad", "Mental Days (0-30)", "BRFSS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Mental Health"),
-  regress_covariate_by_age_year(data_brfss, "diffwalk", "Difficulty Climbing (0/1)", "BRFSS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Difficulty Climbing Stairs")
-)
-
-# --- MEPS ---
-message("MEPS regressions...")
-coef_meps <- safe_bind(
-  regress_covariate_by_age_year(data_meps, "comorb_count", "Comorbidity Count", "MEPS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Comorbidity Count"),
-  regress_covariate_by_age_year(data_meps, "K6SUM_scaled", "K6 (0-6)", "MEPS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Mental Health"),
-  regress_covariate_by_age_year(data_meps, "ADCLIM", "Difficulty Climbing (0-2)", "MEPS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Difficulty Climbing Stairs")
-)
-
-# --- NHIS ---
-message("NHIS regressions...")
-coef_nhis <- safe_bind(
-  regress_covariate_by_age_year(data_nhis, "comorb_count", "Comorbidity Count", "NHIS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Comorbidity Count"),
-  regress_covariate_by_age_year(data_nhis, "k6_scaled", "K6 (0-6)", "NHIS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Mental Health"),
-  regress_covariate_by_age_year(data_nhis, "lawalkclimdif", "Difficulty Climbing (1-4)", "NHIS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Difficulty Climbing Stairs")
-)
-
-
-# ==============================================================================
-# PART 3: COMPUTE PREVALENCE/MEANS
-# ==============================================================================
-
-message("\n========== Computing prevalence/means ==========\n")
-
-# --- BRFSS ---
-message("BRFSS prevalence...")
-prev_brfss <- safe_bind(
-  mean_by_age_year(data_brfss, "comorb_count", "Comorbidity Count", "BRFSS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Comorbidity Count"),
-  mean_by_age_year(data_brfss, "ment_bad", "Mental Days (0-30)", "BRFSS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Mental Health"),
-  mean_by_age_year(data_brfss, "diffwalk", "Difficulty Climbing (0/1)", "BRFSS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Difficulty Climbing Stairs")
-)
-
-# --- MEPS ---
-message("MEPS prevalence...")
-prev_meps <- safe_bind(
-  mean_by_age_year(data_meps, "comorb_count", "Comorbidity Count", "MEPS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Comorbidity Count"),
-  mean_by_age_year(data_meps, "K6SUM_scaled", "K6 (0-6)", "MEPS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Mental Health"),
-  mean_by_age_year(data_meps, "ADCLIM", "Difficulty Climbing (0-2)", "MEPS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Difficulty Climbing Stairs")
-)
-
-# --- NHIS ---
-message("NHIS prevalence...")
-prev_nhis <- safe_bind(
-  mean_by_age_year(data_nhis, "comorb_count", "Comorbidity Count", "NHIS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Comorbidity Count"),
-  mean_by_age_year(data_nhis, "k6_scaled", "K6 (0-6)", "NHIS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Mental Health"),
-  mean_by_age_year(data_nhis, "lawalkclimdif", "Difficulty Climbing (1-4)", "NHIS", psu_var = NULL, strata_var = NULL) %>% mutate(category = "Difficulty Climbing Stairs")
-)
-
-# Free memory
-rm(data_brfss, data_meps, data_nhis); gc()
 
 message("\nData ready:")
 message("  BRFSS coef: ", nrow(coef_brfss), " rows, years ", min(coef_brfss$year), "-", max(coef_brfss$year))
@@ -286,6 +307,12 @@ xlim_brfss <- get_year_range(coef_brfss)
 xlim_meps <- get_year_range(coef_meps)
 xlim_nhis <- get_year_range(coef_nhis)
 
+# Global x-axis range so all panels align across surveys
+xlim_global <- c(
+  min(xlim_brfss[1], xlim_meps[1], xlim_nhis[1], na.rm = TRUE),
+  max(xlim_brfss[2], xlim_meps[2], xlim_nhis[2], na.rm = TRUE)
+)
+
 
 # ==============================================================================
 # PART 3: CREATE FIGURE 2A (COEFFICIENTS)
@@ -302,59 +329,59 @@ p_brfss_chronic <- create_age_subplot(
                         !year %in% brfss_comorb_exclude_years),
   show_title = TRUE, title = "Comorbidity Coefficient",
   ylabel = "Comorbidities",
-  xlim = xlim_brfss, row_label = "BRFSS"
+  xlim = xlim_global, row_label = "BRFSS"
 )
 
 p_brfss_mental <- create_age_subplot(
   coef_brfss %>% filter(category == "Mental Health"),
   show_title = TRUE, title = "Mental Health Coefficient",
   ylabel = var_descriptions$BRFSS_mental,
-  xlim = xlim_brfss
+  xlim = xlim_global
 )
 
 p_brfss_physical <- create_age_subplot(
   coef_brfss %>% filter(category == "Difficulty Climbing Stairs"),
   show_title = TRUE, title = "Physical Limit. Coefficient",
   ylabel = var_descriptions$BRFSS_physical,
-  xlim = xlim_brfss
+  xlim = xlim_global
 )
 
 # --- Row 2: MEPS ---
 p_meps_chronic <- create_age_subplot(
   coef_meps %>% filter(category == "Comorbidity Count"),
   ylabel = "Comorbidities",
-  xlim = xlim_meps, row_label = "MEPS"
+  xlim = xlim_global, row_label = "MEPS"
 )
 
 p_meps_mental <- create_age_subplot(
   coef_meps %>% filter(category == "Mental Health"),
   ylabel = var_descriptions$MEPS_mental,
-  xlim = xlim_meps
+  xlim = xlim_global
 )
 
 p_meps_physical <- create_age_subplot(
   coef_meps %>% filter(category == "Difficulty Climbing Stairs"),
   ylabel = var_descriptions$MEPS_physical,
-  xlim = xlim_meps
+  xlim = xlim_global
 )
 
 # --- Row 3: NHIS ---
 p_nhis_chronic <- create_age_subplot(
   coef_nhis %>% filter(category == "Comorbidity Count"),
   ylabel = "Comorbidities",
-  xlim = xlim_nhis, row_label = "NHIS"
+  xlim = xlim_global, row_label = "NHIS"
 )
 
 p_nhis_mental <- create_age_subplot(
   coef_nhis %>% filter(category == "Mental Health"),
   ylabel = var_descriptions$NHIS_mental,
-  xlim = xlim_nhis
+  xlim = xlim_global
 )
 
 p_nhis_physical <- create_age_subplot(
   coef_nhis %>% filter(category == "Difficulty Climbing Stairs"),
   ylabel = var_descriptions$NHIS_physical,
-  xlim = xlim_nhis
+  xlim = xlim_global
 )
 
 # --- Assemble Figure 2A ---
@@ -402,7 +429,7 @@ p3a_brfss_chronic <- create_age_subplot(
   y_var = "mean",
   show_title = TRUE, title = "Comorbidity Mean",
   ylabel = var_descriptions$BRFSS_chronic,
-  xlim = xlim_brfss, show_hline = FALSE, row_label = "BRFSS"
+  xlim = xlim_global, show_hline = FALSE, row_label = "BRFSS"
 )
 
 p3a_brfss_mental <- create_age_subplot(
@@ -410,7 +437,7 @@ p3a_brfss_mental <- create_age_subplot(
   y_var = "mean",
   show_title = TRUE, title = "Mental Health Mean",
   ylabel = var_descriptions$BRFSS_mental,
-  xlim = xlim_brfss, show_hline = FALSE
+  xlim = xlim_global, show_hline = FALSE
 )
 
 p3a_brfss_physical <- create_age_subplot(
@@ -418,7 +445,7 @@ p3a_brfss_physical <- create_age_subplot(
   y_var = "mean",
   show_title = TRUE, title = "Physical Limit. Mean",
   ylabel = var_descriptions$BRFSS_physical,
-  xlim = xlim_brfss, show_hline = FALSE
+  xlim = xlim_global, show_hline = FALSE
 )
 
 # --- Row 2: MEPS ---
@@ -426,21 +453,21 @@ p3a_meps_chronic <- create_age_subplot(
   prev_meps %>% filter(category == "Comorbidity Count"),
   y_var = "mean",
   ylabel = var_descriptions$MEPS_chronic,
-  xlim = xlim_meps, show_hline = FALSE, row_label = "MEPS"
+  xlim = xlim_global, show_hline = FALSE, row_label = "MEPS"
 )
 
 p3a_meps_mental <- create_age_subplot(
   prev_meps %>% filter(category == "Mental Health"),
   y_var = "mean",
   ylabel = var_descriptions$MEPS_mental,
-  xlim = xlim_meps, show_hline = FALSE
+  xlim = xlim_global, show_hline = FALSE
 )
 
 p3a_meps_physical <- create_age_subplot(
   prev_meps %>% filter(category == "Difficulty Climbing Stairs"),
   y_var = "mean",
   ylabel = var_descriptions$MEPS_physical,
-  xlim = xlim_meps, show_hline = FALSE
+  xlim = xlim_global, show_hline = FALSE
 )
 
 # --- Row 3: NHIS ---
@@ -448,21 +475,21 @@ p3a_nhis_chronic <- create_age_subplot(
   prev_nhis %>% filter(category == "Comorbidity Count"),
   y_var = "mean",
   ylabel = var_descriptions$NHIS_chronic,
-  xlim = xlim_nhis, show_hline = FALSE, row_label = "NHIS"
+  xlim = xlim_global, show_hline = FALSE, row_label = "NHIS"
 )
 
 p3a_nhis_mental <- create_age_subplot(
   prev_nhis %>% filter(category == "Mental Health"),
   y_var = "mean",
   ylabel = var_descriptions$NHIS_mental,
-  xlim = xlim_nhis, show_hline = FALSE
+  xlim = xlim_global, show_hline = FALSE
 )
 
 p3a_nhis_physical <- create_age_subplot(
   prev_nhis %>% filter(category == "Difficulty Climbing Stairs"),
   y_var = "mean",
   ylabel = var_descriptions$NHIS_physical,
-  xlim = xlim_nhis, show_hline = FALSE
+  xlim = xlim_global, show_hline = FALSE
 )
 
 # --- Assemble Figure 3A ---
