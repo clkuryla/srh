@@ -638,6 +638,8 @@ plot_apci_main_effects_all <- function(all_age_effects,
 create_apci_subplot <- function(df, x_var, color,
                                 show_title = FALSE, title_text = "",
                                 show_ylabel = FALSE, ylabel_text = "",
+                                panel_label = NULL,
+                                tag_position = c(-0.05, 0.88),
                                 show_significance = FALSE,
                                 y_limits = NULL,
                                 base_size = 20) {
@@ -681,6 +683,7 @@ create_apci_subplot <- function(df, x_var, color,
   # Labels
   p <- p + labs(
     title = if (show_title) title_text else NULL,
+    tag = panel_label,
     x = NULL,
     y = if (show_ylabel) ylabel_text else NULL
   )
@@ -692,6 +695,8 @@ create_apci_subplot <- function(df, x_var, color,
       panel.grid.minor = element_blank(),
       panel.grid.major = element_line(color = "gray90", linewidth = 0.25),
       plot.title = element_text(size = base_size + 2, face = "bold", hjust = 0.5),
+      plot.tag = element_text(size = base_size + 4, face = "bold"),
+      plot.tag.position = tag_position,
       axis.title = element_text(size = base_size),
       axis.text = element_text(size = base_size - 1, color = "gray30"),
       axis.text.x = element_text(size = base_size - 1, color = "gray30",
@@ -764,14 +769,17 @@ plot_apci_combined_grid <- function(all_cohort_avgs, all_cohort_slopes,
     row1_plots[[i]] <- create_apci_subplot(
       df = df_age, x_var = "age_midpoint", color = "#0072B2",
       show_title = TRUE, title_text = svy,
-      show_ylabel = is_first, ylabel_text = "Age Effect (SRH units)",
+      show_ylabel = is_first, ylabel_text = "Age Effect",
+      panel_label = if (is_first) "A" else NULL,
+      tag_position = c(-0.05, 0.82),
       y_limits = shared_ylim, base_size = base_size
     )
 
     # Row 2: Period main effects (shared y-axis)
     row2_plots[[i]] <- create_apci_subplot(
       df = df_period, x_var = "period_midpoint", color = "#009E73",
-      show_ylabel = is_first, ylabel_text = "Period Effect (SRH units)",
+      show_ylabel = is_first, ylabel_text = "Period Effect",
+      panel_label = if (is_first) "B" else NULL,
       y_limits = shared_ylim, base_size = base_size
     )
 
@@ -779,6 +787,7 @@ plot_apci_combined_grid <- function(all_cohort_avgs, all_cohort_slopes,
     row3_plots[[i]] <- create_apci_subplot(
       df = df_avg, x_var = "cohort_midpoint", color = "#CC79A7",
       show_ylabel = is_first, ylabel_text = "Cohort Deviation",
+      panel_label = if (is_first) "C" else NULL,
       show_significance = TRUE, base_size = base_size
     )
 
@@ -786,18 +795,19 @@ plot_apci_combined_grid <- function(all_cohort_avgs, all_cohort_slopes,
     row4_plots[[i]] <- create_apci_subplot(
       df = df_slope, x_var = "cohort_midpoint", color = "#E69F00",
       show_ylabel = is_first, ylabel_text = "Cohort Slope",
+      panel_label = if (is_first) "D" else NULL,
       show_significance = TRUE, base_size = base_size
     )
   }
 
   # --- Section labels (rotated text on left margin) ---
   label_cohort <- wrap_elements(full = grid::textGrob(
-    "Cohort Deviations\nand Slopes", rot = 90,
+    "Cohort Deviations and Slopes", rot = 90,
     gp = grid::gpar(fontsize = base_size + 4, fontface = "bold")
   ))
 
   label_main <- wrap_elements(full = grid::textGrob(
-    "Age and Period\nMain Effects", rot = 90,
+    "Age and Period Main Effects", rot = 90,
     gp = grid::gpar(fontsize = base_size + 4, fontface = "bold")
   ))
 
