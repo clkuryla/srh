@@ -674,6 +674,29 @@ plot_fig1_combined_3row <- function(
       )
   }
 
+  # --- Add panel labels (A, B, C) using cowplot overlay ---
+  # Heights: c(1, 0.8, 0.03, 0.8, 0.08) + legend
+  total_h <- 1 + 0.8 + 0.03 + 0.8 + 0.08  # 2.71
+  legend_frac <- 0.06  # approximate legend fraction of figure
+  scale <- 1 - legend_frac
+  row1_top <- 1.0
+  row2_top <- 1.0 - (1.0 / total_h) * scale
+  row3_top <- 1.0 - ((1.0 + 0.8 + 0.03) / total_h) * scale
+
+  label_x <- 0.003
+  combined <- cowplot::ggdraw() +
+    theme(plot.background = element_rect(fill = "white", colour = NA)) +
+    cowplot::draw_plot(combined, x = 0.02, y = 0, width = 0.98, height = 1) +
+    cowplot::draw_label("A", x = label_x, y = row1_top - 0.04,
+                        hjust = 0, vjust = 1, fontface = "bold", size = 18,
+                        colour = "black") +
+    cowplot::draw_label("B", x = label_x, y = row2_top,
+                        hjust = 0, vjust = 1, fontface = "bold", size = 18,
+                        colour = "black") +
+    cowplot::draw_label("C", x = label_x, y = row3_top,
+                        hjust = 0, vjust = 1, fontface = "bold", size = 18,
+                        colour = "black")
+
   return(combined)
 }
 
