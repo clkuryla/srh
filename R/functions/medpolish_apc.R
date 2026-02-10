@@ -646,8 +646,6 @@ plot_medpolish_combined <- function(all_effects,
         geom_hline(yintercept = 0, linetype = "dashed",
                    color = "gray60", linewidth = 0.3) +
         geom_point(color = color, size = 1.8) +
-        geom_smooth(method = "lm", se = TRUE, color = color,
-                    fill = color, alpha = 0.12, linewidth = 0.6) +
         theme_srh(base_size = 11) +
         theme(
           plot.margin = margin(2, 4, 2, 4),
@@ -725,8 +723,6 @@ plot_medpolish_combined_simple <- function(all_effects,
         geom_hline(yintercept = 0, linetype = "dashed",
                    color = "gray60", linewidth = 0.3) +
         geom_point(color = color, size = 1.8) +
-        geom_smooth(method = "lm", se = TRUE, color = color,
-                    fill = color, alpha = 0.12, linewidth = 0.6) +
         theme_srh(base_size = 11) +
         theme(
           plot.margin = margin(2, 4, 2, 4),
@@ -753,7 +749,7 @@ plot_medpolish_combined_simple <- function(all_effects,
   combined <- wrap_plots(panels, ncol = 3, nrow = n_surveys, byrow = TRUE) +
     plot_annotation(
       title    = "Median Polish APC Effects Across Surveys",
-      subtitle = "Age (blue) | Period (green) | Cohort (pink) — mean residuals + linear trend",
+      subtitle = "Age (blue) | Period (green) | Cohort (pink) — mean residuals",
       theme = theme(
         plot.title    = element_text(size = 16, face = "bold"),
         plot.subtitle = element_text(size = 12, color = "gray40")
@@ -790,8 +786,6 @@ plot_medpolish_effects <- function(effects_df, survey) {
     ggplot(df_dim, aes(x = value, y = effect)) +
       geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
       geom_point(color = color, size = 2.5) +
-      geom_smooth(method = "lm", se = TRUE, color = color,
-                  fill = color, alpha = 0.15, linewidth = 0.8) +
       labs(
         x = dim_name,
         y = "Residual Effect (SRH units)",
@@ -1048,8 +1042,6 @@ plot_medpolish_all_surveys <- function(all_effects, dimension) {
   ggplot(df_dim, aes(x = value, y = effect)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
     geom_point(color = color, size = 2) +
-    geom_smooth(method = "lm", se = TRUE, color = color,
-                fill = color, alpha = 0.15, linewidth = 0.7) +
     facet_wrap(~ survey, scales = "free", ncol = 3) +
     labs(
       x = dimension,
