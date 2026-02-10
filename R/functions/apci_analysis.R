@@ -760,33 +760,33 @@ plot_apci_combined_grid <- function(all_cohort_avgs, all_cohort_slopes,
     df_age    <- all_age_effects    |> filter(survey == svy)
     df_period <- all_period_effects |> filter(survey == svy)
 
-    # Row 1: Cohort deviations
+    # Row 1: Age main effects (shared y-axis)
     row1_plots[[i]] <- create_apci_subplot(
-      df = df_avg, x_var = "cohort_midpoint", color = "#CC79A7",
-      show_title = TRUE, title_text = svy,
-      show_ylabel = is_first, ylabel_text = "Cohort Deviation",
-      show_significance = TRUE, base_size = base_size
-    )
-
-    # Row 2: Cohort slopes
-    row2_plots[[i]] <- create_apci_subplot(
-      df = df_slope, x_var = "cohort_midpoint", color = "#E69F00",
-      show_ylabel = is_first, ylabel_text = "Cohort Slope",
-      show_significance = TRUE, base_size = base_size
-    )
-
-    # Row 3: Age main effects (shared y-axis)
-    row3_plots[[i]] <- create_apci_subplot(
       df = df_age, x_var = "age_midpoint", color = "#0072B2",
+      show_title = TRUE, title_text = svy,
       show_ylabel = is_first, ylabel_text = "Age Effect (SRH units)",
       y_limits = shared_ylim, base_size = base_size
     )
 
-    # Row 4: Period main effects (shared y-axis)
-    row4_plots[[i]] <- create_apci_subplot(
+    # Row 2: Period main effects (shared y-axis)
+    row2_plots[[i]] <- create_apci_subplot(
       df = df_period, x_var = "period_midpoint", color = "#009E73",
       show_ylabel = is_first, ylabel_text = "Period Effect (SRH units)",
       y_limits = shared_ylim, base_size = base_size
+    )
+
+    # Row 3: Cohort deviations
+    row3_plots[[i]] <- create_apci_subplot(
+      df = df_avg, x_var = "cohort_midpoint", color = "#CC79A7",
+      show_ylabel = is_first, ylabel_text = "Cohort Deviation",
+      show_significance = TRUE, base_size = base_size
+    )
+
+    # Row 4: Cohort slopes
+    row4_plots[[i]] <- create_apci_subplot(
+      df = df_slope, x_var = "cohort_midpoint", color = "#E69F00",
+      show_ylabel = is_first, ylabel_text = "Cohort Slope",
+      show_significance = TRUE, base_size = base_size
     )
   }
 
@@ -808,15 +808,15 @@ plot_apci_combined_grid <- function(all_cohort_avgs, all_cohort_slopes,
   row4 <- wrap_plots(row4_plots, ncol = n_surveys)
 
   # --- Combine: label | content rows for each section ---
-  cohort_section <- (label_cohort | (row1 / row2)) +
+  main_section <- (label_main | (row1 / row2)) +
     plot_layout(widths = c(0.04, 1))
-  main_section <- (label_main | (row3 / row4)) +
+  cohort_section <- (label_cohort | (row3 / row4)) +
     plot_layout(widths = c(0.04, 1))
 
   spacer <- plot_spacer()
 
   # Stack sections with thin spacer between
-  combined <- cohort_section / spacer / main_section +
+  combined <- main_section / spacer / cohort_section +
     plot_layout(heights = c(1, 0.03, 1))
 
   # --- Title and subtitle ---
