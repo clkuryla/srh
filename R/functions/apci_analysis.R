@@ -363,7 +363,8 @@ plot_apci_main_effects <- function(results, survey) {
   # Age effects
   p_age <- ggplot(results$age_effects,
                   aes(x = age_midpoint, y = estimate)) +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray40",
+               linewidth = 0.7) +
     geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper),
                 fill = APCI_COLORS[["Age"]], alpha = 0.2) +
     geom_line(color = APCI_COLORS[["Age"]], linewidth = 0.8) +
@@ -376,7 +377,8 @@ plot_apci_main_effects <- function(results, survey) {
   # Period effects
   p_period <- ggplot(results$period_effects,
                      aes(x = period_midpoint, y = estimate)) +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray40",
+               linewidth = 0.7) +
     geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper),
                 fill = APCI_COLORS[["Period"]], alpha = 0.2) +
     geom_line(color = APCI_COLORS[["Period"]], linewidth = 0.8) +
@@ -411,7 +413,8 @@ plot_apci_cohort_averages <- function(results, survey) {
     filter(!is.na(cohort_midpoint))
 
   ggplot(df, aes(x = cohort_midpoint, y = estimate)) +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray40",
+               linewidth = 0.7) +
     geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper),
                 fill = APCI_COLORS[["Cohort"]], alpha = 0.2) +
     geom_line(color = APCI_COLORS[["Cohort"]], linewidth = 0.8) +
@@ -442,7 +445,8 @@ plot_apci_cohort_slopes <- function(results, survey) {
     filter(!is.na(cohort_midpoint))
 
   ggplot(df, aes(x = cohort_midpoint, y = estimate)) +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray40",
+               linewidth = 0.7) +
     geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper),
                 fill = "#E69F00", alpha = 0.2) +
     geom_line(color = "#E69F00", linewidth = 0.8) +
@@ -506,7 +510,8 @@ plot_apci_cohort_avgs_all <- function(all_cohort_avgs,
     mutate(survey = factor(survey, levels = survey_order))
 
   ggplot(df, aes(x = cohort_midpoint, y = estimate)) +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "gray60") +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray40",
+               linewidth = 0.7) +
     geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper),
                 fill = APCI_COLORS[["Cohort"]], alpha = 0.15) +
     geom_line(color = APCI_COLORS[["Cohort"]], linewidth = 0.6) +
@@ -540,7 +545,8 @@ plot_apci_cohort_slopes_all <- function(all_cohort_slopes,
     mutate(survey = factor(survey, levels = survey_order))
 
   ggplot(df, aes(x = cohort_midpoint, y = estimate)) +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "gray60") +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray40",
+               linewidth = 0.7) +
     geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper),
                 fill = "#E69F00", alpha = 0.15) +
     geom_line(color = "#E69F00", linewidth = 0.6) +
@@ -581,7 +587,8 @@ plot_apci_main_effects_all <- function(all_age_effects,
     mutate(survey = factor(survey, levels = survey_order))
 
   p_age <- ggplot(df_age, aes(x = age_midpoint, y = estimate)) +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "gray60") +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray40",
+               linewidth = 0.7) +
     geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper),
                 fill = APCI_COLORS[["Age"]], alpha = 0.15) +
     geom_line(color = APCI_COLORS[["Age"]], linewidth = 0.6) +
@@ -593,7 +600,8 @@ plot_apci_main_effects_all <- function(all_age_effects,
     theme(plot.title = element_text(color = APCI_COLORS[["Age"]]))
 
   p_period <- ggplot(df_period, aes(x = period_midpoint, y = estimate)) +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "gray60") +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray40",
+               linewidth = 0.7) +
     geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper),
                 fill = APCI_COLORS[["Period"]], alpha = 0.15) +
     geom_line(color = APCI_COLORS[["Period"]], linewidth = 0.6) +
@@ -656,8 +664,8 @@ create_apci_subplot <- function(df, x_var, color,
 
   # Base plot
   p <- ggplot(df, aes(x = .data[[x_var]], y = estimate)) +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "gray60",
-               linewidth = 0.3) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray40",
+               linewidth = 0.7) +
     geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper),
                 fill = color, alpha = 0.15) +
     geom_line(color = color, linewidth = 0.6)

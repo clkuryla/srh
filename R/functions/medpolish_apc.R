@@ -509,7 +509,8 @@ plot_direct_effects <- function(direct_effects, survey) {
 
     ggplot(df_dim, aes(x = value, y = effect,
                        shape = source_slice, linetype = source_slice)) +
-      geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+      geom_hline(yintercept = 0, linetype = "dashed", color = "gray40",
+                 linewidth = 0.7) +
       geom_line(color = color, linewidth = 0.7) +
       geom_point(color = color, size = 2.5) +
       scale_shape_manual(values = c("AP" = 16, "AC" = 17, "PC" = 15)) +
@@ -644,7 +645,7 @@ plot_medpolish_combined <- function(all_effects,
 
       p <- ggplot(df_cell, aes(x = value, y = effect)) +
         geom_hline(yintercept = 0, linetype = "dashed",
-                   color = "gray60", linewidth = 0.3) +
+                   color = "gray40", linewidth = 0.7) +
         geom_point(color = color, size = 1.8) +
         theme_srh(base_size = 11) +
         theme(
@@ -721,7 +722,7 @@ plot_medpolish_combined_simple <- function(all_effects,
 
       p <- ggplot(df_cell, aes(x = value, y = effect)) +
         geom_hline(yintercept = 0, linetype = "dashed",
-                   color = "gray60", linewidth = 0.3) +
+                   color = "gray40", linewidth = 0.7) +
         geom_point(color = color, size = 1.8) +
         theme_srh(base_size = 11) +
         theme(
@@ -784,7 +785,8 @@ plot_medpolish_effects <- function(effects_df, survey) {
     color <- APC_COLORS[[dim_name]]
 
     ggplot(df_dim, aes(x = value, y = effect)) +
-      geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+      geom_hline(yintercept = 0, linetype = "dashed", color = "gray40",
+                 linewidth = 0.7) +
       geom_point(color = color, size = 2.5) +
       labs(
         x = dim_name,
@@ -824,7 +826,8 @@ plot_medpolish_residuals <- function(mp_result, survey) {
     resid_df <- mp_result$residuals[[slice_name]]
 
     ggplot(resid_df, aes(x = .data[[x_dim]], y = residual)) +
-      geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+      geom_hline(yintercept = 0, linetype = "dashed", color = "gray40",
+                 linewidth = 0.7) +
       geom_point(alpha = 0.4, size = 1.5, color = "gray40") +
       stat_summary(fun = mean, geom = "line", color = "firebrick",
                    linewidth = 0.8, group = 1) +
@@ -883,7 +886,7 @@ plot_direct_effects_all_surveys <- function(all_direct,
                                shape = source_slice,
                                linetype = source_slice)) +
         geom_hline(yintercept = 0, linetype = "dashed",
-                   color = "gray60", linewidth = 0.3) +
+                   color = "gray40", linewidth = 0.7) +
         geom_line(color = color, linewidth = 0.6) +
         geom_point(color = color, size = 1.5) +
         scale_shape_manual(values = c("AP" = 16, "AC" = 17, "PC" = 15)) +
@@ -982,7 +985,7 @@ plot_residuals_all_surveys <- function(all_results,
 
       p <- ggplot(resid_df, aes(x = .data[[x_dim]], y = residual)) +
         geom_hline(yintercept = 0, linetype = "dashed",
-                   color = "gray60", linewidth = 0.3) +
+                   color = "gray40", linewidth = 0.7) +
         geom_point(alpha = 0.35, size = 1, color = "gray50") +
         stat_summary(fun = mean, geom = "line",
                      color = resid_color, linewidth = 0.7, group = 1) +
@@ -1040,7 +1043,8 @@ plot_medpolish_all_surveys <- function(all_effects, dimension) {
   color <- APC_COLORS[[dimension]]
 
   ggplot(df_dim, aes(x = value, y = effect)) +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray40",
+               linewidth = 0.7) +
     geom_point(color = color, size = 2) +
     facet_wrap(~ survey, scales = "free", ncol = 3) +
     labs(
@@ -1085,8 +1089,8 @@ create_medpolish_subplot <- function(df, color,
 
   p <- ggplot(df, aes(x = value, y = effect,
                        shape = source_slice, linetype = source_slice)) +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "gray60",
-               linewidth = 0.3) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray40",
+               linewidth = 0.7) +
     geom_line(color = color, linewidth = 0.6) +
     geom_point(color = color, size = 2) +
     scale_shape_manual(values = c("AP" = 16, "AC" = 17, "PC" = 15),
