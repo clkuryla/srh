@@ -1,0 +1,559 @@
+---
+title: "APCI Analysis of Self-Rated Health: Results & Interpretation"
+subtitle: "Age-Period-Cohort-Interaction model (Luo & Hodges, 2020) across 6 US surveys"
+author: "Christine Lucille Kuryla"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    number-sections: true
+    code-fold: true
+    code-summary: "Show code"
+    theme: flatly
+    fig-width: 12
+    fig-height: 7
+    fig-dpi: 300
+    embed-resources: true
+    smooth-scroll: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r setup}
+#| label: setup
+#| code-fold: true
+
+library(tidyverse)
+library(here)
+library(APCI)
+library(patchwork)
+library(knitr)
+library(kableExtra)
+
+is_html <- knitr::is_html_output()
+
+# Helper: apply kable_styling only for HTML output
+styled_kable <- function(k, ...) {
+  if (is_html) kable_styling(k, ...) else k
+}
+
+source(here::here("R", "paths.R"))
+source(here::here("R", "functions", "theme_srh.R"))
+source(here::here("R", "functions", "plot_utils.R"))
+source(here::here("R", "functions", "apci_analysis.R"))
+
+apci_output_dir <- here::here("output", "apc", "apci")
+
+# Survey order and labels
+surveys <- c("gss", "nhanes", "meps", "nhis", "cps", "brfss")
+```
+
+# Overview
+
+This report presents an **APCI (Age-Period-Cohort-Interaction)** analysis of self-rated health (SRH) across six US surveys. The APCI model (Luo & Hodges, 2020) provides a third APC decomposition method, complementing the **median polish** (non-parametric descriptive) and **BHAPC** (Bayesian hierarchical parametric) approaches.
+
+## What Makes APCI Different
+
+The APCI model reframes the classic APC identification problem. Instead of trying to separately estimate three perfectly collinear effects (age + period + cohort), it asks:
+
+> **"Do period effects vary by age group?"**
+
+If yes, that variation *is* the cohort effect. This maps directly onto Ryder's (1965) theory that cohort differentiation arises when historical changes affect age groups differentially.
+
+The model is fully identified without arbitrary constraints. It decomposes the outcome into:
+
+- **Age main effects**: the average age pattern across all periods
+- **Period main effects**: the average temporal change across all age groups
+- **Age×period interactions**: variation beyond the additive age + period effects --- these *are* the cohort effects
+
+## How to Read APCI Results {#sec-how-to-read}
+
+### Main Effects (Age & Period)
+
+- **Age main effects** show the expected SRH deviation from the grand mean at each age group, averaging over all periods. These are interpreted as the "pure age" pattern after removing period trends. A negative age effect at older ages means SRH declines with age (expected). The *slope* of the age curve tells us how steeply health declines with age.
+
+- **Period main effects** show the expected SRH deviation from the grand mean at each period, averaging over all age groups. These capture uniform temporal shifts that affect *all* age groups equally. A positive period effect means overall SRH was higher in that period (after removing age composition). Note: SRH is coded higher = better.
+
+### Cohort Averages (Inter-Cohort Deviations)
+
+These are the **average deviations** of each birth cohort from what the age + period main effects would predict. They answer: *"Which birth cohorts have systematically higher or lower SRH than the additive model predicts?"*
+
+- **Positive values** → the cohort rates their health *better* than expected from their age + the period they were observed in
+- **Negative values** → the cohort rates their health *worse* than expected
+- **Significance** (filled points, p < 0.05) → statistical evidence that the deviation is not zero
+- **Magnitude** → in SRH units (e.g., 0.05 means 0.05 SRH points above/below the additive prediction on the 1--5 or 1--4 scale)
+
+### Cohort Slopes (Intra-Cohort Life-Course Dynamics)
+
+These measure how the cohort's deviation *changes with age*. They answer: *"Do cohort advantages/disadvantages accumulate, diminish, or stay constant as people age?"*
+
+- **Positive slope** → the cohort's advantage (or narrowing disadvantage) **accumulates** with age. Sometimes called "accumulating advantage" --- as the cohort ages, their relative position improves.
+- **Negative slope** → the cohort's disadvantage (or narrowing advantage) **accumulates** with age. Called "accumulating disadvantage" --- as the cohort ages, their relative position worsens.
+- **Near-zero / non-significant** → the cohort's deviation is roughly **constant** across the life course. The initial advantage or disadvantage neither grows nor shrinks with age.
+
+This maps onto two classic sociological theories:
+
+| Pattern | Theory | Meaning |
+|---------|--------|---------|
+| Positive slope | **Cumulative advantage** | Initial health advantages compound over the life course |
+| Negative slope | **Cumulative disadvantage** | Initial health disadvantages compound over the life course |
+| Zero slope | **Age-as-leveler** | Aging attenuates cohort differences |
+
+### Convergence Context
+
+The SRH convergence phenomenon operates from **both directions**: younger ages report *lower* SRH over time while older ages report *better* SRH. If this has a cohort component, we expect:
+
+- **Negative cohort averages** for recent birth cohorts (health worse than age+period predict)
+- **Positive cohort averages** for older cohorts (health better than expected)
+- The **intra-cohort slopes** reveal whether these differences accumulate, diminish, or stay constant
+
+## Surveys and Limitations
+
+| Survey | SRH Scale | Notes |
+|--------|-----------|-------|
+| GSS | 1--4 | Weights only |
+| NHANES | 1--5 | Age capped at 79 (sparse cells in 80--89) |
+| MEPS | 1--5 | Full age range 20--89 |
+| NHIS | 1--5 | Full age range 20--89 |
+| CPS | 1--5 | Full age range 20--89 |
+| BRFSS | 1--5 | 50% subsample (memory constraint); wider CIs due to high weight variability |
+
+: SRH is coded higher = better. All surveys use survey weights via `survey::svyglm()` internally. {.striped}
+
+**Limitation: Survey Design.** The APCI package uses `survey::svyglm()` internally with `id = ~1` (no clustering) and no strata. This produces **survey-weighted point estimates** with sandwich standard errors that account for weight heterogeneity, but do **not** account for complex survey design (strata/PSU clustering). Point estimates are correct; inference (p-values, CIs) should be interpreted cautiously as potentially anti-conservative for surveys with design effects (NHIS, MEPS, NHANES). BRFSS has notably wider CIs due to its high weight variability (CV = 1.85).
+
+```{r load-results}
+#| label: load-results
+
+# Load combined results from CSVs (avoids memory issues with large RDS files)
+all_age_effects    <- read_csv(file.path(apci_output_dir, "apci_age_effects_all.csv"),
+                               show_col_types = FALSE)
+all_period_effects <- read_csv(file.path(apci_output_dir, "apci_period_effects_all.csv"),
+                               show_col_types = FALSE)
+all_cohort_avgs    <- read_csv(file.path(apci_output_dir, "apci_cohort_avgs_all.csv"),
+                               show_col_types = FALSE)
+all_cohort_slopes  <- read_csv(file.path(apci_output_dir, "apci_cohort_slopes_all.csv"),
+                               show_col_types = FALSE)
+deviance_summary   <- read_csv(file.path(apci_output_dir, "apci_deviance_summary.csv"),
+                               show_col_types = FALSE)
+
+sv_levels <- toupper(surveys)
+```
+
+# Summary of Findings
+
+```{r tbl-summary}
+#| label: tbl-summary
+
+deviance_summary |>
+  mutate(
+    `Sig. Cohort Avgs` = paste0(n_sig_avg, "/", n_cohorts),
+    `Sig. Cohort Slopes` = paste0(n_sig_slope, "/", n_cohorts)
+  ) |>
+  select(Survey = survey, `N Cohorts` = n_cohorts,
+         `Sig. Cohort Avgs`, `Sig. Cohort Slopes`) |>
+  kable(caption = "APCI model summary across surveys. Significance at p < 0.05.") |>
+  styled_kable(bootstrap_options = c("striped", "hover", "condensed"),
+               full_width = FALSE)
+```
+
+**Key finding:** All six surveys show substantial numbers of significant cohort deviations, confirming that cohort effects on SRH are real and widespread. The prevalence of significant effects ranges from 6/16 (NHANES, fewest periods) to 19/20 (CPS, most precise). For intra-cohort slopes, every survey shows significant evidence of accumulating advantage or disadvantage for multiple cohorts.
+
+# Cross-Survey Results {.tabset}
+
+## Cohort Deviations (Inter-Cohort)
+
+These plots show the **average deviation** of each birth cohort from the age + period main effects. Positive values mean the cohort has higher SRH than expected; negative values mean lower SRH than expected. See @sec-how-to-read for detailed interpretation guide.
+
+```{r fig-cohort-avgs}
+#| label: fig-cohort-avgs
+#| fig-cap: "Inter-cohort deviations from age+period main effects across surveys. Filled points = p < 0.05. Positive = better-than-expected SRH for that cohort."
+#| fig-height: 8
+#| fig-width: 12
+
+plot_apci_cohort_avgs_all(all_cohort_avgs, survey_order = sv_levels)
+```
+
+### Interpretation: Cohort Deviations
+
+```{r cohort-avg-interpretation}
+#| label: cohort-avg-interpretation
+#| results: asis
+
+# Summarize the crossover pattern
+for (sv_label in sv_levels) {
+  sv_avgs <- all_cohort_avgs |>
+    filter(survey == sv_label, !is.na(cohort_midpoint), !is.na(estimate))
+
+  positive_sig <- sv_avgs |>
+    filter(estimate > 0, p_value < 0.05)
+  negative_sig <- sv_avgs |>
+    filter(estimate < 0, p_value < 0.05)
+
+  # Find approximate crossover
+  crossover_cohorts <- sv_avgs |>
+    arrange(cohort_midpoint) |>
+    mutate(sign_change = sign(estimate) != lag(sign(estimate))) |>
+    filter(sign_change == TRUE, !is.na(sign_change))
+
+  cat(sprintf("\n\n**%s**: ", sv_label))
+  if (nrow(positive_sig) > 0) {
+    pos_range <- range(round(positive_sig$cohort_midpoint))
+    cat(sprintf("Cohorts born ~%d--%d have *significantly better* SRH than expected (%d cohorts, max deviation = +%.3f). ",
+                pos_range[1], pos_range[2], nrow(positive_sig),
+                max(positive_sig$estimate)))
+  }
+  if (nrow(negative_sig) > 0) {
+    neg_range <- range(round(negative_sig$cohort_midpoint))
+    cat(sprintf("Cohorts born ~%d--%d have *significantly worse* SRH than expected (%d cohorts, max deviation = %.3f). ",
+                neg_range[1], neg_range[2], nrow(negative_sig),
+                min(negative_sig$estimate)))
+  }
+  if (nrow(crossover_cohorts) > 0) {
+    cross_yr <- round(mean(crossover_cohorts$cohort_midpoint))
+    cat(sprintf("The crossover from positive to negative deviations occurs around birth year ~%d.", cross_yr))
+  }
+}
+```
+
+**Cross-survey synthesis:** Across all six surveys, a remarkably consistent pattern emerges:
+
+1. **Older cohorts (born ~1920--1955) rate their health *better* than expected** from the additive age + period model. These are the "Greatest Generation" and early Baby Boomers. Their positive deviations are typically 0.03--0.10 SRH units above expected.
+
+2. **Younger cohorts (born ~1975--2000) rate their health *worse* than expected.** These are Generation X and Millennials. Their negative deviations are typically 0.03--0.16 SRH units below expected.
+
+3. **The crossover from positive to negative** occurs around cohorts born ~1960--1970, varying modestly across surveys.
+
+4. **This two-directional cohort pattern directly supports the convergence phenomenon.** The convergence isn't just a period effect (uniform temporal shifts); there are genuine cohort-specific deviations that make older cohorts report better health and younger cohorts report worse health than their age and period alone would predict.
+
+## Cohort Slopes (Intra-Cohort)
+
+These plots show the **intra-cohort life-course slopes**. A positive slope means the cohort's advantage accumulates with age; a negative slope means disadvantage accumulates. See @sec-how-to-read for interpretation guide.
+
+```{r fig-cohort-slopes}
+#| label: fig-cohort-slopes
+#| fig-cap: "Intra-cohort life-course slopes across surveys. Positive = accumulating advantage with age; Negative = accumulating disadvantage. Filled = p < 0.05."
+#| fig-height: 8
+#| fig-width: 12
+
+plot_apci_cohort_slopes_all(all_cohort_slopes, survey_order = sv_levels)
+```
+
+### Interpretation: Cohort Slopes
+
+```{r cohort-slope-interpretation}
+#| label: cohort-slope-interpretation
+#| results: asis
+
+for (sv_label in sv_levels) {
+  sv_slopes <- all_cohort_slopes |>
+    filter(survey == sv_label, !is.na(cohort_midpoint), !is.na(estimate))
+
+  accum_adv <- sv_slopes |> filter(estimate > 0, p_value < 0.05)
+  accum_dis <- sv_slopes |> filter(estimate < 0, p_value < 0.05)
+
+  cat(sprintf("\n\n**%s**: ", sv_label))
+  if (nrow(accum_adv) > 0) {
+    adv_range <- range(round(accum_adv$cohort_midpoint))
+    cat(sprintf("Cohorts born ~%d--%d show **accumulating advantage** (%d cohorts). ",
+                adv_range[1], adv_range[2], nrow(accum_adv)))
+  }
+  if (nrow(accum_dis) > 0) {
+    dis_range <- range(round(accum_dis$cohort_midpoint))
+    cat(sprintf("Cohorts born ~%d--%d show **accumulating disadvantage** (%d cohorts). ",
+                dis_range[1], dis_range[2], nrow(accum_dis)))
+  }
+  n_constant <- nrow(sv_slopes) - nrow(accum_adv) - nrow(accum_dis) -
+    sum(is.na(sv_slopes$estimate))
+  if (n_constant > 0) {
+    cat(sprintf("%d cohorts show constant/non-significant slopes.", n_constant))
+  }
+}
+```
+
+**Cross-survey synthesis:** The intra-cohort slopes reveal a striking life-course pattern:
+
+1. **Older cohorts (born before ~1950) show accumulating advantage.** As these cohorts age, their SRH advantage over the age+period baseline *grows*. This is consistent with cumulative advantage theory --- initial health advantages compound over the life course. These cohorts may have benefited from increasingly effective medical care, rising prosperity, and improving living conditions as they aged.
+
+2. **Younger cohorts (born after ~1960) show accumulating disadvantage.** As these cohorts age, their SRH disadvantage *grows*. This suggests that whatever is driving the lower SRH in younger cohorts (mental health burden, subjective health expectations, rising inequality) is not attenuating with age --- it is compounding.
+
+3. **The transition from accumulating advantage to accumulating disadvantage** mirrors the crossover in the cohort averages, occurring around cohorts born ~1950--1960.
+
+4. **This is a strong result for the convergence narrative:** Not only do younger cohorts start with worse SRH than expected, but this disadvantage *grows with age*. The convergence phenomenon has a dynamic, compounding cohort component.
+
+## Main Effects (Age & Period)
+
+```{r fig-main-effects}
+#| label: fig-main-effects
+#| fig-cap: "APCI age (blue) and period (green) main effects across surveys."
+#| fig-height: 14
+#| fig-width: 12
+
+plot_apci_main_effects_all(all_age_effects, all_period_effects,
+                            survey_order = sv_levels)
+```
+
+### Interpretation: Main Effects
+
+**Age main effects** are highly consistent across all six surveys and match expectations:
+
+- SRH declines monotonically with age in all surveys
+- The decline is roughly linear from ages 20--55, then steepens
+- The total age decline ranges from about 0.6 SRH units (GSS, 4-point scale) to about 1.3 SRH units (CPS, 5-point scale)
+- This represents the "pure age" component: the expected health trajectory independent of when a person was born or when they were observed
+
+**Period main effects** show more variation across surveys, which is expected since surveys cover different year ranges:
+
+```{r period-interpretation}
+#| label: period-interpretation
+#| results: asis
+
+cat("\n\n")
+for (sv_label in sv_levels) {
+  sv_period <- all_period_effects |>
+    filter(survey == sv_label, !is.na(period_midpoint))
+
+  early <- sv_period |> slice_min(period_midpoint, n = 1)
+  late <- sv_period |> slice_max(period_midpoint, n = 1)
+  peak <- sv_period |> slice_max(estimate, n = 1)
+  trough <- sv_period |> slice_min(estimate, n = 1)
+
+  cat(sprintf("- **%s** (%d--%d): ", sv_label,
+              min(sv_period$period_midpoint), max(sv_period$period_midpoint)))
+
+  if (peak$period_midpoint != trough$period_midpoint) {
+    cat(sprintf("Peak around %d (%+.3f), trough around %d (%+.3f). ",
+                peak$period_midpoint, peak$estimate,
+                trough$period_midpoint, trough$estimate))
+  }
+  trend <- late$estimate - early$estimate
+  cat(sprintf("Overall change: %+.3f SRH units.\n", trend))
+}
+```
+
+The period effects capture uniform temporal shifts that affect all age groups equally. These complement the cohort effects: the *average* change in SRH over time (period) versus the *differential* change by birth cohort.
+
+# Cohort Deviation Details
+
+## Significant Cohort Deviations
+
+The table below lists all birth cohorts with statistically significant (p < 0.05) deviations from the age + period main effects. Positive deviations mean the cohort has *better* SRH than expected; negative deviations mean *worse*.
+
+```{r tbl-sig-cohorts}
+#| label: tbl-sig-cohorts
+
+sig_cohorts <- all_cohort_avgs |>
+  filter(p_value < 0.05, !is.na(cohort_midpoint)) |>
+  mutate(
+    `Birth Year` = round(cohort_midpoint),
+    Direction = ifelse(estimate > 0, "Better", "Worse"),
+    Estimate = round(estimate, 4),
+    SE = round(se, 4),
+    `95% CI` = paste0("[", round(ci_lower, 4), ", ", round(ci_upper, 4), "]"),
+    p = sprintf("%.4f", p_value)
+  ) |>
+  select(Survey = survey, `Birth Year`, Direction, Estimate, SE, `95% CI`, p, sig) |>
+  arrange(Survey, `Birth Year`)
+
+kable(sig_cohorts,
+      caption = "Birth cohorts with significant (p < 0.05) deviations from age+period main effects.") |>
+  styled_kable(bootstrap_options = c("striped", "hover", "condensed"),
+               full_width = FALSE, font_size = 11)
+```
+
+## Significant Cohort Slopes
+
+The table below lists all birth cohorts with statistically significant intra-cohort slopes. Positive slopes indicate accumulating advantage (health improves relative to the baseline as the cohort ages); negative slopes indicate accumulating disadvantage.
+
+```{r tbl-sig-slopes}
+#| label: tbl-sig-slopes
+
+sig_slopes <- all_cohort_slopes |>
+  filter(p_value < 0.05, !is.na(cohort_midpoint)) |>
+  mutate(
+    `Birth Year` = round(cohort_midpoint),
+    Estimate = round(estimate, 4),
+    SE = round(se, 4),
+    `95% CI` = paste0("[", round(ci_lower, 4), ", ", round(ci_upper, 4), "]"),
+    p = sprintf("%.4f", p_value),
+    Interpretation = interpretation
+  ) |>
+  select(Survey = survey, `Birth Year`, Estimate, SE, `95% CI`, p,
+         Interpretation) |>
+  arrange(Survey, `Birth Year`)
+
+kable(sig_slopes,
+      caption = "Birth cohorts with significant (p < 0.05) intra-cohort slopes.") |>
+  styled_kable(bootstrap_options = c("striped", "hover", "condensed"),
+               full_width = FALSE, font_size = 11)
+```
+
+# Per-Survey Detail {.tabset}
+
+```{r per-survey-detail}
+#| label: per-survey-detail
+#| results: asis
+
+for (sv_label in sv_levels) {
+  cat("\n\n## ", sv_label, "\n\n")
+
+  sv_avgs <- all_cohort_avgs |> filter(survey == sv_label, !is.na(estimate))
+  sv_slopes <- all_cohort_slopes |> filter(survey == sv_label, !is.na(estimate))
+  sv_age <- all_age_effects |> filter(survey == sv_label)
+  sv_period <- all_period_effects |> filter(survey == sv_label)
+
+  n_sig_avg <- sum(sv_avgs$p_value < 0.05, na.rm = TRUE)
+  n_total_avg <- nrow(sv_avgs)
+  n_sig_slope <- sum(sv_slopes$p_value < 0.05, na.rm = TRUE)
+  n_total_slope <- nrow(sv_slopes)
+
+  # Summary stats
+  cat(sprintf("- **Cohort deviations:** %d/%d significant (p < 0.05)\n",
+              n_sig_avg, n_total_avg))
+  cat(sprintf("- **Cohort slopes:** %d/%d significant\n", n_sig_slope, n_total_slope))
+  cat(sprintf("- **Periods covered:** %d--%d (%d 5-year bins)\n",
+              min(sv_period$period_midpoint, na.rm = TRUE),
+              max(sv_period$period_midpoint, na.rm = TRUE),
+              nrow(sv_period)))
+  cat(sprintf("- **Cohort range:** ~%d--%d\n\n",
+              min(round(sv_avgs$cohort_midpoint), na.rm = TRUE),
+              max(round(sv_avgs$cohort_midpoint), na.rm = TRUE)))
+
+  # Cohort averages detail
+  pos_sig <- sv_avgs |> filter(estimate > 0, p_value < 0.05)
+  neg_sig <- sv_avgs |> filter(estimate < 0, p_value < 0.05)
+
+  if (nrow(pos_sig) > 0) {
+    cat(sprintf("**Better-than-expected cohorts** (positive deviations): Born ~%d--%d. ",
+                min(round(pos_sig$cohort_midpoint)),
+                max(round(pos_sig$cohort_midpoint))))
+    strongest <- pos_sig |> slice_max(estimate, n = 1)
+    cat(sprintf("Strongest: ~%d (+%.3f, p = %.1e).\n\n",
+                round(strongest$cohort_midpoint), strongest$estimate, strongest$p_value))
+  }
+
+  if (nrow(neg_sig) > 0) {
+    cat(sprintf("**Worse-than-expected cohorts** (negative deviations): Born ~%d--%d. ",
+                min(round(neg_sig$cohort_midpoint)),
+                max(round(neg_sig$cohort_midpoint))))
+    strongest_neg <- neg_sig |> slice_min(estimate, n = 1)
+    cat(sprintf("Strongest: ~%d (%.3f, p = %.1e).\n\n",
+                round(strongest_neg$cohort_midpoint), strongest_neg$estimate,
+                strongest_neg$p_value))
+  }
+
+  # Slopes detail
+  accum_adv <- sv_slopes |> filter(estimate > 0, p_value < 0.05)
+  accum_dis <- sv_slopes |> filter(estimate < 0, p_value < 0.05)
+
+  if (nrow(accum_adv) > 0) {
+    cat(sprintf("**Accumulating advantage:** %d cohorts (born ~%d--%d).\n\n",
+                nrow(accum_adv),
+                min(round(accum_adv$cohort_midpoint)),
+                max(round(accum_adv$cohort_midpoint))))
+  }
+  if (nrow(accum_dis) > 0) {
+    cat(sprintf("**Accumulating disadvantage:** %d cohorts (born ~%d--%d).\n\n",
+                nrow(accum_dis),
+                min(round(accum_dis$cohort_midpoint)),
+                max(round(accum_dis$cohort_midpoint))))
+  }
+}
+```
+
+
+# Comparison with Other APC Methods
+
+## Median Polish vs APCI
+
+| Aspect | Median Polish | APCI |
+|--------|--------------|------|
+| **Type** | Non-parametric descriptive | Parametric inferential |
+| **Identification** | Not formally identified | Fully identified (interaction-based) |
+| **Hypothesis tests** | None (descriptive only) | Global F-test, local z-tests |
+| **Cohort concept** | Residuals from AP matrix | Age-by-period interaction |
+| **Cohort dynamics** | Static effect only | Intra-cohort slopes (accumulation/leveling) |
+| **Advantages** | No distributional assumptions, robust to outliers | Formal inference, richer cohort characterization |
+| **Limitations** | No CIs or p-values | Assumes GLM; SEs use sandwich estimator but no strata/PSU |
+
+## BHAPC vs APCI
+
+| Aspect | BHAPC | APCI |
+|--------|-------|------|
+| **Framework** | Bayesian (rstanarm) | Frequentist (survey::svyglm) |
+| **APC effects** | Crossed random effects | Fixed main effects + interaction |
+| **Identification** | Variance decomposition | Interaction = cohort |
+| **Cohort concept** | Random cohort intercepts | Inter-cohort deviations + intra-cohort slopes |
+| **Inference** | Posterior distributions | z-tests, F-test |
+| **Computation** | Slow (MCMC) | Fast (GLM) |
+
+## Cross-Method Convergence
+
+The APCI results are broadly consistent with the median polish analysis:
+
+- Both methods identify **older cohorts** as having better-than-expected SRH
+- Both methods identify **younger cohorts** as having worse-than-expected SRH
+- The crossover point is similar (~1960--1970)
+- APCI adds formal statistical significance and the novel finding of **accumulating advantage/disadvantage** through the intra-cohort slopes
+
+The key additional insight from APCI is the **intra-cohort slope analysis**, which is not available from median polish or BHAPC. The finding that younger cohorts show accumulating disadvantage suggests the convergence phenomenon is not just a level shift but a dynamic process that compounds over the life course.
+
+
+# Interpretation for the Convergence Paper
+
+## Summary of Evidence
+
+The APCI analysis provides **formal statistical evidence** for the SRH convergence phenomenon as a cohort-driven process:
+
+### 1. Cohort effects are real and widespread
+
+Across all six surveys, a substantial proportion of birth cohorts show statistically significant deviations from the additive age + period model. This is not just noise --- 6 to 19 out of 16--24 cohorts per survey deviate significantly (p < 0.05). The convergence phenomenon has a genuine cohort component that cannot be explained by age and period effects alone.
+
+### 2. The cohort pattern is two-directional
+
+The cohort deviations are not uniformly positive or negative. Instead, they show a clear **sign reversal** around cohorts born ~1960--1970:
+
+- **Cohorts born before ~1960** tend to have positive deviations (better SRH than expected)
+- **Cohorts born after ~1970** tend to have negative deviations (worse SRH than expected)
+
+This two-directional pattern is the cohort signature of convergence: older cohorts are pulling SRH up while younger cohorts are pulling it down, relative to what age and period effects alone would predict.
+
+### 3. Cohort effects compound over the life course
+
+The intra-cohort slopes are perhaps the most important APCI finding for the convergence paper. They show that:
+
+- **Older cohorts' health advantages accumulate with age** (positive slopes). As these cohorts age, they do progressively *better* than the additive model predicts. This is consistent with cumulative advantage theory and may reflect decades of improving medical care, rising economic prosperity, and healthier environments that disproportionately benefited these cohorts as they aged.
+
+- **Younger cohorts' health disadvantages accumulate with age** (negative slopes). As these cohorts age, they do progressively *worse* than expected. This is consistent with cumulative disadvantage and suggests that the factors driving lower SRH in younger cohorts (higher mental health burden, changing health expectations, rising inequality, etc.) are not temporary --- they compound.
+
+### 4. Consistency across surveys
+
+The pattern is remarkably consistent across six independent surveys with different designs, sampling frames, question wording (GSS uses a 4-point scale), and year coverage. This robustness strengthens the claim that the convergence phenomenon reflects genuine population-level dynamics, not a methodological artifact.
+
+### 5. Implications for future SRH trends
+
+The accumulating disadvantage among younger cohorts suggests that the convergence trend will likely **continue or intensify**. As Millennial and Gen-Z cohorts age, their relative SRH disadvantage is expected to grow, further compressing the age gradient in self-rated health. This has implications for:
+
+- Health services planning (rising demand from middle-aged adults)
+- Subjective health measurement (changing reference frames across cohorts)
+- Population health monitoring (SRH may become a less sensitive indicator of objective health if its meaning shifts across cohorts)
+
+## Caveats
+
+1. **SRH is subjective.** Cohort differences in SRH may partly reflect changing health expectations, not just changing health status. Younger cohorts may have higher benchmarks for "good health" due to greater health awareness and medicalization of everyday conditions.
+
+2. **No covariates.** This analysis is unadjusted. Cohort effects may partly reflect compositional changes (education, race/ethnicity, economic conditions) that are confounded with birth cohort.
+
+3. **Survey design.** Standard errors use the sandwich estimator but do not account for complex survey design (strata, PSU clustering). BRFSS uses a 50% subsample and has wider CIs due to high weight variability.
+
+4. **GSS scale difference.** The GSS uses a 4-point scale (no "very good"), which limits direct magnitude comparisons with the 5-point surveys. The *pattern* (direction and relative ordering) is comparable.
+
+5. **Edge cohorts.** The oldest and youngest cohorts in each survey are observed in few age×period cells, leading to wide confidence intervals and less reliable estimates. Interpret these with caution.
+
+---
+
+*Report generated `r Sys.time()`*
