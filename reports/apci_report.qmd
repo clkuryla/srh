@@ -1,0 +1,293 @@
+---
+title: "APCI Analysis of Self-Rated Health"
+subtitle: "Age-Period-Cohort-Interaction model (Luo & Hodges, 2020) across 6 US surveys"
+author: "Christine Lucille Kuryla"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    number-sections: true
+    code-fold: true
+    code-summary: "Show code"
+    theme: flatly
+    fig-width: 12
+    fig-height: 7
+    fig-dpi: 300
+    embed-resources: true
+    smooth-scroll: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r setup}
+#| label: setup
+#| code-fold: true
+
+library(tidyverse)
+library(here)
+library(APCI)
+library(patchwork)
+library(knitr)
+library(kableExtra)
+
+is_html <- knitr::is_html_output()
+
+# Helper: apply kable_styling only for HTML output
+styled_kable <- function(k, ...) {
+  if (is_html) kable_styling(k, ...) else k
+}
+
+source(here::here("R", "paths.R"))
+source(here::here("R", "functions", "theme_srh.R"))
+source(here::here("R", "functions", "plot_utils.R"))
+source(here::here("R", "functions", "apci_analysis.R"))
+
+apci_output_dir <- here::here("output", "apc", "apci")
+
+# Survey order and labels
+surveys <- c("gss", "nhanes", "meps", "nhis", "cps", "brfss")
+```
+
+# Overview
+
+This report presents an **APCI (Age-Period-Cohort-Interaction)** analysis of self-rated health (SRH) across six US surveys. The APCI model (Luo & Hodges, 2020) provides a third APC decomposition method, complementing the **median polish** (non-parametric descriptive) and **BHAPC** (Bayesian hierarchical parametric) approaches.
+
+## What Makes APCI Different
+
+The APCI model reframes the classic APC identification problem. Instead of trying to separately estimate three perfectly collinear effects (age + period + cohort), it asks:
+
+> **"Do period effects vary by age group?"**
+
+If yes, that variation *is* the cohort effect. This maps directly onto Ryder's (1965) theory that cohort differentiation arises when historical changes affect age groups differentially.
+
+## Key Outputs
+
+| Output | Meaning |
+|--------|---------|
+| **Age main effects** | Expected SRH by age group, averaging over periods |
+| **Period main effects** | Expected SRH by period, averaging over age groups |
+| **Cohort averages** (inter-cohort) | Which birth cohorts deviate from age+period main effects? |
+| **Cohort slopes** (intra-cohort) | Do cohort differences accumulate, diminish, or stay constant with age? |
+
+## Convergence Context
+
+The SRH convergence phenomenon operates from **both directions**: younger ages report *lower* SRH over time while older ages report *better* SRH. If this has a cohort component, we expect:
+
+- **Negative cohort averages** for recent birth cohorts (health worse than age+period predict)
+- **Positive cohort averages** for older cohorts (health better than expected)
+- The **intra-cohort slopes** reveal whether these differences accumulate, diminish, or stay constant
+
+## Surveys
+
+| Survey | SRH Scale | Design Note |
+|--------|-----------|-------------|
+| GSS | 1--4 | Weights only |
+| NHANES | 1--5 | Weights only (APCI uses glm, not survey design) |
+| MEPS | 1--5 | Weights only (APCI uses glm, not survey design) |
+| NHIS | 1--5 | Weights only (APCI uses glm, not survey design) |
+| CPS | 1--5 | Weights only |
+| BRFSS | 1--5 | Weights only |
+
+: SRH is coded higher = better. All surveys use weights via the `weight` argument in `apci()`. {.striped}
+
+## Limitation: Survey Design
+
+The `APCI` package uses `glm()` internally with a `weights` argument. This produces **survey-weighted point estimates** but standard errors do **not** account for complex survey design (strata/PSU clustering). Point estimates are correct; inference (p-values, CIs) should be interpreted cautiously as potentially anti-conservative for surveys with design effects (NHIS, MEPS, NHANES).
+
+```{r load-results}
+#| label: load-results
+
+# Load combined results from CSVs (avoids memory issues with large RDS files)
+all_age_effects    <- read_csv(file.path(apci_output_dir, "apci_age_effects_all.csv"),
+                               show_col_types = FALSE)
+all_period_effects <- read_csv(file.path(apci_output_dir, "apci_period_effects_all.csv"),
+                               show_col_types = FALSE)
+all_cohort_avgs    <- read_csv(file.path(apci_output_dir, "apci_cohort_avgs_all.csv"),
+                               show_col_types = FALSE)
+all_cohort_slopes  <- read_csv(file.path(apci_output_dir, "apci_cohort_slopes_all.csv"),
+                               show_col_types = FALSE)
+deviance_summary   <- read_csv(file.path(apci_output_dir, "apci_deviance_summary.csv"),
+                               show_col_types = FALSE)
+
+sv_levels <- toupper(surveys)
+
+# Note: Per-survey RDS files are not loaded here to avoid memory issues.
+# All cross-survey data comes from the combined CSVs above.
+```
+
+# Summary Table
+
+```{r tbl-summary}
+#| label: tbl-summary
+
+deviance_summary |>
+  mutate(
+    `Sig. Cohort Avgs` = paste0(n_sig_avg, "/", n_cohorts),
+    `Sig. Cohort Slopes` = paste0(n_sig_slope, "/", n_cohorts)
+  ) |>
+  select(Survey = survey, `N Cohorts` = n_cohorts,
+         `Sig. Cohort Avgs`, `Sig. Cohort Slopes`) |>
+  kable(caption = "APCI model summary across surveys. Significance at p < 0.05.") |>
+  styled_kable(bootstrap_options = c("striped", "hover", "condensed"),
+               full_width = FALSE)
+```
+
+# Cross-Survey Results {.tabset}
+
+## Cohort Deviations (Inter-Cohort)
+
+These plots show the **average deviation** of each birth cohort from the age + period main effects. Positive values mean the cohort has higher SRH than expected; negative values mean lower SRH than expected.
+
+```{r fig-cohort-avgs}
+#| label: fig-cohort-avgs
+#| fig-cap: "Inter-cohort deviations from age+period main effects across surveys. Filled points = p < 0.05. Positive = better-than-expected SRH for that cohort."
+#| fig-height: 8
+#| fig-width: 12
+
+plot_apci_cohort_avgs_all(all_cohort_avgs, survey_order = sv_levels)
+```
+
+## Cohort Slopes (Intra-Cohort)
+
+These plots show the **intra-cohort life-course slopes**. A positive slope means the cohort's advantage (or disadvantage) accumulates with age; a negative slope means it diminishes; near-zero means it stays constant.
+
+```{r fig-cohort-slopes}
+#| label: fig-cohort-slopes
+#| fig-cap: "Intra-cohort life-course slopes across surveys. Positive = accumulating advantage with age; Negative = accumulating disadvantage. Filled = p < 0.05."
+#| fig-height: 8
+#| fig-width: 12
+
+plot_apci_cohort_slopes_all(all_cohort_slopes, survey_order = sv_levels)
+```
+
+## Main Effects (Age & Period)
+
+```{r fig-main-effects}
+#| label: fig-main-effects
+#| fig-cap: "APCI age (blue) and period (green) main effects across surveys."
+#| fig-height: 14
+#| fig-width: 12
+
+plot_apci_main_effects_all(all_age_effects, all_period_effects,
+                            survey_order = sv_levels)
+```
+
+# Cohort Deviation Details
+
+## Significant Cohort Deviations
+
+```{r tbl-sig-cohorts}
+#| label: tbl-sig-cohorts
+
+sig_cohorts <- all_cohort_avgs |>
+  filter(p_value < 0.05, !is.na(cohort_midpoint)) |>
+  mutate(
+    `Birth Year` = round(cohort_midpoint),
+    Estimate = round(estimate, 4),
+    SE = round(se, 4),
+    `95% CI` = paste0("[", round(ci_lower, 4), ", ", round(ci_upper, 4), "]"),
+    p = sprintf("%.4f", p_value)
+  ) |>
+  select(Survey = survey, `Birth Year`, Estimate, SE, `95% CI`, p, sig) |>
+  arrange(Survey, `Birth Year`)
+
+kable(sig_cohorts,
+      caption = "Birth cohorts with significant (p < 0.05) deviations from age+period main effects. Positive = better SRH than expected.") |>
+  styled_kable(bootstrap_options = c("striped", "hover", "condensed"),
+               full_width = FALSE, font_size = 11)
+```
+
+## Significant Cohort Slopes
+
+```{r tbl-sig-slopes}
+#| label: tbl-sig-slopes
+
+sig_slopes <- all_cohort_slopes |>
+  filter(p_value < 0.05, !is.na(cohort_midpoint)) |>
+  mutate(
+    `Birth Year` = round(cohort_midpoint),
+    Estimate = round(estimate, 4),
+    SE = round(se, 4),
+    `95% CI` = paste0("[", round(ci_lower, 4), ", ", round(ci_upper, 4), "]"),
+    p = sprintf("%.4f", p_value),
+    Interpretation = interpretation
+  ) |>
+  select(Survey = survey, `Birth Year`, Estimate, SE, `95% CI`, p,
+         Interpretation) |>
+  arrange(Survey, `Birth Year`)
+
+kable(sig_slopes,
+      caption = "Birth cohorts with significant (p < 0.05) intra-cohort slopes. Positive = accumulating advantage with age.") |>
+  styled_kable(bootstrap_options = c("striped", "hover", "condensed"),
+               full_width = FALSE, font_size = 11)
+```
+
+# Per-Survey Detail
+
+```{r}
+#| label: per-survey-detail
+#| results: asis
+
+for (sv_label in sv_levels) {
+  cat("\n\n## ", sv_label, " {.unnumbered}\n\n")
+
+  sv_avgs <- all_cohort_avgs |> filter(survey == sv_label)
+  sv_slopes <- all_cohort_slopes |> filter(survey == sv_label)
+
+  n_sig_avg <- sum(sv_avgs$p_value < 0.05, na.rm = TRUE)
+  n_total <- nrow(sv_avgs)
+  n_sig_slope <- sum(sv_slopes$p_value < 0.05, na.rm = TRUE)
+
+  cat("**Significant cohort deviations:**", n_sig_avg, "/", n_total, " | ",
+      "**Significant cohort slopes:**", n_sig_slope, "/", nrow(sv_slopes), "\n\n")
+}
+```
+
+### Per-survey combined plots
+
+The combined plots for each survey (main effects + cohort averages + cohort slopes) are saved in `output/apc/apci/apci_combined_{survey}.png`. See those files for detailed per-survey visualizations.
+
+# Comparison with Other APC Methods
+
+## Median Polish vs APCI
+
+| Aspect | Median Polish | APCI |
+|--------|--------------|------|
+| **Type** | Non-parametric descriptive | Parametric inferential |
+| **Identification** | Not formally identified | Fully identified (interaction-based) |
+| **Hypothesis tests** | None (descriptive only) | Global F-test, local z-tests |
+| **Cohort concept** | Residuals from AP matrix | Age-by-period interaction |
+| **Cohort dynamics** | Static effect only | Intra-cohort slopes (accumulation/leveling) |
+| **Advantages** | No distributional assumptions, robust to outliers | Formal inference, richer cohort characterization |
+| **Limitations** | No CIs or p-values | Assumes GLM; SEs don't account for survey design |
+
+## BHAPC vs APCI
+
+| Aspect | BHAPC | APCI |
+|--------|-------|------|
+| **Framework** | Bayesian (rstanarm) | Frequentist (glm) |
+| **APC effects** | Crossed random effects | Fixed main effects + interaction |
+| **Identification** | Variance decomposition | Interaction = cohort |
+| **Cohort concept** | Random cohort intercepts | Inter-cohort deviations + intra-cohort slopes |
+| **Inference** | Posterior distributions | z-tests, F-test |
+| **Computation** | Slow (MCMC) | Fast (glm) |
+
+# Interpretation for Convergence Paper
+
+The APCI results provide **formal statistical evidence** for the convergence phenomenon:
+
+1. **Do cohort effects exist?** The number of significant cohort deviations across surveys answers this.
+
+2. **Which cohorts are affected?** The cohort averages identify which birth cohorts deviate from age+period expectations --- recent cohorts (born ~1980+) with negative deviations would support the "declining youth SRH" component of convergence.
+
+3. **Is convergence from both directions?** Older cohorts (born ~1930-1950) with positive deviations would confirm the "improving older SRH" component.
+
+4. **Do effects accumulate?** Intra-cohort slopes reveal whether cohort advantages/disadvantages grow with age (cumulative advantage theory) or diminish (age-as-leveler).
+
+---
+
+*Report generated `r Sys.time()`*
