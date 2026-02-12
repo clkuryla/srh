@@ -83,7 +83,52 @@ ft_race <- make_meta_ft(sociodem_race, "Table S3b. Metaregression by Race/Ethnic
 ft_educ <- make_meta_ft(sociodem_educ, "Table S3c. Metaregression by Education Level", sociodem_footer)
 
 # ==============================================================================
-# 2. Dichotomized metaregression
+# 2. Covariate-adjusted age coefficients (Figure S1)
+# ==============================================================================
+
+adj_coefs <- read_csv(
+  here::here("..", "srh", "output", "sensitivity", "sociodemographic",
+             "figS1_age_adjusted_coefficients_20260211.csv"),
+  show_col_types = FALSE
+)
+
+format_adj_coefs <- function(df, covariate_name) {
+  df |>
+    filter(covariate_adjusted == covariate_name) |>
+    mutate(
+      coef_formatted = formatC(coefficient, format = "e", digits = 2),
+      se_formatted   = formatC(se, format = "e", digits = 1),
+      p_value_formatted = case_when(
+        p_value < 0.001 ~ "<0.001",
+        TRUE ~ formatC(p_value, format = "f", digits = 3)
+      ),
+      ci = paste0("[", formatC(ci_lower, format = "f", digits = 4), ", ",
+                  formatC(ci_upper, format = "f", digits = 4), "]"),
+      year = as.character(year)
+    ) |>
+    select(
+      Survey     = survey,
+      Year       = year,
+      `Age Coef.` = coef_formatted,
+      SE         = se_formatted,
+      `P-value`  = p_value_formatted,
+      `95% CI`   = ci,
+      N          = n_unweighted
+    )
+}
+
+adj_sex  <- format_adj_coefs(adj_coefs, "Sex")
+adj_race <- format_adj_coefs(adj_coefs, "Race/Ethnicity")
+adj_educ <- format_adj_coefs(adj_coefs, "Education")
+
+adj_footer <- "Note: Age coefficient from SRH ~ age, adjusted for the indicated covariate. Survey-weighted estimates. N is unweighted sample size."
+
+ft_adj_sex  <- make_meta_ft(adj_sex,  "Table S1a. Covariate-adjusted age coefficients (adjusted for Sex)",             adj_footer)
+ft_adj_race <- make_meta_ft(adj_race, "Table S1b. Covariate-adjusted age coefficients (adjusted for Race/Ethnicity)",  adj_footer)
+ft_adj_educ <- make_meta_ft(adj_educ, "Table S1c. Covariate-adjusted age coefficients (adjusted for Education Level)", adj_footer)
+
+# ==============================================================================
+# 3. Dichotomized metaregression
 # ==============================================================================
 
 dichot_dir <- here::here("output", "sensitivity", "dichotomized", "tables")
@@ -152,6 +197,17 @@ doc <- doc |>
   body_add_flextable(ft_race) |>
   body_add_break() |>
   body_add_flextable(ft_educ) |>
+  body_add_break()
+
+# --- Covariate-adjusted age coefficients section ---
+doc <- doc |>
+  body_add_par("Sensitivity Analysis: Covariate-Adjusted Age Coefficients", style = "heading 1") |>
+  body_add_par("") |>
+  body_add_flextable(ft_adj_sex) |>
+  body_add_break() |>
+  body_add_flextable(ft_adj_race) |>
+  body_add_break() |>
+  body_add_flextable(ft_adj_educ) |>
   body_add_break()
 
 # --- Dichotomized section ---
