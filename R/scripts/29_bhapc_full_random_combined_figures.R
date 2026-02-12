@@ -196,8 +196,24 @@ cohort_data <- all_cohort_effects %>%
   mutate(x_var = as.character(cohort), x_numeric = cohort) %>%
   select(survey, effect_type, x_var, x_numeric, estimate, ci_lower_90, ci_upper_90)
 
+# Compute shared x-axis levels across all surveys for alignment
+all_age_levels <- sort(unique(age_data$x_var))
+all_period_levels <- sort(unique(period_data$x_numeric))
+all_cohort_levels <- sort(unique(cohort_data$x_numeric))
+
+cat("\nShared x-axis levels:\n")
+cat("Age groups:", paste(all_age_levels, collapse = ", "), "\n")
+cat("Periods:", paste(all_period_levels, collapse = ", "), "\n")
+cat("Cohorts:", length(all_cohort_levels), "levels from", min(all_cohort_levels), "to", max(all_cohort_levels), "\n")
+
+# Create labels for cohort axis (show every Nth)
+n_cohorts_total <- length(all_cohort_levels)
+label_every_cohort <- max(1, floor(n_cohorts_total / 10))
+cohort_labels <- ifelse(seq_along(all_cohort_levels) %% label_every_cohort == 1,
+                        all_cohort_levels, "")
+
 # Create individual plots for each component
-create_age_plot <- function(survey_data, survey_name) {
+create_age_plot <- function(survey_data, survey_name, shared_levels) {
 
   if (nrow(survey_data) == 0) return(NULL)
 
@@ -206,6 +222,7 @@ create_age_plot <- function(survey_data, survey_name) {
     geom_errorbar(aes(ymin = ci_lower_90, ymax = ci_upper_90),
                   width = 0.2, color = apc_colors["Age"], linewidth = 0.8) +
     geom_point(color = apc_colors["Age"], size = 3) +
+    scale_x_discrete(limits = shared_levels, drop = FALSE) +
     labs(x = "", y = "", title = survey_name) +
     theme_srh(base_size = 14) +
     theme(
@@ -216,17 +233,18 @@ create_age_plot <- function(survey_data, survey_name) {
     )
 }
 
-create_period_plot <- function(survey_data, survey_name) {
+create_period_plot <- function(survey_data, survey_name, shared_levels) {
   if (nrow(survey_data) == 0) return(NULL)
 
   # Filter out NA rows and treat as categorical
   survey_data <- survey_data %>% filter(!is.na(x_numeric))
 
-  ggplot(survey_data, aes(x = factor(x_numeric), y = estimate)) +
+  ggplot(survey_data, aes(x = factor(x_numeric, levels = shared_levels), y = estimate)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
     geom_errorbar(aes(ymin = ci_lower_90, ymax = ci_upper_90),
                   width = 0.2, color = apc_colors["Period"], linewidth = 0.8) +
     geom_point(color = apc_colors["Period"], size = 3) +
+    scale_x_discrete(limits = as.character(shared_levels), drop = FALSE) +
     labs(x = "", y = "", title = survey_name) +
     theme_srh(base_size = 14) +
     theme(
@@ -237,24 +255,18 @@ create_period_plot <- function(survey_data, survey_name) {
     )
 }
 
-create_cohort_plot <- function(survey_data, survey_name) {
+create_cohort_plot <- function(survey_data, survey_name, shared_levels, shared_labels) {
   if (nrow(survey_data) == 0) return(NULL)
 
   # Filter out NA rows and treat as categorical
   survey_data <- survey_data %>% filter(!is.na(x_numeric))
 
-  # For cohort, there are many bins - show every Nth label
-  n_cohorts <- nrow(survey_data)
-  label_every <- max(1, floor(n_cohorts / 8))  # Show ~8 labels
-  x_labels <- survey_data$x_numeric
-  x_labels_display <- ifelse(seq_along(x_labels) %% label_every == 1, x_labels, "")
-
-  ggplot(survey_data, aes(x = factor(x_numeric), y = estimate)) +
+  ggplot(survey_data, aes(x = factor(x_numeric, levels = shared_levels), y = estimate)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
     geom_errorbar(aes(ymin = ci_lower_90, ymax = ci_upper_90),
                   width = 0.3, color = apc_colors["Cohort"], linewidth = 0.6) +
     geom_point(color = apc_colors["Cohort"], size = 2) +
-    scale_x_discrete(labels = x_labels_display) +
+    scale_x_discrete(limits = as.character(shared_levels), labels = shared_labels, drop = FALSE) +
     labs(x = "", y = "", title = survey_name) +
     theme_srh(base_size = 14) +
     theme(
@@ -284,7 +296,7 @@ library(patchwork)
 age_plots <- map(SURVEY_ORDER, function(s) {
   survey_data <- age_data %>% filter(survey == s)
   if (nrow(survey_data) > 0) {
-    create_age_plot(survey_data, s)
+    create_age_plot(survey_data, s, all_age_levels)
   } else {
     create_placeholder(s)
   }
@@ -293,7 +305,7 @@ age_plots <- map(SURVEY_ORDER, function(s) {
 period_plots <- map(SURVEY_ORDER, function(s) {
   survey_data <- period_data %>% filter(survey == s)
   if (nrow(survey_data) > 0) {
-    create_period_plot(survey_data, s)
+    create_period_plot(survey_data, s, all_period_levels)
   } else {
     create_placeholder(s)
   }
@@ -302,7 +314,7 @@ period_plots <- map(SURVEY_ORDER, function(s) {
 cohort_plots <- map(SURVEY_ORDER, function(s) {
   survey_data <- cohort_data %>% filter(survey == s)
   if (nrow(survey_data) > 0) {
-    create_cohort_plot(survey_data, s)
+    create_cohort_plot(survey_data, s, all_cohort_levels, cohort_labels)
   } else {
     create_placeholder(s)
   }
