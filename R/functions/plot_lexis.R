@@ -297,6 +297,7 @@ plot_lexis_contour <- function(data,
 create_lexis_subplot <- function(data,
                                   survey_name,
                                   x_axis = "year",
+                                  y_axis = "age",
                                   show_title = TRUE,
                                   show_legend = TRUE,
                                   show_cohort_lines = TRUE,
@@ -316,7 +317,9 @@ create_lexis_subplot <- function(data,
                                   base_size = 12) {
 
   stopifnot(x_axis %in% c("year", "cohort"))
+  stopifnot(y_axis %in% c("age", "cohort"))
   x_var <- x_axis  # "year" or "cohort"
+  y_var <- y_axis  # "age" or "cohort"
 
   # Complete the grid so missing cells show as gray instead of white gaps
   all_x_data <- sort(unique(data[[x_var]]))
@@ -326,15 +329,21 @@ create_lexis_subplot <- function(data,
   } else {
     all_x <- all_x_data
   }
-  all_ages <- sort(unique(data$age))
+  all_y_data <- sort(unique(data[[y_var]]))
+  if (length(all_y_data) > 1) {
+    y_step <- min(diff(all_y_data))
+    all_y <- seq(min(all_y_data), max(all_y_data), by = y_step)
+  } else {
+    all_y <- all_y_data
+  }
   complete_grid <- setNames(
-    expand.grid(all_x, all_ages),
-    c(x_var, "age")
+    expand.grid(all_x, all_y),
+    c(x_var, y_var)
   )
-  data <- merge(complete_grid, data, by = c(x_var, "age"), all.x = TRUE)
+  data <- merge(complete_grid, data, by = c(x_var, y_var), all.x = TRUE)
 
   # Base plot
-  p <- ggplot(data, aes(x = .data[[x_var]], y = age, fill = mean_srh)) +
+  p <- ggplot(data, aes(x = .data[[x_var]], y = .data[[y_var]], fill = mean_srh)) +
     geom_tile()
 
   # Determine scale limits
@@ -381,8 +390,8 @@ create_lexis_subplot <- function(data,
     )
   }
 
-  # Cohort reference lines (only for year-axis Lexis diagrams)
-  if (show_cohort_lines && x_axis == "year" && nrow(data) > 0) {
+  # Cohort reference lines (only for year-axis Lexis diagrams with age on y)
+  if (show_cohort_lines && x_axis == "year" && y_axis == "age" && nrow(data) > 0) {
     year_range <- range(data$year, na.rm = TRUE)
     age_range <- range(data$age, na.rm = TRUE)
     birth_min <- year_range[1] - age_range[2]
@@ -508,6 +517,7 @@ create_lexis_subplot <- function(data,
 plot_lexis_combined <- function(lexis_list,
                                  ncol = 6,
                                  x_axis = "year",
+                                 y_axis = "age",
                                  show_cohort_lines = TRUE,
                                  color_scale = "turbo",
                                  reverse_colors = TRUE,
@@ -543,6 +553,7 @@ plot_lexis_combined <- function(lexis_list,
       data = lexis_list[[svy]],
       survey_name = svy,
       x_axis = x_axis,
+      y_axis = y_axis,
       show_title = TRUE,
       show_legend = TRUE,
       show_cohort_lines = show_cohort_lines,
@@ -567,8 +578,9 @@ plot_lexis_combined <- function(lexis_list,
   plot_grid <- wrap_plots(plots, ncol = ncol)
 
   # --- Create shared axis labels as grobs (like Figure 1) ---
+  y_label_text <- if (y_axis == "cohort") "Cohort (Birth Year)" else "Age"
   y_label_grob <- grid::textGrob(
-    "Age",
+    y_label_text,
     rot = 90,
     gp = grid::gpar(fontsize = base_size + 2, fontface = "plain")
   )
@@ -1093,6 +1105,162 @@ prepare_lexis_data_cohort <- function(data,
     lexis_data <- work_data %>%
       filter(!is.na(srh_value), !is.na(age), !is.na(cohort)) %>%
       group_by(cohort, age) %>%
+      summarize(
+        mean_srh = mean(srh_value, na.rm = TRUE),
+        n = n(),
+        .groups = "drop"
+      )
+  }
+
+  # --- Filter by minimum cell size ---
+  lexis_data <- lexis_data %>%
+    filter(n >= min_n)
+
+  # --- Check for empty result ---
+  if (nrow(lexis_data) == 0) {
+    warning("No cells met minimum n threshold (", min_n, "). ",
+            "Consider lowering min_n or using wider bins.")
+  }
+
+  return(lexis_data)
+}
+
+#' Prepare survey data for period-cohort Lexis diagram
+#'
+#' @description Like prepare_lexis_data() but computes cohort (birth year) at
+#'   the individual level before binning. Returns data binned by (year, cohort)
+#'   instead of (year, age) or (cohort, age), suitable for Lexis diagrams with
+#'   period on x-axis and cohort on y-axis.
+#'
+#' Key interpretation:
+#'   - Horizontal patterns = cohort effects (birth year matters)
+#'   - Vertical patterns = period effects (calendar year matters)
+#'   - Diagonal patterns (slope = +1) = age effects (age = period - cohort)
+#'
+#' @param data Survey data frame. Must contain: year, age, srh (numeric), wt (weight).
+#' @param srh_var Name of the SRH variable (default "srh")
+#' @param age_var Name of the age variable (default "age")
+#' @param year_var Name of the year variable (default "year")
+#' @param weight_var Name of the weight variable (default "wt")
+#' @param year_binwidth Width of year (period) bins (default 5)
+#' @param cohort_binwidth Width of cohort (birth year) bins (default 5)
+#' @param min_age Minimum age to include (default NULL)
+#' @param max_age Maximum age to include (default NULL)
+#' @param min_n Minimum unweighted observations per cell (default 30)
+#' @param weighted Use survey weights? (default TRUE)
+#' @param rescale_01 Rescale SRH to 0-1 scale? (default TRUE)
+#' @param srh_scale The original scale of SRH ("4" or "5", auto-detected if NULL)
+#'
+#' @return Data frame with columns: year, cohort, mean_srh, n
+#' @export
+prepare_lexis_data_period_cohort <- function(data,
+                                              srh_var = "srh",
+                                              age_var = "age",
+                                              year_var = "year",
+                                              weight_var = "wt",
+                                              year_binwidth = 5,
+                                              cohort_binwidth = 5,
+                                              min_age = NULL,
+                                              max_age = NULL,
+                                              min_n = 30,
+                                              weighted = TRUE,
+                                              rescale_01 = TRUE,
+                                              srh_scale = NULL) {
+
+  # --- Input validation ---
+  required_cols <- c(year_var, age_var, srh_var)
+  if (weighted) required_cols <- c(required_cols, weight_var)
+
+  missing_cols <- setdiff(required_cols, names(data))
+  if (length(missing_cols) > 0) {
+    stop("Missing required columns: ", paste(missing_cols, collapse = ", "))
+  }
+
+  # --- Helper to safely convert to numeric (handles haven_labelled) ---
+  safe_numeric <- function(x) {
+    if (inherits(x, "haven_labelled")) {
+      as.numeric(unclass(x))
+    } else if (is.factor(x)) {
+      as.numeric(levels(x))[x]
+    } else {
+      as.numeric(x)
+    }
+  }
+
+  # --- Rename to standard names for processing ---
+  work_data <- data %>%
+    mutate(
+      srh_raw = safe_numeric(!!sym(srh_var)),
+      age_raw = safe_numeric(!!sym(age_var)),
+      year_raw = safe_numeric(!!sym(year_var))
+    )
+
+  if (weighted && weight_var %in% names(data)) {
+    work_data <- work_data %>%
+      mutate(wt = safe_numeric(!!sym(weight_var)))
+  }
+
+  # --- Filter by age range if specified ---
+  if (!is.null(min_age)) {
+    work_data <- work_data %>% filter(age_raw >= min_age)
+  }
+  if (!is.null(max_age)) {
+    work_data <- work_data %>% filter(age_raw <= max_age)
+  }
+
+  # --- Auto-detect SRH scale if needed ---
+  if (rescale_01 && is.null(srh_scale)) {
+    srh_max <- max(work_data$srh_raw, na.rm = TRUE)
+    srh_scale <- if (srh_max <= 4) "4" else "5"
+    message("Auto-detected SRH scale: ", srh_scale, "-point")
+  }
+
+  # --- Rescale SRH if requested ---
+  if (rescale_01) {
+    scale_max <- as.numeric(srh_scale)
+    work_data <- work_data %>%
+      mutate(srh_value = (srh_raw - 1) / (scale_max - 1))
+  } else {
+    work_data <- work_data %>%
+      mutate(srh_value = srh_raw)
+  }
+
+  # --- Compute cohort at individual level before binning ---
+  work_data <- work_data %>%
+    mutate(cohort_raw = year_raw - age_raw)
+
+  # --- Apply year binning ---
+  if (year_binwidth > 1) {
+    work_data <- work_data %>%
+      mutate(year = floor(year_raw / year_binwidth) * year_binwidth + year_binwidth / 2)
+  } else {
+    work_data <- work_data %>%
+      mutate(year = year_raw)
+  }
+
+  # --- Apply cohort binning ---
+  if (cohort_binwidth > 1) {
+    work_data <- work_data %>%
+      mutate(cohort = floor(cohort_raw / cohort_binwidth) * cohort_binwidth + cohort_binwidth / 2)
+  } else {
+    work_data <- work_data %>%
+      mutate(cohort = cohort_raw)
+  }
+
+  # --- Calculate weighted means by year and cohort ---
+  if (weighted && "wt" %in% names(work_data)) {
+    lexis_data <- work_data %>%
+      filter(!is.na(srh_value), !is.na(year), !is.na(cohort), !is.na(wt)) %>%
+      group_by(year, cohort) %>%
+      summarize(
+        mean_srh = weighted.mean(srh_value, wt, na.rm = TRUE),
+        n = n(),
+        .groups = "drop"
+      )
+  } else {
+    lexis_data <- work_data %>%
+      filter(!is.na(srh_value), !is.na(year), !is.na(cohort)) %>%
+      group_by(year, cohort) %>%
       summarize(
         mean_srh = mean(srh_value, na.rm = TRUE),
         n = n(),
