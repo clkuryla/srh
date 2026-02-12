@@ -83,7 +83,7 @@ ft_race <- make_meta_ft(sociodem_race, "Table S3b. Metaregression by Race/Ethnic
 ft_educ <- make_meta_ft(sociodem_educ, "Table S3c. Metaregression by Education Level", sociodem_footer)
 
 # ==============================================================================
-# 2. Covariate-adjusted age coefficients (Figure S1)
+# 2. Metaregression of covariate-adjusted age coefficients (Figure S1)
 # ==============================================================================
 
 adj_coefs <- read_csv(
@@ -92,40 +92,66 @@ adj_coefs <- read_csv(
   show_col_types = FALSE
 )
 
-format_adj_coefs <- function(df, covariate_name) {
+# Run inverse-variance weighted metaregression: coefficient ~ year, weights = 1/se^2
+run_adj_metareg <- function(df) {
+  df |>
+    group_by(survey, covariate_adjusted) |>
+    summarise(
+      fit = list({
+        w <- 1 / se^2
+        mod <- lm(coefficient ~ year, weights = w)
+        s <- summary(mod)
+        tibble(
+          slope      = coef(mod)[["year"]],
+          slope_se   = s$coefficients["year", "Std. Error"],
+          slope_p    = s$coefficients["year", "Pr(>|t|)"],
+          r_squared  = s$r.squared,
+          n_years    = n(),
+          year_min   = min(year),
+          year_max   = max(year)
+        )
+      }),
+      .groups = "drop"
+    ) |>
+    unnest(fit)
+}
+
+adj_metareg <- run_adj_metareg(adj_coefs)
+
+format_adj_metareg <- function(df, covariate_name) {
   df |>
     filter(covariate_adjusted == covariate_name) |>
     mutate(
-      coef_formatted = formatC(coefficient, format = "e", digits = 2),
-      se_formatted   = formatC(se, format = "e", digits = 1),
+      slope_formatted = formatC(slope, format = "e", digits = 2),
+      se_formatted    = formatC(slope_se, format = "e", digits = 1),
       p_value_formatted = case_when(
-        p_value < 0.001 ~ "<0.001",
-        TRUE ~ formatC(p_value, format = "f", digits = 3)
+        slope_p < 0.001 ~ "<0.001",
+        TRUE ~ formatC(slope_p, format = "f", digits = 3)
       ),
-      ci = paste0("[", formatC(ci_lower, format = "f", digits = 4), ", ",
-                  formatC(ci_upper, format = "f", digits = 4), "]"),
-      year = as.character(year)
+      r_squared_formatted = formatC(r_squared, format = "f", digits = 2),
+      year_range = paste0(year_min, "-", year_max)
     ) |>
     select(
-      Survey     = survey,
-      Year       = year,
-      `Age Coef.` = coef_formatted,
-      SE         = se_formatted,
-      `P-value`  = p_value_formatted,
-      `95% CI`   = ci,
-      N          = n_unweighted
-    )
+      Survey             = survey,
+      `Slope (per year)` = slope_formatted,
+      SE                 = se_formatted,
+      `P-value`          = p_value_formatted,
+      R2                 = r_squared_formatted,
+      `N Years`          = n_years,
+      `Year Range`       = year_range
+    ) |>
+    rename_with(~ "R\u00B2", .cols = "R2")
 }
 
-adj_sex  <- format_adj_coefs(adj_coefs, "Sex")
-adj_race <- format_adj_coefs(adj_coefs, "Race/Ethnicity")
-adj_educ <- format_adj_coefs(adj_coefs, "Education")
+adj_meta_sex  <- format_adj_metareg(adj_metareg, "Sex")
+adj_meta_race <- format_adj_metareg(adj_metareg, "Race/Ethnicity")
+adj_meta_educ <- format_adj_metareg(adj_metareg, "Education")
 
-adj_footer <- "Note: Age coefficient from SRH ~ age, adjusted for the indicated covariate. Survey-weighted estimates. N is unweighted sample size."
+adj_meta_footer <- "Note: Inverse-variance weighted metaregression of the covariate-adjusted age coefficient (from SRH ~ age + covariate) on calendar year. Positive slopes indicate convergence toward zero."
 
-ft_adj_sex  <- make_meta_ft(adj_sex,  "Table S1a. Covariate-adjusted age coefficients (adjusted for Sex)",             adj_footer)
-ft_adj_race <- make_meta_ft(adj_race, "Table S1b. Covariate-adjusted age coefficients (adjusted for Race/Ethnicity)",  adj_footer)
-ft_adj_educ <- make_meta_ft(adj_educ, "Table S1c. Covariate-adjusted age coefficients (adjusted for Education Level)", adj_footer)
+ft_adj_sex  <- make_meta_ft(adj_meta_sex,  "Table S1a. Metaregression of age coefficients adjusted for Sex",             adj_meta_footer)
+ft_adj_race <- make_meta_ft(adj_meta_race, "Table S1b. Metaregression of age coefficients adjusted for Race/Ethnicity",  adj_meta_footer)
+ft_adj_educ <- make_meta_ft(adj_meta_educ, "Table S1c. Metaregression of age coefficients adjusted for Education Level", adj_meta_footer)
 
 # ==============================================================================
 # 3. Dichotomized metaregression
