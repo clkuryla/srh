@@ -1,0 +1,7 @@
+In survey-weighted Cox proportional hazard models (age time scale, 10-year follow-up), we tested whether the SRH-mortality association changed over calendar time by fitting srh * survey_year interactions within each age group. Survey year was centered at 1990 and scaled per decade, so the interaction coefficient represents the multiplicative change in the SRH hazard ratio per decade of calendar time.
+
+For adults aged 30-39, 40-49, 50-59, 60-69, 70-79, the interaction was negative and statistically significant, indicating that SRH became increasingly predictive of subsequent mortality over time (e.g., for ages 60-69: HR multiplied by 0.928 per decade, 95% CI [0.918, 0.937], p < 0.001). In contrast, the interaction was smaller and not statistically distinguishable from zero for ages 18-29, 80-89 (FDR-adjusted p > 0.05).
+
+The design-based Wald F-test (regTermTest) was used for inference, with Benjamini-Hochberg correction for multiple comparisons across 7 age groups. 5 of 7 age groups showed a statistically significant interaction at FDR < 0.05.
+
+Interpretation: An HR multiplier per decade < 1 means that the protective association of higher SRH with lower mortality is strengthening over calendar time (the HR moves further below 1 each decade). SRH is coded higher = better (1=Poor, 5=Excellent).
