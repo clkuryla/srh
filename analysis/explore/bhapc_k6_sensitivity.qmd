@@ -1,0 +1,306 @@
+---
+title: "BHAPC Covariate Sensitivity Analysis: K6 and Demographics"
+author: "Christine L. Kuryla"
+date: today
+format:
+  gfm:
+    toc: true
+execute:
+  echo: false
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+
+library(tidyverse)
+library(here)
+library(knitr)
+
+output_dir <- here::here("output", "bhapc_nhis_meps_covariates")
+surveys <- c("meps", "nhis")
+models <- paste0("m", 1:4)
+```
+
+# Motivation
+
+A key question for interpreting cohort effects in self-rated health (SRH) is
+whether they reflect *true* generational differences or are artifacts of
+compositional changes in the population. If the demographic and health profiles
+of successive birth cohorts have shifted --- for example, through rising
+educational attainment, changing racial/ethnic composition, or increasing
+psychological distress --- then apparent cohort "effects" on SRH may simply
+reflect these compositional shifts rather than genuine generational change.
+
+To test this, we fit a sequence of Bayesian hierarchical APC (BHAPC) models that
+progressively add covariates to the baseline specification. If cohort variance
+shrinks substantially after adjusting for demographics and psychological
+distress, the compositional hypothesis is supported.
+
+
+# Methods
+
+## Model specifications
+
+We estimated four nested BHAPC models on NHIS (1997--2018) and MEPS
+(1996--2019), each using a 100,000-observation random subsample:
+
+| Model | Specification | Purpose |
+|-------|--------------|---------|
+| **M1** (Baseline) | `srh ~ age + age² + ln(wt)` + random cohort + period | Baseline APC decomposition |
+| **M2** (Demographics) | M1 + race + education + sex | Test compositional demographics |
+| **M3** (K6 only) | M1 + K6 | Test psychological distress alone |
+| **M4** (Full) | M1 + race + education + sex + K6 | All covariates combined |
+
+All models include age (linear + quadratic) as fixed effects, log-transformed
+survey weights as a covariate (Graf, 2021), and crossed random intercepts for
+4-year birth cohort and period bins. Models were estimated via MCMC using
+rstanarm (4 chains x 6,000 iterations, adapt_delta = 0.998). Models M3 and M4
+are fit on complete cases for K6.
+
+## K6 availability
+
+The Kessler-6 psychological distress scale is not available for all respondents:
+
+```{r}
+#| label: missingness-summary
+
+miss_meps <- read_csv(file.path(output_dir, "meps", "missingness_report.csv"),
+                      show_col_types = FALSE)
+miss_nhis <- read_csv(file.path(output_dir, "nhis", "missingness_report.csv"),
+                      show_col_types = FALSE)
+
+k6_meps <- miss_meps |> filter(variable == "k6")
+k6_nhis <- miss_nhis |> filter(variable == "k6")
+
+tibble(
+  Survey = c("MEPS", "NHIS"),
+  `N (total)` = c(k6_meps$n_total, k6_nhis$n_total),
+  `N (valid K6)` = c(k6_meps$n_valid, k6_nhis$n_valid),
+  `% Missing` = c(k6_meps$pct_missing, k6_nhis$pct_missing)
+) |>
+  kable(digits = 1)
+```
+
+MEPS retains approximately 74% of observations for K6-inclusive models; NHIS
+retains approximately 42%. Core variables (SRH, age, year, survey weight) are
+complete in both surveys.
+
+
+# Convergence
+
+```{r}
+#| label: convergence
+
+conv_meps <- read_csv(file.path(output_dir, "meps", "convergence_diagnostics.csv"),
+                      show_col_types = FALSE)
+conv_nhis <- read_csv(file.path(output_dir, "nhis", "convergence_diagnostics.csv"),
+                      show_col_types = FALSE)
+
+conv_all <- bind_rows(
+  conv_meps |> mutate(survey = "MEPS"),
+  conv_nhis |> mutate(survey = "NHIS")
+)
+
+max_rhat <- max(conv_all$max_rhat)
+min_neff <- min(conv_all$min_neff)
+```
+
+All 8 models converged successfully (max Rhat = `r round(max_rhat, 4)`,
+min effective sample size = `r format(min_neff, big.mark = ",")`).
+
+
+# Variance Decomposition
+
+```{r}
+#| label: variance-tables
+
+comp_meps <- read_csv(file.path(output_dir, "meps", "comparison_table.csv"),
+                      show_col_types = FALSE)
+comp_nhis <- read_csv(file.path(output_dir, "nhis", "comparison_table.csv"),
+                      show_col_types = FALSE)
+
+# Compute percent reductions
+meps_cohort <- comp_meps |> filter(component == "Cohort")
+nhis_cohort <- comp_nhis |> filter(component == "Cohort")
+meps_cohort_red <- (meps_cohort$M1_base - meps_cohort$M4_full) / meps_cohort$M1_base * 100
+nhis_cohort_red <- (nhis_cohort$M1_base - nhis_cohort$M4_full) / nhis_cohort$M1_base * 100
+
+# Format comparison tables
+format_comp <- function(df, survey_name) {
+  df |>
+    mutate(across(where(is.numeric), ~ round(.x, 3))) |>
+    rename(Component = component,
+           `M1 (Base)` = M1_base,
+           `M2 (Demog)` = M2_demog,
+           `M3 (K6)` = M3_k6,
+           `M4 (Full)` = M4_full)
+}
+```
+
+The table below shows the percentage of total SRH variance attributable to each
+component across the four model specifications.
+
+### MEPS
+
+```{r}
+#| label: variance-meps
+
+kable(format_comp(comp_meps, "MEPS"), digits = 3,
+      caption = "MEPS: Variance components (% of total) by model")
+```
+
+### NHIS
+
+```{r}
+#| label: variance-nhis
+
+kable(format_comp(comp_nhis, "NHIS"), digits = 3,
+      caption = "NHIS: Variance components (% of total) by model")
+```
+
+### Cohort variance reduction
+
+```{r}
+#| label: variance-reduction-summary
+
+tibble(
+  Survey = c("MEPS", "NHIS"),
+  `M1 Cohort (%)` = c(meps_cohort$M1_base, nhis_cohort$M1_base),
+  `M4 Cohort (%)` = c(meps_cohort$M4_full, nhis_cohort$M4_full),
+  `Reduction (%)` = c(meps_cohort_red, nhis_cohort_red)
+) |>
+  kable(digits = 1,
+        caption = "Cohort variance reduction from baseline (M1) to full model (M4)")
+```
+
+In MEPS, cohort variance drops by approximately `r round(meps_cohort_red)`%
+from M1 to M4. In NHIS, the reduction is approximately
+`r round(nhis_cohort_red)`%. In both surveys, adding K6 (M1 → M3) produces the
+single largest reduction, with demographics providing additional but smaller
+contributions.
+
+
+# Key Fixed Effects
+
+```{r}
+#| label: fixed-effects
+
+fe_all <- map_dfr(surveys, function(svy) {
+  map_dfr(models, function(m) {
+    read_csv(file.path(output_dir, svy, paste0("fixed_effects_", m, ".csv")),
+             show_col_types = FALSE) |>
+      mutate(survey = toupper(svy), model = toupper(m))
+  })
+})
+
+# K6 coefficients
+fe_k6 <- fe_all |>
+  filter(term == "k6") |>
+  select(Survey = survey, Model = model,
+         Estimate = estimate, SE = std_error,
+         `CI Lower (90%)` = ci_lower_90, `CI Upper (90%)` = ci_upper_90)
+
+kable(fe_k6, digits = 4, caption = "K6 coefficient across models")
+```
+
+The K6 coefficient is strongly negative and consistent across surveys and
+specifications: each unit increase in psychological distress (K6 scale) is
+associated with approximately 0.09 lower SRH, controlling for age and other
+covariates.
+
+```{r}
+#| label: age-effects
+
+fe_age <- fe_all |>
+  filter(term == "age") |>
+  select(Survey = survey, Model = model,
+         Estimate = estimate, SE = std_error)
+
+kable(fe_age, digits = 4, caption = "Age coefficient across models")
+```
+
+The age coefficient attenuates modestly when covariates are added (from ≈-0.035
+to ≈-0.031 in NHIS; ≈-0.035 to ≈-0.036 in MEPS), consistent with partial
+confounding between age and health-correlated demographics.
+
+
+# Period and Cohort Effects
+
+## Combined comparison across models and surveys
+
+```{r}
+#| label: fig-combined-comparison
+#| fig-cap: "Birth cohort effects on SRH across model specifications. Posterior means with 90% credible intervals. As covariates are added (M1 → M4), cohort effects flatten toward zero in both surveys."
+
+knitr::include_graphics(here::here("output", "bhapc_nhis_meps_covariates",
+                                    "combined_covariate_comparison.png"))
+```
+
+## MEPS: Period and cohort effects by model
+
+```{r}
+#| label: fig-meps-2x4
+#| fig-cap: "MEPS period (top) and cohort (bottom) effects across four model specifications."
+
+knitr::include_graphics(here::here("output", "bhapc_nhis_meps_covariates",
+                                    "meps_figure_2x4_period_cohort.png"))
+```
+
+## NHIS: Period and cohort effects by model
+
+```{r}
+#| label: fig-nhis-2x4
+#| fig-cap: "NHIS period (top) and cohort (bottom) effects across four model specifications."
+
+knitr::include_graphics(here::here("output", "bhapc_nhis_meps_covariates",
+                                    "nhis_figure_2x4_period_cohort.png"))
+```
+
+
+# Key Findings
+
+1. **Cohort effects are largely compositional.** Adding demographics and K6
+   reduces cohort variance by ~75% in MEPS and ~85% in NHIS. The residual
+   cohort effects in M4 are negligible (<0.4% of total variance).
+
+2. **K6 is the most powerful single covariate.** Psychological distress alone
+   (M3) accounts for more cohort variance reduction than demographics alone
+   (M2), suggesting that rising psychological distress in younger cohorts is a
+   primary driver of apparent cohort differences in SRH.
+
+3. **Results are consistent across surveys.** Despite differences in survey
+   design, sample composition, and K6 availability, both MEPS and NHIS tell
+   the same story: observed birth cohort patterns in SRH are substantially
+   explained by compositional changes rather than true generational effects.
+
+4. **The K6 effect is robust.** The K6 coefficient is stable across
+   specifications (β ≈ -0.09) and does not change meaningfully when
+   demographics are added or removed.
+
+
+# Limitations
+
+- **K6 missingness** is substantial, especially in NHIS (58%). Models M3 and M4
+  are fit on complete cases, which may introduce selection bias if missingness
+  is related to distress or health.
+- **Cross-sectional identification:** The BHAPC framework relies on assumptions
+  to separate age, period, and cohort effects. The covariate reduction approach
+  is more interpretable than point estimates of APC effects, but is not causal.
+- **Subsample of 100,000:** Due to computational constraints of MCMC estimation,
+  models use a random subsample rather than the full survey data.
+
+
+# Reproducibility
+
+Analysis scripts: `R/scripts/17_bhapc_nhis_meps_covariates.R` and subscripts
+`17a`--`17e`. Pre-computed results in `output/bhapc_nhis_meps_covariates/`.
+Methods details: `output/methods_bhapc.md`.
+
+```{r}
+#| label: session-info
+#| echo: true
+
+sessionInfo()
+```
