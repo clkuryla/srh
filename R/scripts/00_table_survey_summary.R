@@ -37,6 +37,14 @@ summarize_survey <- function(survey_key) {
 
   data <- read_rds(path)
 
+  # Restrict NHIS to 1983-2024 (SRH on correct 5-point scale)
+  if (survey_key == "nhis") {
+    data <- data %>% filter(year >= 1983, year <= 2024)
+  }
+
+  # Restrict to observations with valid weights, matching analysis sample
+  data <- data %>% filter(wt > 0)
+
   # Calculate statistics
   years <- sort(unique(data$year))
   n_waves <- length(years)

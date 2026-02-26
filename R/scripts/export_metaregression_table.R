@@ -12,10 +12,15 @@ library(flextable)
 source(here::here("R/paths.R"))
 
 # --- Load data ---
-meta <- readr::read_csv(
-  here::here("output", "tables", "fig1b_metaregression_20260116.csv"),
-  show_col_types = FALSE
+# Always use the most recently dated metaregression file
+meta_files <- list.files(
+  here::here("output", "tables"),
+  pattern = "^fig1b_metaregression_\\d{8}\\.csv$",
+  full.names = TRUE
 )
+meta_latest <- meta_files[which.max(file.mtime(meta_files))]
+message("Loading: ", basename(meta_latest))
+meta <- readr::read_csv(meta_latest, show_col_types = FALSE)
 
 # --- Format table for publication ---
 meta_formatted <- meta |>

@@ -10,7 +10,7 @@
 #   Recoded (srh):     5=Excellent, 4=Very Good, 3=Good, 2=Fair, 1=Poor (higher = better)
 #
 # Survey design notes:
-#   - Uses MEC exam weights (WTMEC2YR for most cycles, WTMECPRP for pre-pandemic)
+#   - Uses interview weights (WTINT2YR for most cycles, WTINTPRP for pre-pandemic)
 #   - Strata: SDMVSTRA
 #   - PSU: SDMVPSU
 #   - NHANES uses 2-year survey cycles
@@ -33,18 +33,18 @@ nhanes_direct_dir <- file.path(data_root(), "surveys", "NHANES_direct")
 # Note: We include all available cycles; downstream analysis can filter as needed
 cycles <- tribble(
   ~demo_file, ~huq_file, ~years_label, ~year_midpoint, ~weight_var,
-  "DEMO_1999-2000.rds",      "HUQ_1999-2000.rds",      "1999-2000",  1999.5, "WTMEC2YR",
-  "DEMO_B_2001-2002.rds",    "HUQ_B_2001-2002.rds",    "2001-2002",  2001.5, "WTMEC2YR",
-  "DEMO_C_2003-2004.rds",    "HUQ_C_2003-2004.rds",    "2003-2004",  2003.5, "WTMEC2YR",
-  "DEMO_D_2005-2006.rds",    "HUQ_D_2005-2006.rds",    "2005-2006",  2005.5, "WTMEC2YR",
-  "DEMO_E_2007-2008.rds",    "HUQ_E_2007-2008.rds",    "2007-2008",  2007.5, "WTMEC2YR",
-  "DEMO_F_2009-2010.rds",    "HUQ_F_2009-2010.rds",    "2009-2010",  2009.5, "WTMEC2YR",
-  "DEMO_G_2011-2012.rds",    "HUQ_G_2011-2012.rds",    "2011-2012",  2011.5, "WTMEC2YR",
-  "DEMO_H_2013-2014.rds",    "HUQ_H_2013-2014.rds",    "2013-2014",  2013.5, "WTMEC2YR",
-  "DEMO_I_2015-2016.rds",    "HUQ_I_2015-2016.rds",    "2015-2016",  2015.5, "WTMEC2YR",
-  "DEMO_J_2017-2018.rds",    "HUQ_J_2017-2018.rds",    "2017-2018",  2017.5, "WTMEC2YR",
-  "P_DEMO_2017-2020.rds",    "P_HUQ_2017-2020.rds",    "2017-2020",  2018.5, "WTMECPRP",  # Pre-pandemic
-  "DEMO_L_2021-2023.rds",    "HUQ_L_2021-2023.rds",    "2021-2023",  2022.0, "WTMEC2YR"   # Post-pandemic
+  "DEMO_1999-2000.rds",      "HUQ_1999-2000.rds",      "1999-2000",  1999.5, "WTINT2YR",
+  "DEMO_B_2001-2002.rds",    "HUQ_B_2001-2002.rds",    "2001-2002",  2001.5, "WTINT2YR",
+  "DEMO_C_2003-2004.rds",    "HUQ_C_2003-2004.rds",    "2003-2004",  2003.5, "WTINT2YR",
+  "DEMO_D_2005-2006.rds",    "HUQ_D_2005-2006.rds",    "2005-2006",  2005.5, "WTINT2YR",
+  "DEMO_E_2007-2008.rds",    "HUQ_E_2007-2008.rds",    "2007-2008",  2007.5, "WTINT2YR",
+  "DEMO_F_2009-2010.rds",    "HUQ_F_2009-2010.rds",    "2009-2010",  2009.5, "WTINT2YR",
+  "DEMO_G_2011-2012.rds",    "HUQ_G_2011-2012.rds",    "2011-2012",  2011.5, "WTINT2YR",
+  "DEMO_H_2013-2014.rds",    "HUQ_H_2013-2014.rds",    "2013-2014",  2013.5, "WTINT2YR",
+  "DEMO_I_2015-2016.rds",    "HUQ_I_2015-2016.rds",    "2015-2016",  2015.5, "WTINT2YR",
+  "DEMO_J_2017-2018.rds",    "HUQ_J_2017-2018.rds",    "2017-2018",  2017.5, "WTINT2YR",
+  "P_DEMO_2017-2020.rds",    "P_HUQ_2017-2020.rds",    "2017-2020",  2018.5, "WTINTPRP",  # Pre-pandemic
+  "DEMO_L_2021-2023.rds",    "HUQ_L_2021-2023.rds",    "2021-2023",  2022.0, "WTINT2YR"   # Post-pandemic
 )
 
 # ------------------------------------------------------------------------------
@@ -75,7 +75,7 @@ process_cycle <- function(demo_file, huq_file, years_label, year_midpoint, weigh
     demo_vars <- c(demo_vars, weight_var)
   } else {
     warning("  Weight variable ", weight_var, " not found in ", demo_file)
-    demo_vars <- c(demo_vars, "WTMEC2YR")  # Fallback
+    demo_vars <- c(demo_vars, "WTINT2YR")  # Fallback
   }
 
   # Ensure all required variables exist
@@ -121,10 +121,10 @@ message("\nTotal rows before filtering: ", nrow(all_data))
 # ------------------------------------------------------------------------------
 
 # Rename weight columns to a common name
-# Handle both WTMEC2YR and WTMECPRP
+# Handle both WTINT2YR and WTINTPRP
 all_data <- all_data %>%
   mutate(
-    wt = coalesce(WTMEC2YR, WTMECPRP)
+    wt = coalesce(WTINT2YR, WTINTPRP)
   )
 
 # Wrangle to match expected output format
@@ -236,6 +236,11 @@ print(range(data_nhanes$age, na.rm = TRUE))
 output_path <- derived_path("data_nhanes_source.rds")
 saveRDS(data_nhanes, output_path)
 message("\nSaved to: ", output_path)
+
+# Also save as canonical data_nhanes.rds (used by downstream analysis scripts)
+output_path_main <- derived_path("data_nhanes.rds")
+saveRDS(data_nhanes, output_path_main)
+message("Saved to: ", output_path_main)
 
 # Also save a version with only 1999-2018 for comparison with Kamaryn's data
 data_nhanes_1999_2018 <- data_nhanes %>%
