@@ -1016,3 +1016,459 @@ run_all_covariate_coefficients <- function(
   })
   dplyr::bind_rows(results)
 }
+
+
+# ------------------------------------------------------------------------------
+# FUNCTION 6: FULL MODEL — ALL COVARIATES SIMULTANEOUSLY
+# ------------------------------------------------------------------------------
+
+#' Fit SRH ~ age + sex + race + education (all together) for each year
+#'
+#' @description
+#' For each year, fits a survey-weighted linear model with ALL covariates:
+#'   SRH ~ age + sex + race_includehisp + educ_3cat
+#' Returns ALL coefficients (age + each covariate level) in tidy format.
+#'
+#' Analogous to regress_age_adjusted_by_year() + regress_covariate_overall_by_year()
+#' but from a single joint model rather than separate one-at-a-time models.
+#'
+#' @param data Data frame with columns: srh, age, sex, race_includehisp, educ_3cat, year, wt
+#' @param survey_name Character string for labeling output
+#' @param covariate_vars Named list of covariate specs:
+#'   list(sex = list(label = "Sex", ref = "Male"), ...)
+#' @param srh_var,age_var,year_var,psu_var,strata_var,wt_var Column names
+#' @param ci_level Confidence level (default 0.95)
+#' @param lonely_psu How to handle single-PSU strata (default "adjust")
+#' @param min_n Minimum observations per year (default 100)
+#'
+#' @return Data frame with columns:
+#'   survey, term, covariate, covariate_label, level, reference,
+#'   year, coefficient, se, ci_lower, ci_upper, n_unweighted
+#'
+regress_all_covariates_by_year <- function(
+    data,
+    survey_name,
+    covariate_vars = list(
+      sex = list(label = "Sex", ref = "Male"),
+      race_includehisp = list(label = "Race/Ethnicity", ref = "White"),
+      educ_3cat = list(label = "Education", ref = "LT_HS")
+    ),
+    srh_var = "srh",
+    age_var = "age",
+    year_var = "year",
+    psu_var = "psu",
+    strata_var = "strata",
+    wt_var = "wt",
+    ci_level = 0.95,
+    lonely_psu = "adjust",
+    min_n = 100
+) {
+
+  # --- Input validation ---
+  stopifnot(is.data.frame(data))
+  stopifnot(srh_var %in% names(data))
+  stopifnot(age_var %in% names(data))
+  stopifnot(year_var %in% names(data))
+  stopifnot(wt_var %in% names(data))
+
+  # Check which covariates are actually available
+  available_covars <- list()
+  for (cv in names(covariate_vars)) {
+    if (cv %in% names(data) && !all(is.na(data[[cv]]))) {
+      available_covars[[cv]] <- covariate_vars[[cv]]
+    } else {
+      message("  Skipping ", cv, " - not available in ", survey_name)
+    }
+  }
+
+  if (length(available_covars) == 0) {
+    warning("No covariates available for ", survey_name)
+    return(NULL)
+  }
+
+  # --- Set up factor levels with correct references ---
+  for (cv in names(available_covars)) {
+    ref <- available_covars[[cv]]$ref
+    if (is.character(data[[cv]]) || is.factor(data[[cv]])) {
+      data[[cv]] <- relevel(factor(data[[cv]]), ref = ref)
+    }
+  }
+
+  # --- Set survey options ---
+  old_lonely <- getOption("survey.lonely.psu")
+  options(survey.lonely.psu = lonely_psu)
+  on.exit(options(survey.lonely.psu = old_lonely), add = TRUE)
+
+  # --- Check design elements ---
+  has_psu <- !is.null(psu_var) && psu_var %in% names(data)
+  has_strata <- !is.null(strata_var) && strata_var %in% names(data)
+
+  message("Processing ", survey_name,
+          " (SRH ~ age + ", paste(names(available_covars), collapse = " + "), ")")
+
+  # --- Get unique years ---
+  years <- sort(unique(data[[year_var]]))
+
+  # --- Run regression for each year ---
+  results_list <- list()
+
+  for (yr in years) {
+    data_year <- data[data[[year_var]] == yr, , drop = FALSE]
+
+    # Base valid mask: srh, age, weights
+    valid_mask <- !is.na(data_year[[srh_var]]) &
+      !is.na(data_year[[age_var]]) &
+      !is.na(data_year[[wt_var]]) &
+      data_year[[wt_var]] > 0
+
+    if (has_psu) valid_mask <- valid_mask & !is.na(data_year[[psu_var]])
+    if (has_strata) valid_mask <- valid_mask & !is.na(data_year[[strata_var]])
+
+    # Determine which covariates are usable this year:
+    # require non-NA AND 2+ levels after NA removal
+    year_covars <- list()
+    year_valid_mask <- valid_mask
+    for (cv in names(available_covars)) {
+      cv_mask <- !is.na(data_year[[cv]])
+      cv_vals <- data_year[[cv]][valid_mask & cv_mask]
+      if (length(unique(cv_vals)) >= 2) {
+        year_covars[[cv]] <- available_covars[[cv]]
+        year_valid_mask <- year_valid_mask & cv_mask
+      } else {
+        message("  Year ", yr, ": dropping ", cv,
+                " (insufficient levels)")
+      }
+    }
+
+    data_year <- data_year[year_valid_mask, , drop = FALSE]
+    n_unweighted <- nrow(data_year)
+
+    if (n_unweighted < min_n) {
+      message("  Year ", yr, " has only ", n_unweighted, " obs. Skipping.")
+      next
+    }
+
+    # Build per-year formula
+    rhs <- paste(c(age_var, names(year_covars)), collapse = " + ")
+    yr_formula <- as.formula(paste0(srh_var, " ~ ", rhs))
+
+    tryCatch({
+      # --- Create survey design ---
+      if (has_psu && has_strata) {
+        svy_design <- svydesign(
+          ids = as.formula(paste0("~", psu_var)),
+          strata = as.formula(paste0("~", strata_var)),
+          weights = as.formula(paste0("~", wt_var)),
+          data = data_year, nest = TRUE
+        )
+      } else if (has_psu) {
+        svy_design <- svydesign(
+          ids = as.formula(paste0("~", psu_var)),
+          weights = as.formula(paste0("~", wt_var)),
+          data = data_year
+        )
+      } else if (has_strata) {
+        svy_design <- svydesign(
+          ids = ~1,
+          strata = as.formula(paste0("~", strata_var)),
+          weights = as.formula(paste0("~", wt_var)),
+          data = data_year
+        )
+      } else {
+        svy_design <- svydesign(
+          ids = ~1,
+          weights = as.formula(paste0("~", wt_var)),
+          data = data_year
+        )
+      }
+
+      # --- Fit the model (covariates may vary by year) ---
+      model <- svyglm(yr_formula, design = svy_design)
+
+      coef_summary <- summary(model)$coefficients
+      ci_all <- confint(model, level = ci_level)
+
+      # --- Extract age coefficient ---
+      if (age_var %in% rownames(coef_summary)) {
+        age_row <- coef_summary[age_var, ]
+        ci_age <- ci_all[age_var, ]
+        results_list[[length(results_list) + 1]] <- data.frame(
+          survey = survey_name,
+          term = age_var,
+          covariate = "age",
+          covariate_label = "Age",
+          level = "age",
+          reference = NA_character_,
+          year = yr,
+          coefficient = age_row["Estimate"],
+          se = age_row["Std. Error"],
+          ci_lower = ci_age[1],
+          ci_upper = ci_age[2],
+          n_unweighted = n_unweighted,
+          stringsAsFactors = FALSE
+        )
+      }
+
+      # --- Extract covariate coefficients (only for this year's covars) ---
+      for (cv in names(year_covars)) {
+        label <- year_covars[[cv]]$label
+        ref <- year_covars[[cv]]$ref
+        cv_levels <- setdiff(levels(data_year[[cv]]), ref)
+
+        for (lvl in cv_levels) {
+          coef_name <- paste0(cv, lvl)
+          if (!coef_name %in% rownames(coef_summary)) next
+
+          coef_row <- coef_summary[coef_name, ]
+          ci_row <- ci_all[coef_name, ]
+
+          results_list[[length(results_list) + 1]] <- data.frame(
+            survey = survey_name,
+            term = coef_name,
+            covariate = cv,
+            covariate_label = label,
+            level = lvl,
+            reference = ref,
+            year = yr,
+            coefficient = coef_row["Estimate"],
+            se = coef_row["Std. Error"],
+            ci_lower = ci_row[1],
+            ci_upper = ci_row[2],
+            n_unweighted = n_unweighted,
+            stringsAsFactors = FALSE
+          )
+        }
+      }
+
+    }, error = function(e) {
+      warning("  Year ", yr, " failed: ", e$message)
+    })
+  }
+
+  coefficients <- dplyr::bind_rows(results_list)
+  rownames(coefficients) <- NULL
+
+  if (nrow(coefficients) == 0) {
+    warning("No valid results for ", survey_name)
+    return(NULL)
+  }
+
+  message("  Completed: ", nrow(coefficients), " coefficient-year rows")
+  return(coefficients)
+}
+
+
+# ------------------------------------------------------------------------------
+# FUNCTION 7: FULL MODEL — ALL COVARIATES BY AGE GROUP
+# ------------------------------------------------------------------------------
+
+#' Fit SRH ~ sex + race + education (all together) by age group x year
+#'
+#' @description
+#' For each age group x year, fits:
+#'   SRH ~ sex + race_includehisp + educ_3cat
+#' Returns all covariate coefficients. Analogous to
+#' regress_covariate_by_age_year_categorical() but with all covariates in
+#' a single model.
+#'
+#' @inheritParams regress_all_covariates_by_year
+#' @param age_group_var Name of age group variable (default "age_group")
+#' @param age_groups Character vector of age groups to include
+#' @param min_n Minimum observations per age-year cell (default 50)
+#'
+#' @return Data frame with columns:
+#'   survey, term, covariate, covariate_label, level, reference,
+#'   age_group, year, coefficient, se, ci_lower, ci_upper, n_unweighted
+#'
+regress_all_covariates_by_age_year <- function(
+    data,
+    survey_name,
+    covariate_vars = list(
+      sex = list(label = "Sex", ref = "Male"),
+      race_includehisp = list(label = "Race/Ethnicity", ref = "White"),
+      educ_3cat = list(label = "Education", ref = "LT_HS")
+    ),
+    age_group_var = "age_group",
+    age_groups = c("18-29", "30-39", "40-49", "50-59", "60-69", "70-79", "80-89"),
+    srh_var = "srh",
+    year_var = "year",
+    psu_var = "psu",
+    strata_var = "strata",
+    wt_var = "wt",
+    ci_level = 0.95,
+    lonely_psu = "adjust",
+    min_n = 50
+) {
+
+  stopifnot(is.data.frame(data))
+  stopifnot(age_group_var %in% names(data))
+
+  # Check available covariates
+  available_covars <- list()
+  for (cv in names(covariate_vars)) {
+    if (cv %in% names(data) && !all(is.na(data[[cv]]))) {
+      available_covars[[cv]] <- covariate_vars[[cv]]
+    } else {
+      message("  Skipping ", cv, " - not available in ", survey_name)
+    }
+  }
+
+  if (length(available_covars) == 0) {
+    warning("No covariates available for ", survey_name)
+    return(NULL)
+  }
+
+  # Set up factor levels
+  for (cv in names(available_covars)) {
+    ref <- available_covars[[cv]]$ref
+    if (is.character(data[[cv]]) || is.factor(data[[cv]])) {
+      data[[cv]] <- relevel(factor(data[[cv]]), ref = ref)
+    }
+  }
+
+  # Survey options
+  old_lonely <- getOption("survey.lonely.psu")
+  options(survey.lonely.psu = lonely_psu)
+  on.exit(options(survey.lonely.psu = old_lonely), add = TRUE)
+
+  has_psu <- !is.null(psu_var) && psu_var %in% names(data)
+  has_strata <- !is.null(strata_var) && strata_var %in% names(data)
+
+  # Filter to valid age groups
+  existing_ag <- unique(data[[age_group_var]])
+  age_groups <- intersect(age_groups, existing_ag)
+
+  years <- sort(unique(data[[year_var]]))
+  message("Processing ", survey_name,
+          " (SRH ~ ", paste(names(available_covars), collapse = " + "),
+          " by age): ",
+          length(years), " years x ", length(age_groups), " age groups")
+
+  results_list <- list()
+
+  for (ag in age_groups) {
+    for (yr in years) {
+      data_subset <- data[
+        data[[age_group_var]] == ag & data[[year_var]] == yr, ,
+        drop = FALSE
+      ]
+
+      # Base valid mask
+      valid_mask <- !is.na(data_subset[[srh_var]]) &
+        !is.na(data_subset[[wt_var]]) &
+        data_subset[[wt_var]] > 0
+
+      if (has_psu) valid_mask <- valid_mask & !is.na(data_subset[[psu_var]])
+      if (has_strata) valid_mask <- valid_mask & !is.na(data_subset[[strata_var]])
+
+      # Determine which covariates are usable in this cell
+      cell_covars <- list()
+      cell_valid_mask <- valid_mask
+      for (cv in names(available_covars)) {
+        cv_mask <- !is.na(data_subset[[cv]])
+        cv_vals <- data_subset[[cv]][valid_mask & cv_mask]
+        if (length(unique(cv_vals)) >= 2) {
+          cell_covars[[cv]] <- available_covars[[cv]]
+          cell_valid_mask <- cell_valid_mask & cv_mask
+        }
+      }
+
+      if (length(cell_covars) == 0) next
+
+      data_subset <- data_subset[cell_valid_mask, , drop = FALSE]
+      n_unweighted <- nrow(data_subset)
+
+      if (n_unweighted < min_n) next
+
+      # Build per-cell formula
+      cell_rhs <- paste(names(cell_covars), collapse = " + ")
+      cell_formula <- as.formula(paste0(srh_var, " ~ ", cell_rhs))
+
+      tryCatch({
+        if (has_psu && has_strata) {
+          svy_design <- svydesign(
+            ids = as.formula(paste0("~", psu_var)),
+            strata = as.formula(paste0("~", strata_var)),
+            weights = as.formula(paste0("~", wt_var)),
+            data = data_subset, nest = TRUE
+          )
+        } else if (has_psu) {
+          svy_design <- svydesign(
+            ids = as.formula(paste0("~", psu_var)),
+            weights = as.formula(paste0("~", wt_var)),
+            data = data_subset
+          )
+        } else if (has_strata) {
+          svy_design <- svydesign(
+            ids = ~1,
+            strata = as.formula(paste0("~", strata_var)),
+            weights = as.formula(paste0("~", wt_var)),
+            data = data_subset
+          )
+        } else {
+          svy_design <- svydesign(
+            ids = ~1,
+            weights = as.formula(paste0("~", wt_var)),
+            data = data_subset
+          )
+        }
+
+        model <- svyglm(cell_formula, design = svy_design)
+
+        coef_summary <- summary(model)$coefficients
+        ci_all <- confint(model, level = ci_level)
+
+        # Extract covariate coefficients
+        for (cv in names(cell_covars)) {
+          label <- cell_covars[[cv]]$label
+          ref <- cell_covars[[cv]]$ref
+          cv_levels <- setdiff(levels(data_subset[[cv]]), ref)
+
+          for (lvl in cv_levels) {
+            coef_name <- paste0(cv, lvl)
+            if (!coef_name %in% rownames(coef_summary)) next
+
+            coef_row <- coef_summary[coef_name, ]
+            ci_row <- ci_all[coef_name, ]
+
+            results_list[[length(results_list) + 1]] <- data.frame(
+              survey = survey_name,
+              term = coef_name,
+              covariate = cv,
+              covariate_label = label,
+              level = lvl,
+              reference = ref,
+              age_group = ag,
+              year = yr,
+              coefficient = coef_row["Estimate"],
+              se = coef_row["Std. Error"],
+              ci_lower = ci_row[1],
+              ci_upper = ci_row[2],
+              n_unweighted = n_unweighted,
+              stringsAsFactors = FALSE
+            )
+          }
+        }
+
+      }, error = function(e) {
+        # Silently skip failed cells
+      })
+    }
+  }
+
+  coefficients <- dplyr::bind_rows(results_list)
+  rownames(coefficients) <- NULL
+
+  if (nrow(coefficients) == 0) {
+    warning("No valid results for ", survey_name)
+    return(NULL)
+  }
+
+  coefficients$age_group <- factor(
+    coefficients$age_group,
+    levels = c("18-29", "30-39", "40-49", "50-59", "60-69", "70-79", "80-89")
+  )
+
+  message("  Completed: ", nrow(coefficients), " age-year-level cells")
+  return(coefficients)
+}

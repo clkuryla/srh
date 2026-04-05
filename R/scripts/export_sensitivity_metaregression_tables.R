@@ -209,7 +209,80 @@ ft_dichot <- imap(dichot_tables, \(df, label) {
 })
 
 # ==============================================================================
-# 3. Assemble Word document
+# 4. Combined model metaregression (SRH ~ age + sex + race + education)
+# ==============================================================================
+
+combined_coefs <- read_csv(
+  here::here("output", "sensitivity", "sociodemographic",
+             "combined_model_coefficients_20260405.csv"),
+  show_col_types = FALSE
+)
+
+# Age coefficient from combined model — metaregression: coefficient ~ year
+combined_age_metareg <- combined_coefs |>
+  filter(covariate == "age") |>
+  group_by(survey) |>
+  summarise(
+    fit = list({
+      w <- 1 / se^2
+      mod <- lm(coefficient ~ year, weights = w)
+      s <- summary(mod)
+      tibble(
+        slope      = coef(mod)[["year"]],
+        slope_se   = s$coefficients["year", "Std. Error"],
+        slope_p    = s$coefficients["year", "Pr(>|t|)"],
+        r_squared  = s$r.squared,
+        n_years    = n(),
+        year_min   = min(year),
+        year_max   = max(year)
+      )
+    }),
+    .groups = "drop"
+  ) |>
+  unnest(fit)
+
+combined_age_table <- combined_age_metareg |>
+  mutate(
+    slope_formatted = formatC(slope, format = "e", digits = 2),
+    se_formatted    = formatC(slope_se, format = "e", digits = 1),
+    p_value_formatted = case_when(
+      slope_p < 0.001 ~ "<0.001",
+      TRUE ~ formatC(slope_p, format = "f", digits = 3)
+    ),
+    r_squared_formatted = formatC(r_squared, format = "f", digits = 2),
+    year_range = paste0(year_min, "-", year_max)
+  ) |>
+  select(
+    Survey             = survey,
+    `Slope (per year)` = slope_formatted,
+    SE                 = se_formatted,
+    `P-value`          = p_value_formatted,
+    R2                 = r_squared_formatted,
+    `N Years`          = n_years,
+    `Year Range`       = year_range
+  ) |>
+  rename_with(~ "R\u00B2", .cols = "R2")
+
+combined_age_footer <- "Note: Inverse-variance weighted metaregression of the age coefficient from the combined model (SRH ~ age + sex + race + education) on calendar year. Positive slopes indicate convergence toward zero."
+
+ft_combined_age <- make_meta_ft(
+  combined_age_table,
+  "Table. Metaregression of age coefficients from combined model (adjusted for sex + race + education simultaneously)",
+  combined_age_footer
+)
+
+# Save standalone CSV for reference
+write_csv(
+  combined_age_metareg,
+  here::here("output", "sensitivity", "sociodemographic",
+             "combined_model_age_metaregression_20260405.csv")
+)
+
+cat("Combined model metaregression table ready.\n")
+
+
+# ==============================================================================
+# 5. Assemble Word document
 # ==============================================================================
 
 doc <- read_docx()
@@ -234,6 +307,13 @@ doc <- doc |>
   body_add_flextable(ft_adj_race) |>
   body_add_break() |>
   body_add_flextable(ft_adj_educ) |>
+  body_add_break()
+
+# --- Combined model section ---
+doc <- doc |>
+  body_add_par("Sensitivity Analysis: Combined Model (sex + race + education)", style = "heading 1") |>
+  body_add_par("") |>
+  body_add_flextable(ft_combined_age) |>
   body_add_break()
 
 # --- Dichotomized section ---
