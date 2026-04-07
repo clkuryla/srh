@@ -132,38 +132,6 @@ lexis_year_age <- lapply(survey_order, function(svy) {
 })
 names(lexis_year_age) <- survey_order
 
-# --- Row B: Cohort x Age ---
-cat("Preparing Row B: Cohort x Age...\n")
-lexis_cohort_age <- lapply(survey_order, function(svy) {
-  s <- survey_datasets[[svy]]
-  cat("  ", svy, "...\n")
-  prepare_lexis_data_cohort(
-    s$data,
-    age_binwidth    = age_bin,
-    cohort_binwidth = cohort_bin,
-    min_age = min_age, max_age = max_age,
-    min_n = s$min_n,
-    rescale_01 = TRUE, srh_scale = s$scale
-  )
-})
-names(lexis_cohort_age) <- survey_order
-
-# --- Row C: Year x Cohort ---
-cat("Preparing Row C: Year x Cohort...\n")
-lexis_year_cohort <- lapply(survey_order, function(svy) {
-  s <- survey_datasets[[svy]]
-  cat("  ", svy, "...\n")
-  prepare_lexis_data_period_cohort(
-    s$data,
-    year_binwidth   = year_bin,
-    cohort_binwidth = cohort_bin,
-    min_age = min_age, max_age = max_age,
-    min_n = s$min_n,
-    rescale_01 = TRUE, srh_scale = s$scale
-  )
-})
-names(lexis_year_cohort) <- survey_order
-
 cat("Done preparing data.\n\n")
 
 
@@ -171,11 +139,7 @@ cat("Done preparing data.\n\n")
 # COMPUTE GLOBAL SRH RANGE FOR SHARED COLOR SCALE
 # ==============================================================================
 
-all_srh_values <- c(
-  unlist(lapply(lexis_year_age,    function(x) x$mean_srh)),
-  unlist(lapply(lexis_cohort_age,  function(x) x$mean_srh)),
-  unlist(lapply(lexis_year_cohort, function(x) x$mean_srh))
-)
+all_srh_values <- unlist(lapply(lexis_year_age, function(x) x$mean_srh))
 
 global_min <- min(all_srh_values, na.rm = TRUE)
 global_max <- max(all_srh_values, na.rm = TRUE)
@@ -195,53 +159,17 @@ n_surveys <- length(survey_order)
 base_size <- 16
 
 row_a_plots <- vector("list", n_surveys)
-row_b_plots <- vector("list", n_surveys)
-row_c_plots <- vector("list", n_surveys)
 
 for (i in seq_along(survey_order)) {
   svy <- survey_order[i]
 
-  # Row A: Year x Age (survey name as column header)
+  # Year x Age (survey name as column header)
   row_a_plots[[i]] <- create_lexis_subplot(
     data = lexis_year_age[[svy]],
     survey_name = svy,
     x_axis = "year",
     y_axis = "age",
     show_title = TRUE,
-    show_legend = TRUE,
-    show_cohort_lines = FALSE,
-    color_scale = "turbo",
-    reverse_colors = TRUE,
-    shared_scale = TRUE,
-    scale_limits = c(global_min, global_max),
-    tilt_x_labels = 45,
-    base_size = base_size
-  )
-
-  # Row B: Cohort x Age (no title — column headers from row A)
-  row_b_plots[[i]] <- create_lexis_subplot(
-    data = lexis_cohort_age[[svy]],
-    survey_name = svy,
-    x_axis = "cohort",
-    y_axis = "age",
-    show_title = FALSE,
-    show_legend = TRUE,
-    show_cohort_lines = FALSE,
-    color_scale = "turbo",
-    reverse_colors = TRUE,
-    shared_scale = TRUE,
-    scale_limits = c(global_min, global_max),
-    tilt_x_labels = 45,
-    base_size = base_size
-  )
-
-  # Row C: Year x Cohort (no title)
-  row_c_plots[[i]] <- create_lexis_subplot(
-    data = lexis_year_cohort[[svy]],
-    survey_name = svy,
-    x_axis = "year",
-    y_axis = "cohort",
-    show_title = FALSE,
     show_legend = TRUE,
     show_cohort_lines = FALSE,
     color_scale = "turbo",
@@ -262,34 +190,9 @@ cat("Done building subplots.\n\n")
 
 cat("Assembling combined figure...\n")
 
-# --- Assemble rows ---
-row_a <- wrap_plots(row_a_plots, ncol = n_surveys)
-row_b <- wrap_plots(row_b_plots, ncol = n_surveys)
-row_c <- wrap_plots(row_c_plots, ncol = n_surveys)
-
-# --- Row labels (rotated text on left margin) ---
-make_row_label <- function(label_text, base_size) {
-  wrap_elements(full = grid::textGrob(
-    label_text,
-    rot = 90,
-    gp = grid::gpar(fontsize = base_size + 4, fontface = "bold")
-  ))
-}
-
-label_a <- make_row_label("Year \u00D7 Age", base_size)
-label_b <- make_row_label("Cohort \u00D7 Age", base_size)
-label_c <- make_row_label("Year \u00D7 Cohort", base_size)
-
-# --- Combine: (label | row) for each row, stacked vertically ---
-label_width <- 0.04
-
-section_a <- (label_a | row_a) + plot_layout(widths = c(label_width, 1))
-section_b <- (label_b | row_b) + plot_layout(widths = c(label_width, 1))
-section_c <- (label_c | row_c) + plot_layout(widths = c(label_width, 1))
-
-# Stack the three sections with shared legend
-combined <- section_a / section_b / section_c +
-  plot_layout(heights = c(1, 1, 1), guides = "collect") &
+# --- Single row with shared legend ---
+combined <- wrap_plots(row_a_plots, ncol = n_surveys) +
+  plot_layout(guides = "collect") &
   theme(
     legend.position = "bottom",
     legend.background = element_blank(),
@@ -299,7 +202,7 @@ combined <- section_a / section_b / section_c +
 # --- Add overall title ---
 combined <- combined +
   plot_annotation(
-    title = "Lexis Diagrams of Mean SRH: Three APC Projections",
+    title = "Lexis Diagrams of Mean SRH",
     subtitle = "Color: SRH rescaled 0\u20131",
     theme = theme(
       plot.title = element_text(
@@ -323,7 +226,7 @@ fig_dir <- here::here("output", "figures")
 if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)
 
 fig_width  <- 16
-fig_height <- 14
+fig_height <- 5.5
 
 cat("Saving combined 3x6 Lexis figure...\n")
 
