@@ -133,6 +133,18 @@ if (has_race) {
   ))
 }
 
+# Combined model: all available sociodemographic covariates simultaneously
+all_vars <- c(
+  if (has_sex) "sex",
+  if (has_educ) "educ_3cat_f",
+  if (has_race) "race_includehisp_f"
+)
+if (length(all_vars) >= 2) {
+  covariate_specs <- c(covariate_specs, list(
+    list(label = "Adjusted: All", vars = all_vars)
+  ))
+}
+
 message(sprintf("\nModel specifications: %d", length(covariate_specs)))
 for (spec in covariate_specs) {
   message(sprintf("  - %s", spec$label))

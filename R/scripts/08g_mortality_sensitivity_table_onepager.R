@@ -137,7 +137,7 @@ gt_a <- table_a %>%
   ) %>%
   tab_spanner(
     label = md("**A. Covariate-Adjusted Models**"),
-    columns = c(Unadjusted, `Adjusted: Sex`, `Adjusted: Education`, `Adjusted: Race/Ethnicity`)
+    columns = c(Unadjusted, `Adjusted: Sex`, `Adjusted: Education`, `Adjusted: Race/Ethnicity`, `Adjusted: All`)
   ) %>%
   cols_label(
     `Age Group` = md("**Age Group**"),
@@ -145,6 +145,7 @@ gt_a <- table_a %>%
     `Adjusted: Sex` = md("**+ Sex**"),
     `Adjusted: Education` = md("**+ Education**"),
     `Adjusted: Race/Ethnicity` = md("**+ Race/Ethnicity**"),
+    `Adjusted: All` = md("**+ All**"),
     N = md("**N**"),
     Deaths = md("**Deaths**")
   ) %>%
@@ -288,7 +289,7 @@ combined_df <- bind_rows(
 # Reorder columns for display
 col_order <- c("section", "age_group",
                "Unadjusted", "Adjusted: Sex", "Adjusted: Education",
-               "Adjusted: Race/Ethnicity",
+               "Adjusted: Race/Ethnicity", "Adjusted: All",
                "Male", "Female",
                "< HS", "HS/Some college", "College+",
                "NH White", "NH Black", "Hispanic",
@@ -313,6 +314,7 @@ gt_combined <- combined_df %>%
     `Adjusted: Sex` = md("**+ Sex**"),
     `Adjusted: Education` = md("**+ Educ.**"),
     `Adjusted: Race/Ethnicity` = md("**+ Race**"),
+    `Adjusted: All` = md("**+ All**"),
     Male = md("**Male**"),
     Female = md("**Female**"),
     `< HS` = md("**< HS**"),
@@ -330,7 +332,7 @@ gt_combined <- combined_df %>%
   # Spanners for column groups
   tab_spanner(
     label = md("**Adjusted Models**"),
-    columns = c(Unadjusted, `Adjusted: Sex`, `Adjusted: Education`, `Adjusted: Race/Ethnicity`)
+    columns = c(Unadjusted, `Adjusted: Sex`, `Adjusted: Education`, `Adjusted: Race/Ethnicity`, `Adjusted: All`)
   ) %>%
   tab_spanner(
     label = md("**By Sex**"),
@@ -385,7 +387,7 @@ gt_combined <- combined_df %>%
   ) %>%
   # Footnote
   tab_footnote(
-    footnote = md("All models: Surv(age\\_survey, age\\_end, death) ~ SRH. HR < 1 = better SRH associated with lower mortality. Adjusted models add one covariate each. Stratified models fit within each subgroup. Education ~1997+. N and Deaths shown for unadjusted.")
+    footnote = md("All models: Surv(age\\_survey, age\\_end, death) ~ SRH. HR < 1 = better SRH associated with lower mortality. Adjusted models add one covariate each; '+ All' adjusts for sex, education, and race/ethnicity simultaneously. Stratified models fit within each subgroup. Education ~1997+. N and Deaths shown for unadjusted.")
   ) %>%
   # Formatting — larger sizes
   tab_options(

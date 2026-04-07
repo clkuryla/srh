@@ -77,7 +77,7 @@ message("  Models: ", paste(unique(results$model_label), collapse = ", "))
 
 
 # ==============================================================================
-# FIGURE: FACETED HR COMPARISON
+# FIGURE: FACETED HR COMPARISON (2-row layout)
 # ==============================================================================
 
 message("\n=== Creating faceted HR comparison figure ===\n")
@@ -89,63 +89,86 @@ if (nrow(plot_data) == 0) {
   stop("No converged models to plot.")
 }
 
-# Determine facet order (Unadjusted first, then alphabetical)
+# Row 1: Unadjusted + Adjusted: All
+# Row 2: Individual adjustments (Sex, Education, Race/Ethnicity)
+row1_labels <- c("Unadjusted", "Adjusted: All")
 model_labels <- unique(plot_data$model_label)
-model_order <- c("Unadjusted", sort(setdiff(model_labels, "Unadjusted")))
+row2_labels <- sort(setdiff(model_labels, row1_labels))
+
+# Full order for factor levels
+model_order <- c(row1_labels, row2_labels)
 model_order <- intersect(model_order, model_labels)
 
 plot_data <- plot_data %>%
-  mutate(model_label = factor(model_label, levels = model_order))
+  mutate(
+    model_label = factor(model_label, levels = model_order),
+    row = if_else(model_label %in% row1_labels, "top", "bottom")
+  )
 
-# Determine number of columns for facet layout
-n_models <- length(model_order)
-ncol_facet <- min(n_models, 2)
+# Shared plot aesthetics
+make_hr_panel <- function(data, subtitle_text = NULL) {
+  n_panels <- n_distinct(data$model_label)
+  ggplot(data, aes(
+    x = start_year,
+    y = hr,
+    color = age_group,
+    fill = age_group,
+    group = age_group
+  )) +
+    geom_hline(yintercept = 1, linetype = "dashed", color = "gray50", linewidth = 0.5) +
+    geom_ribbon(
+      aes(ymin = conf_low, ymax = conf_high),
+      alpha = 0.10,
+      color = NA
+    ) +
+    geom_line(linewidth = 0.8) +
+    geom_point(size = 1.8) +
+    facet_wrap(~model_label, nrow = 1) +
+    scale_color_age() +
+    scale_fill_age() +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 5)) +
+    scale_y_log10() +
+    labs(
+      x = "Window Start Year",
+      y = "Hazard Ratio per 1-unit SRH",
+      color = "Age Group"
+    ) +
+    theme_srh(base_size = 22) +
+    theme(
+      strip.text = element_text(size = 20, face = "bold"),
+      legend.position = "none",
+      axis.title = element_text(size = 20),
+      axis.text = element_text(size = 16),
+      axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
+    ) +
+    guides(fill = "none")
+}
 
-fig_adjusted <- ggplot(plot_data, aes(
-  x = start_year,
-  y = hr,
-  color = age_group,
-  fill = age_group,
-  group = age_group
-)) +
-  geom_hline(yintercept = 1, linetype = "dashed", color = "gray50", linewidth = 0.5) +
-  geom_ribbon(
-    aes(ymin = conf_low, ymax = conf_high),
-    alpha = 0.10,
-    color = NA
-  ) +
-  geom_line(linewidth = 0.8) +
-  geom_point(size = 1.8) +
-  facet_wrap(~model_label, ncol = ncol_facet, scales = "free_x") +
-  scale_color_age() +
-  scale_fill_age() +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 5)) +
-  scale_y_log10() +
-  labs(
-    x = "Window Start Year",
-    y = "Hazard Ratio per 1-unit SRH",
-    color = "Age Group",
+row1_plot <- make_hr_panel(plot_data %>% filter(row == "top"))
+row2_plot <- make_hr_panel(plot_data %>% filter(row == "bottom"))
+
+fig_adjusted <- (row1_plot / row2_plot) +
+  plot_layout(guides = "collect") +
+  plot_annotation(
     title = "SRH-Mortality HR: Sensitivity to Sociodemographic Adjustment",
-    subtitle = "NHIS, 10-year rolling windows, survey-weighted Cox PH"
-  ) +
-  theme_srh(base_size = 22) +
+    subtitle = "NHIS, 10-year rolling windows, survey-weighted Cox PH",
+    theme = theme(
+      plot.title = element_text(size = 22, face = "bold"),
+      plot.subtitle = element_text(size = 16, color = "gray40"),
+      plot.background = element_rect(fill = "white", color = NA)
+    )
+  ) &
   theme(
-    strip.text = element_text(size = 20, face = "bold"),
     legend.position = "bottom",
     legend.direction = "horizontal",
     legend.title = element_text(face = "bold", size = 20),
     legend.text = element_text(size = 18),
     legend.key.size = unit(2, "lines"),
-    legend.key.width = unit(2.5, "lines"),
-    axis.title = element_text(size = 20),
-    axis.text = element_text(size = 16),
-    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
-    plot.title = element_text(size = 22),
-    plot.subtitle = element_text(size = 16, color = "gray40")
-  ) +
+    legend.key.width = unit(2.5, "lines")
+  ) &
   guides(
-    fill = "none",
-    color = guide_legend(nrow = 1, override.aes = list(size = 5, linewidth = 2))
+    color = guide_legend(nrow = 1, override.aes = list(size = 5, linewidth = 2)),
+    fill = "none"
   )
 
 
@@ -155,9 +178,8 @@ fig_adjusted <- ggplot(plot_data, aes(
 
 message("\n=== Saving figures ===\n")
 
-# Determine figure dimensions based on number of models
-fig_width <- 8 * ncol_facet
-fig_height <- 6 * ceiling(n_models / ncol_facet) + 1.5
+fig_width <- 16
+fig_height <- 14
 
 # Draft version with date
 ggsave(
