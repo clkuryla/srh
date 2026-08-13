@@ -539,7 +539,7 @@ if (file.exists(summary_path)) {
 }
 
 cat("Summary:\n")
-print(summary_df, n = Inf)
+print(as_tibble(summary_df), n = Inf)
 
 write.csv(summary_df, summary_path, row.names = FALSE)
 
