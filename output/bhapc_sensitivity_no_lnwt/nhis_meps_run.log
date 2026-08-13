@@ -73,3 +73,255 @@ Chain 2: Iteration:    1 / 4000 [  0%]  (Warmup)
 Chain 1: Iteration:    1 / 4000 [  0%]  (Warmup)
 Chain 3: Iteration:    1 / 4000 [  0%]  (Warmup)
 Chain 4: Iteration:    1 / 4000 [  0%]  (Warmup)
+Chain 1: Iteration:  400 / 4000 [ 10%]  (Warmup)
+Chain 1: Iteration:  800 / 4000 [ 20%]  (Warmup)
+Chain 1: Iteration: 1200 / 4000 [ 30%]  (Warmup)
+Chain 1: Iteration: 1600 / 4000 [ 40%]  (Warmup)
+Chain 3: Iteration:  400 / 4000 [ 10%]  (Warmup)
+Chain 2: Iteration:  400 / 4000 [ 10%]  (Warmup)
+Chain 1: Iteration: 2000 / 4000 [ 50%]  (Warmup)
+Chain 1: Iteration: 2001 / 4000 [ 50%]  (Sampling)
+Chain 3: Iteration:  800 / 4000 [ 20%]  (Warmup)
+Chain 2: Iteration:  800 / 4000 [ 20%]  (Warmup)
+Chain 3: Iteration: 1200 / 4000 [ 30%]  (Warmup)
+Chain 1: Iteration: 2400 / 4000 [ 60%]  (Sampling)
+Chain 2: Iteration: 1200 / 4000 [ 30%]  (Warmup)
+Chain 3: Iteration: 1600 / 4000 [ 40%]  (Warmup)
+Chain 2: Iteration: 1600 / 4000 [ 40%]  (Warmup)
+Chain 4: Iteration:  400 / 4000 [ 10%]  (Warmup)
+Chain 1: Iteration: 2800 / 4000 [ 70%]  (Sampling)
+Chain 3: Iteration: 2000 / 4000 [ 50%]  (Warmup)
+Chain 3: Iteration: 2001 / 4000 [ 50%]  (Sampling)
+Chain 2: Iteration: 2000 / 4000 [ 50%]  (Warmup)
+Chain 2: Iteration: 2001 / 4000 [ 50%]  (Sampling)
+Chain 4: Iteration:  800 / 4000 [ 20%]  (Warmup)
+Chain 1: Iteration: 3200 / 4000 [ 80%]  (Sampling)
+Chain 2: Iteration: 2400 / 4000 [ 60%]  (Sampling)
+Chain 3: Iteration: 2400 / 4000 [ 60%]  (Sampling)
+Chain 4: Iteration: 1200 / 4000 [ 30%]  (Warmup)
+Chain 2: Iteration: 2800 / 4000 [ 70%]  (Sampling)
+Chain 1: Iteration: 3600 / 4000 [ 90%]  (Sampling)
+Chain 4: Iteration: 1600 / 4000 [ 40%]  (Warmup)
+Chain 2: Iteration: 3200 / 4000 [ 80%]  (Sampling)
+Chain 3: Iteration: 2800 / 4000 [ 70%]  (Sampling)
+Chain 2: Iteration: 3600 / 4000 [ 90%]  (Sampling)
+Chain 4: Iteration: 2000 / 4000 [ 50%]  (Warmup)
+Chain 4: Iteration: 2001 / 4000 [ 50%]  (Sampling)
+Chain 1: Iteration: 4000 / 4000 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 7463.69 seconds (Warm-up)
+Chain 1:                7787.74 seconds (Sampling)
+Chain 1:                15251.4 seconds (Total)
+Chain 1: 
+Chain 2: Iteration: 4000 / 4000 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 11412.9 seconds (Warm-up)
+Chain 2:                4349.06 seconds (Sampling)
+Chain 2:                15762 seconds (Total)
+Chain 2: 
+Chain 4: Iteration: 2400 / 4000 [ 60%]  (Sampling)
+Chain 3: Iteration: 3200 / 4000 [ 80%]  (Sampling)
+Chain 4: Iteration: 2800 / 4000 [ 70%]  (Sampling)
+Chain 3: Iteration: 3600 / 4000 [ 90%]  (Sampling)
+Chain 4: Iteration: 3200 / 4000 [ 80%]  (Sampling)
+Chain 4: Iteration: 3600 / 4000 [ 90%]  (Sampling)
+Chain 3: Iteration: 4000 / 4000 [100%]  (Sampling)
+Chain 3: 
+Chain 3:  Elapsed Time: 11038.7 seconds (Warm-up)
+Chain 3:                7651.07 seconds (Sampling)
+Chain 3:                18689.8 seconds (Total)
+Chain 3: 
+Chain 4: Iteration: 4000 / 4000 [100%]  (Sampling)
+Chain 4: 
+Chain 4:  Elapsed Time: 14911.5 seconds (Warm-up)
+Chain 4:                4225.45 seconds (Sampling)
+Chain 4:                19136.9 seconds (Total)
+Chain 4: 
+  Model completed in 319.1 minutes
+
+  Variance Decomposition:
+    Period: 0.08 %
+    Cohort: 0.49 %
+    Residual: 99.43 %
+
+  Fixed Effects:
+    Age (linear): -0.018748 
+    Age (quadratic, scaled): -5e-04 
+
+  Diagnostics: Max Rhat = 1.002 
+
+  Comparison with original:
+    Age (linear): -0.02130 vs -0.01875 (diff: +0.00255)
+    Period var %: 0.06% vs 0.08%
+    Cohort var %: 0.40% vs 0.49%
+    Original lnWt coefficient: -0.0004 
+
+  Files saved to: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_sensitivity_no_lnwt 
+
+ ====================================================================== 
+SENSITIVITY ANALYSIS: MEPS (NO lnWt)
+Started at: 06:30:54 
+====================================================================== 
+  Original N: 464,130 
+  Subsampling to 1e+05 ...
+
+=== Subsampling Summary ===
+  Original n:     464,130
+  Target n:       1e+05
+  Final n:        100,028
+  Sampling frac:  0.2155
+  Max |diff| in year proportions: 0.00163
+  Weighted mean SRH: original = 3.5991, subsampled = 3.5991
+===========================
+
+  Final N: 100,028 
+Preparing BHAPC data for MEPS
+  Initial rows: 100,028
+  Observed age range: 18 - 996
+  Using weight column: wt
+  Final rows: 99,950
+  Years: 2003-2023
+  Periods: 1999, 2003, 2007, 2011, 2015, 2019, 2023
+  Age groups: 15
+  Cohorts: 24
+  Mean SRH: 3.5
+  BHAPC N: 99,950 
+
+  Fitting model (NO lnWt)...
+  Formula: srh ~ age + scale(age_squared) + (1|period_4yr) + (1|cohort_4yr)
+  iter = 4000 , cores = 64 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 1).
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 2).
+Chain 1: 
+Chain 1: Gradient evaluation took 0.06644 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 664.4 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 3).
+Chain 2: 
+Chain 2: Gradient evaluation took 0.067242 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 672.42 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+Chain 3: 
+Chain 3: Gradient evaluation took 0.05694 seconds
+Chain 3: 1000 transitions using 10 leapfrog steps per transition would take 569.4 seconds.
+Chain 3: Adjust your expectations accordingly!
+Chain 3: 
+Chain 3: 
+
+SAMPLING FOR MODEL 'continuous' NOW (CHAIN 4).
+Chain 4: 
+Chain 4: Gradient evaluation took 0.065254 seconds
+Chain 4: 1000 transitions using 10 leapfrog steps per transition would take 652.54 seconds.
+Chain 4: Adjust your expectations accordingly!
+Chain 4: 
+Chain 4: 
+Chain 3: Iteration:    1 / 4000 [  0%]  (Warmup)
+Chain 1: Iteration:    1 / 4000 [  0%]  (Warmup)
+Chain 2: Iteration:    1 / 4000 [  0%]  (Warmup)
+Chain 4: Iteration:    1 / 4000 [  0%]  (Warmup)
+Chain 1: Iteration:  400 / 4000 [ 10%]  (Warmup)
+Chain 2: Iteration:  400 / 4000 [ 10%]  (Warmup)
+Chain 4: Iteration:  400 / 4000 [ 10%]  (Warmup)
+Chain 1: Iteration:  800 / 4000 [ 20%]  (Warmup)
+Chain 1: Iteration: 1200 / 4000 [ 30%]  (Warmup)
+Chain 4: Iteration:  800 / 4000 [ 20%]  (Warmup)
+Chain 2: Iteration:  800 / 4000 [ 20%]  (Warmup)
+Chain 3: Iteration:  400 / 4000 [ 10%]  (Warmup)
+Chain 1: Iteration: 1600 / 4000 [ 40%]  (Warmup)
+Chain 4: Iteration: 1200 / 4000 [ 30%]  (Warmup)
+Chain 3: Iteration:  800 / 4000 [ 20%]  (Warmup)
+Chain 2: Iteration: 1200 / 4000 [ 30%]  (Warmup)
+Chain 1: Iteration: 2000 / 4000 [ 50%]  (Warmup)
+Chain 1: Iteration: 2001 / 4000 [ 50%]  (Sampling)
+Chain 4: Iteration: 1600 / 4000 [ 40%]  (Warmup)
+Chain 3: Iteration: 1200 / 4000 [ 30%]  (Warmup)
+Chain 3: Iteration: 1600 / 4000 [ 40%]  (Warmup)
+Chain 4: Iteration: 2000 / 4000 [ 50%]  (Warmup)
+Chain 4: Iteration: 2001 / 4000 [ 50%]  (Sampling)
+Chain 1: Iteration: 2400 / 4000 [ 60%]  (Sampling)
+Chain 2: Iteration: 1600 / 4000 [ 40%]  (Warmup)
+Chain 3: Iteration: 2000 / 4000 [ 50%]  (Warmup)
+Chain 3: Iteration: 2001 / 4000 [ 50%]  (Sampling)
+Chain 4: Iteration: 2400 / 4000 [ 60%]  (Sampling)
+Chain 1: Iteration: 2800 / 4000 [ 70%]  (Sampling)
+Chain 2: Iteration: 2000 / 4000 [ 50%]  (Warmup)
+Chain 2: Iteration: 2001 / 4000 [ 50%]  (Sampling)
+Chain 2: Iteration: 2400 / 4000 [ 60%]  (Sampling)
+Chain 3: Iteration: 2400 / 4000 [ 60%]  (Sampling)
+Chain 4: Iteration: 2800 / 4000 [ 70%]  (Sampling)
+Chain 1: Iteration: 3200 / 4000 [ 80%]  (Sampling)
+Chain 2: Iteration: 2800 / 4000 [ 70%]  (Sampling)
+Chain 4: Iteration: 3200 / 4000 [ 80%]  (Sampling)
+Chain 3: Iteration: 2800 / 4000 [ 70%]  (Sampling)
+Chain 2: Iteration: 3200 / 4000 [ 80%]  (Sampling)
+Chain 1: Iteration: 3600 / 4000 [ 90%]  (Sampling)
+Chain 2: Iteration: 3600 / 4000 [ 90%]  (Sampling)
+Chain 4: Iteration: 3600 / 4000 [ 90%]  (Sampling)
+Chain 3: Iteration: 3200 / 4000 [ 80%]  (Sampling)
+Chain 1: Iteration: 4000 / 4000 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 10678.9 seconds (Warm-up)
+Chain 1:                7622.36 seconds (Sampling)
+Chain 1:                18301.2 seconds (Total)
+Chain 1: 
+Chain 2: Iteration: 4000 / 4000 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 14155 seconds (Warm-up)
+Chain 2:                4289.76 seconds (Sampling)
+Chain 2:                18444.7 seconds (Total)
+Chain 2: 
+Chain 4: Iteration: 4000 / 4000 [100%]  (Sampling)
+Chain 4: 
+Chain 4:  Elapsed Time: 12161.3 seconds (Warm-up)
+Chain 4:                7020.17 seconds (Sampling)
+Chain 4:                19181.5 seconds (Total)
+Chain 4: 
+Chain 3: Iteration: 3600 / 4000 [ 90%]  (Sampling)
+Chain 3: Iteration: 4000 / 4000 [100%]  (Sampling)
+Chain 3: 
+Chain 3:  Elapsed Time: 13573.1 seconds (Warm-up)
+Chain 3:                6663.03 seconds (Sampling)
+Chain 3:                20236.1 seconds (Total)
+Chain 3: 
+  Model completed in 337.3 minutes
+
+  Variance Decomposition:
+    Period: 1.59 %
+    Cohort: 0.33 %
+    Residual: 98.09 %
+
+  Fixed Effects:
+    Age (linear): -0.028339 
+    Age (quadratic, scaled): 0.2056 
+
+  Diagnostics: Max Rhat = 1.006 
+
+  Comparison with original:
+    Age (linear): -0.03670 vs -0.02834 (diff: +0.00836)
+    Period var %: 0.26% vs 1.59%
+    Cohort var %: 1.71% vs 0.33%
+    Original lnWt coefficient: 0.2072 
+
+  Files saved to: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_sensitivity_no_lnwt 
+
+
+ ================================================================================ 
+ALL COMPLETE
+Total time: 656.9 minutes
+================================================================================ 
+
+# A tibble: 2 × 6
+  survey status  n_obs elapsed_min period_var_pct cohort_var_pct
+  <chr>  <chr>   <int>       <dbl>          <dbl>          <dbl>
+1 nhis   success 99742        319.         0.0792          0.486
+2 meps   success 99950        337.         1.59            0.326
+
+Outputs saved to: /home/ubuntu/projects/srh/srh-bhapc/output/bhapc_sensitivity_no_lnwt 
+Finished at: 2026-02-06 12:08:23 

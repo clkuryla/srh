@@ -1,0 +1,10 @@
+Outcome,Survey,Period %,Cohort %
+Education,MEPS,0.71,7.53
+Education,NHIS,5.54,0.91
+Education,GSS,10.03,6.41
+Happiness,GSS,1.45,0.06
+K6,MEPS,1.05,1.78
+K6,NHIS,0.25,0.4
+SRH,MEPS,0.36,1.35
+SRH,NHIS,0.07,0.37
+SRH,GSS,0.14,2.35
