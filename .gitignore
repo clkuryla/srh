@@ -58,3 +58,14 @@ config.yml
 '
 # OS junk
 .DS_Store'
+
+# Oversize run artifacts (exceed GitHub 100MB file limit)
+output/bhapc_full_random/run.log
+output/bhapc_parallel/full_run.log
+output/bhapc_parallel/brfss/brfss_bhapc_compact.rds
+output/bhapc_parallel/meps/meps_bhapc_model.rds
+output/bhapc_parallel/meps/meps_interaction_model.rds
+output/bhapc_parallel/nhanes/nhanes_bhapc_model.rds
+output/bhapc_parallel/nhanes/nhanes_interaction_model.rds
+output/bhapc_parallel/nhis/nhis_bhapc_model.rds
+output/bhapc_parallel/nhis/nhis_interaction_model.rds

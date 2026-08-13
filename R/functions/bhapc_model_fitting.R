@@ -343,6 +343,155 @@ compute_age_effect <- function(model,
 # Model Comparison
 # ==============================================================================
 
+# ==============================================================================
+# Fully Random Effects Model
+# ==============================================================================
+
+#' Fit Bayesian HAPC model with all random effects (age, period, cohort)
+#'
+#' Fits a fully random effects BHAPC model where age is also treated as a
+#' random effect (by age_group) instead of a fixed quadratic term. This allows
+#' for partial pooling across all three APC components.
+#'
+#' @param bhapc_df Data frame from prepare_bhapc_data()
+#' @param outcome Character: column name of outcome variable (default "srh")
+#' @param adapt_delta Numeric: Stan adapt_delta parameter (default 0.998)
+#' @param iter Integer: number of iterations (default 6000)
+#' @param chains Integer: number of chains (default 4)
+#' @param cores Integer: number of cores for parallel (default all available)
+#' @param seed Integer: random seed for reproducibility
+#' @return List with model object, summary, and diagnostics
+#'
+#' @details
+#' Model specification:
+#' outcome ~ lnWt + (1|age_group) + (1|period_4yr) + (1|cohort_4yr)
+#'
+#' This treats all three APC components as random effects, allowing for:
+#' - Partial pooling (shrinkage) across age groups, periods, and cohorts
+#' - Direct comparison of variance components across all three dimensions
+#' - No parametric assumption about the age-SRH relationship
+#'
+#' @examples
+#' result <- fit_bhapc_full_random(bhapc_df)
+fit_bhapc_full_random <- function(bhapc_df,
+                                   outcome = "srh",
+                                   adapt_delta = 0.998,
+                                   iter = 6000,
+                                   chains = 4,
+                                   cores = parallel::detectCores(),
+                                   seed = 20260209) {
+
+  # Check outcome column exists
+  stopifnot(outcome %in% names(bhapc_df))
+
+  # Check age_group exists and is a factor
+
+  stopifnot("age_group" %in% names(bhapc_df))
+
+  message("Fitting BHAPC Full Random Effects model...")
+  message("  Outcome: ", outcome)
+  message("  N observations: ", format(nrow(bhapc_df), big.mark = ","))
+  message("  N age groups: ", length(unique(bhapc_df$age_group)))
+  message("  N periods: ", length(unique(bhapc_df$period_4yr)))
+  message("  N cohorts: ", length(unique(bhapc_df$cohort_4yr)))
+  message("  adapt_delta: ", adapt_delta)
+  message("  iter: ", iter)
+  message("  chains: ", chains)
+  message("  cores: ", cores)
+
+  # Build formula - all three APC components as random effects
+  formula_str <- paste0(outcome, " ~ lnWt + (1|age_group) + (1|period_4yr) + (1|cohort_4yr)")
+  formula <- as.formula(formula_str)
+  message("  Formula: ", formula_str)
+
+  # Set seed for reproducibility
+  set.seed(seed)
+
+  # Fit model
+  start_time <- Sys.time()
+
+  model <- stan_lmer(
+    formula = formula,
+    data = bhapc_df,
+    adapt_delta = adapt_delta,
+    iter = iter,
+    chains = chains,
+    cores = cores
+  )
+
+  elapsed <- difftime(Sys.time(), start_time, units = "mins")
+  message("  Model fitting completed in ", round(elapsed, 1), " minutes")
+
+  # Extract diagnostics
+  diagnostics <- extract_bhapc_diagnostics(model)
+
+  # Check convergence
+  if (any(diagnostics$rhat > 1.01, na.rm = TRUE)) {
+    warning("Some Rhat values > 1.01, indicating potential convergence issues")
+  }
+
+  if (any(diagnostics$n_eff < 400, na.rm = TRUE)) {
+    warning("Some n_eff values < 400, consider increasing iterations")
+  }
+
+  # Return results
+  list(
+    model = model,
+    formula = formula_str,
+    outcome = outcome,
+    n_obs = nrow(bhapc_df),
+    n_age_groups = length(unique(bhapc_df$age_group)),
+    n_periods = length(unique(bhapc_df$period_4yr)),
+    n_cohorts = length(unique(bhapc_df$cohort_4yr)),
+    diagnostics = diagnostics,
+    elapsed_minutes = as.numeric(elapsed),
+    seed = seed,
+    timestamp = Sys.time(),
+    model_type = "full_random"
+  )
+}
+
+
+#' Extract age group random effects from full random model
+#'
+#' Extracts age group random effects with 90% credible intervals
+#'
+#' @param model rstanarm model object from fit_bhapc_full_random()
+#' @return Data frame with age group effects
+extract_age_group_effects <- function(model) {
+  ranef_summary <- as.data.frame(summary(model, probs = c(0.05, 0.95)))
+  ranef_summary$term <- rownames(ranef_summary)
+
+  age_effects <- ranef_summary %>%
+    filter(grepl("age_group", term)) %>%
+    mutate(
+      age_group = gsub("b\\[\\(Intercept\\) age_group:(.*)\\]", "\\1", term)
+    ) %>%
+    select(age_group, mean, sd, `5%`, `95%`) %>%
+    rename(
+      estimate = mean,
+      std_error = sd,
+      ci_lower_90 = `5%`,
+      ci_upper_90 = `95%`
+    )
+
+  # Sort by age group order
+  age_levels <- c("18-21", "22-25", "26-29", "30-34", "35-39", "40-44",
+                  "45-49", "50-54", "55-59", "60-64", "65-69", "70-74",
+                  "75-79", "80-84", "85-89")
+
+  age_effects <- age_effects %>%
+    mutate(age_group = factor(age_group, levels = age_levels)) %>%
+    arrange(age_group)
+
+  age_effects
+}
+
+
+# ==============================================================================
+# Model Comparison
+# ==============================================================================
+
 #' Compare BHAPC models using LOOIC
 #'
 #' Computes and compares LOOIC for model selection
