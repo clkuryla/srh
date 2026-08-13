@@ -1,0 +1,7 @@
+"survey","status","n_obs","elapsed_min","max_rhat","min_neff","converged","age_var_pct","period_var_pct","cohort_var_pct"
+"nhanes","success",75367,125.3,1.003,1650,TRUE,6.4,1.5,0.3
+"meps","success",199890,831.4,1.001,1934,TRUE,12.1,0.2,1.7
+"nhis","success",199349,910.7,1.003,1627,TRUE,15.5,0.1,0.4
+"cps","success",199605,908.1,1.003,2013,TRUE,18.8,0,0.8
+"brfss","success",200034,756.4,1.002,1850,TRUE,9.1,0.2,1.7
+"gss","success (previous run)",57627,806.6,NA,NA,TRUE,7.7,0.1,2.1

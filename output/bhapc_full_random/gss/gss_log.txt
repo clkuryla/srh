@@ -1,0 +1,45 @@
+
+====================================================================== 
+BHAPC FULL RANDOM PIPELINE: GSS 
+Started at: 2026-02-09 20:27:30 
+====================================================================== 
+
+--- STEP 1: DATA LOADING & PREPARATION --- 
+  Original N: 57,627 
+  Final N: 57,627 
+  BHAPC N: 57,627 
+  Age groups: 18-21, 22-25, 26-29, 30-34, 35-39, 40-44, 45-49, 50-54, 55-59, 60-64, 65-69, 70-74, 75-79, 80-84, 85-89 
+  Periods: 1971, 1975, 1979, 1983, 1987, 1991, 1995, 1999, 2003, 2007, 2011, 2015, 2019, 2023 
+  Cohorts: 31 
+
+--- STEP 2: FULL RANDOM EFFECTS BHAPC MODEL --- 
+  Formula: srh ~ lnWt + (1|age_group) + (1|period_4yr) + (1|cohort_4yr) 
+  iter = 6000, adapt_delta = 0.998 
+  cores = 10 
+  Model completed in 806.4 minutes 
+
+  Variance Decomposition: 
+    cohort_4yr: 0.0155 (2.1%) 
+    age_group: 0.0557 (7.7%) 
+    period_4yr: 8e-04 (0.1%) 
+    Residual: 0.6511 (90%) 
+    Total: 0.723 (100%) 
+
+--- STEP 3: EXTRACTING RANDOM EFFECTS --- 
+  Saved age group effects (16 groups) 
+  Saved period effects (15 periods) 
+  Saved cohort effects (32 cohorts) 
+
+--- STEP 4: GENERATING FIGURES --- 
+  Saved summary figure 
+
+--- STEP 5: DIAGNOSTICS --- 
+  Max Rhat: 1.004 
+  Min n_eff: 1862 
+  Converged: TRUE 
+
+====================================================================== 
+PIPELINE COMPLETE: GSS 
+Total time: 806.6 minutes 
+Finished at: 2026-02-10 09:54:10 
+====================================================================== 

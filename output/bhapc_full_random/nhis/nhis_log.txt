@@ -1,0 +1,47 @@
+
+====================================================================== 
+BHAPC FULL RANDOM (FAST): NHIS 
+Started at: 2026-02-11 03:58:12 
+Settings: adapt_delta=0.95, iter=5000, cores=64 
+====================================================================== 
+
+--- STEP 1: DATA LOADING & PREPARATION --- 
+  Original N: 2,509,273 
+  Final N: 200,370 
+  BHAPC N: 199,349 
+  Age groups: 15 
+  Periods: 1983, 1987, 1991, 1995, 1999, 2003, 2007, 2011, 2015, 2019, 2023 
+  Cohorts: 28 
+
+--- STEP 2: FULL RANDOM EFFECTS BHAPC MODEL (FAST) --- 
+  Formula: srh ~ lnWt + (1|age_group) + (1|period_4yr) + (1|cohort_4yr) 
+  adapt_delta = 0.95 
+  iter = 5000 
+  cores = 64 
+  Model completed in 910.5 minutes 
+
+  Variance Decomposition: 
+    cohort_4yr: 0.005 (0.4%) 
+    age_group: 0.1984 (15.5%) 
+    period_4yr: 0.0012 (0.1%) 
+    Residual: 1.0732 (84%) 
+    Total: 1.2778 (100%) 
+
+--- STEP 3: EXTRACTING RANDOM EFFECTS --- 
+  Saved age group effects (16 groups) 
+  Saved period effects (12 periods) 
+  Saved cohort effects (29 cohorts) 
+
+--- STEP 4: GENERATING FIGURES --- 
+  Saved summary figure 
+
+--- STEP 5: DIAGNOSTICS --- 
+  Max Rhat: 1.003 
+  Min n_eff: 1627 
+  Converged: TRUE 
+
+====================================================================== 
+COMPLETE: NHIS 
+Total time: 910.7 minutes 
+Finished at: 2026-02-11 19:09:02 
+====================================================================== 

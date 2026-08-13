@@ -1,0 +1,47 @@
+
+====================================================================== 
+BHAPC FULL RANDOM (FAST): CPS 
+Started at: 2026-02-11 19:09:02 
+Settings: adapt_delta=0.95, iter=5000, cores=64 
+====================================================================== 
+
+--- STEP 1: DATA LOADING & PREPARATION --- 
+  Original N: 3,896,528 
+  Final N: 200,029 
+  BHAPC N: 199,605 
+  Age groups: 15 
+  Periods: 1995, 1999, 2003, 2007, 2011, 2015, 2019, 2023 
+  Cohorts: 25 
+
+--- STEP 2: FULL RANDOM EFFECTS BHAPC MODEL (FAST) --- 
+  Formula: srh ~ lnWt + (1|age_group) + (1|period_4yr) + (1|cohort_4yr) 
+  adapt_delta = 0.95 
+  iter = 5000 
+  cores = 64 
+  Model completed in 908 minutes 
+
+  Variance Decomposition: 
+    cohort_4yr: 0.0109 (0.8%) 
+    age_group: 0.2471 (18.8%) 
+    period_4yr: 5e-04 (0%) 
+    Residual: 1.0563 (80.3%) 
+    Total: 1.3149 (100%) 
+
+--- STEP 3: EXTRACTING RANDOM EFFECTS --- 
+  Saved age group effects (16 groups) 
+  Saved period effects (9 periods) 
+  Saved cohort effects (26 cohorts) 
+
+--- STEP 4: GENERATING FIGURES --- 
+  Saved summary figure 
+
+--- STEP 5: DIAGNOSTICS --- 
+  Max Rhat: 1.003 
+  Min n_eff: 2013 
+  Converged: TRUE 
+
+====================================================================== 
+COMPLETE: CPS 
+Total time: 908.1 minutes 
+Finished at: 2026-02-12 10:17:21 
+====================================================================== 
