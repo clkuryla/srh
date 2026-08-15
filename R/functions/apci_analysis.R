@@ -130,7 +130,9 @@ prep_apci_data <- function(df,
     mutate(
       age_midpoint = age_midpoints[age_group],
       cohort_midpoint = period_midpoint - age_midpoint,
-      # Integer cohort index for APCI
+      # Row-level cohort factor passed to apci(); NOTE APCI does not use it for
+      # indexing (it builds its own A+P-1 diagonal index) — output cohort labels
+      # come from build_apci_cohort_lookup() in extract_apci_results().
       cohort_group = as.integer(factor(cohort_midpoint))
     )
 
@@ -200,6 +202,46 @@ run_apci_model <- function(df_prep,
 # Extract Results
 # ==============================================================================
 
+#' Cohort lookup table on APCI's own indexing (the A+P-1 diagonals)
+#'
+#' APCI indexes cohorts as the diagonals of the age x period grid:
+#' cohort_index = A + period_index - age_index (see APCI:::cohortdeviation,
+#' `cindex`), with index 1 = oldest cohort. It does NOT use the `cohort` column
+#' passed to apci(). Each diagonal is labelled here by the mean of
+#' (period midpoint - age midpoint) over its cells.
+#'
+#' Why this exists (bug fixed 2026-08-15): the previous code joined the diagonal
+#' index to distinct(cohort_group, cohort_midpoint) with
+#' cohort_group = as.integer(factor(cohort_midpoint)). That is only correct when
+#' the grid is regular. NHANES's 5-yr periods have irregular midpoints
+#' (2002/2007/2012/2017/2021), giving 27 distinct row-level midpoints for 16
+#' diagonals, so the 16 diagonals were labelled with the 16 SMALLEST midpoints
+#' (1924.5 ... 1969.5) instead of the diagonal means (1924.5 ... 1998.5). A
+#' related positional-vs-label mismatch affected BRFSS (empty 80-84 bin; see the
+#' age_lookup note in extract_apci_results()). See
+#' R/scripts/12c_apci_fix_nhanes_labels.R for the artefact correction.
+#'
+#' @param age_lookup Tibble with age_index (1..A) and age_midpoint
+#' @param period_lookup Tibble with period_index (1..P) and period_midpoint
+#' @return Tibble: cohort_index, cohort_group (= cohort_index), cohort_midpoint, n_cells
+build_apci_cohort_lookup <- function(age_lookup, period_lookup) {
+  A <- nrow(age_lookup); P <- nrow(period_lookup)
+  stopifnot(all(sort(age_lookup$age_index) == seq_len(A)),
+            all(sort(period_lookup$period_index) == seq_len(P)))
+  tidyr::expand_grid(age_index = age_lookup$age_index,
+                     period_index = period_lookup$period_index) |>
+    left_join(age_lookup |> select(age_index, age_midpoint), by = "age_index") |>
+    left_join(period_lookup |> select(period_index, period_midpoint), by = "period_index") |>
+    mutate(cohort_index = A + period_index - age_index) |>
+    group_by(cohort_index) |>
+    summarise(cohort_midpoint = mean(period_midpoint - age_midpoint),
+              n_cells = n(), .groups = "drop") |>
+    mutate(cohort_group = cohort_index) |>
+    arrange(cohort_index) |>
+    select(cohort_index, cohort_group, cohort_midpoint, n_cells)
+}
+
+
 #' Extract tidy results from APCI model
 #'
 #' Extracts age effects, period effects, cohort averages, cohort slopes,
@@ -212,20 +254,32 @@ run_apci_model <- function(df_prep,
 extract_apci_results <- function(model, df_prep) {
 
   # --- Label lookup tables ---
+  # APCI's age/period indices are POSITIONAL over the levels present in the data
+  # (temp_model() does as.factor() and names coefficients acc1..accA / pcc1..pccP
+  # by position), so the lookups must use row position among the sorted present
+  # levels — not the integer label. They differ when a bin is empty: BRFSS codes
+  # all ages 80+ as 89, so its "80-84" bin is empty and APCI's positional level 13
+  # is "85-89" (label 14). Joining on the label left that level unlabelled (NA
+  # age_midpoint -> dropped from Fig S9 panel A) and shifted the BRFSS cohort
+  # labels by up to 5 years. Fixed 2026-08-15 (see 12c_apci_fix_nhanes_labels.R).
   age_lookup <- df_prep |>
     distinct(age_group, age_group_label, age_midpoint) |>
-    arrange(age_group) |>
-    mutate(age_index = as.integer(as.character(age_group)))
+    mutate(age_level = as.integer(as.character(age_group))) |>
+    arrange(age_level) |>
+    mutate(age_index = row_number()) |>
+    select(-age_level)
 
   period_lookup <- df_prep |>
     distinct(period_group, period_group_label, period_midpoint) |>
-    arrange(period_group) |>
-    mutate(period_index = as.integer(as.character(period_group)))
+    mutate(period_level = as.integer(as.character(period_group))) |>
+    arrange(period_level) |>
+    mutate(period_index = row_number()) |>
+    select(-period_level)
 
-  cohort_lookup <- df_prep |>
-    distinct(cohort_group, cohort_midpoint) |>
-    arrange(cohort_group) |>
-    mutate(cohort_index = as.integer(as.character(cohort_group)))
+  # Cohort labels follow APCI's diagonal indexing (NOT the row-level
+  # cohort_group factor in df_prep) — see build_apci_cohort_lookup().
+  cohort_lookup <- build_apci_cohort_lookup(age_lookup, period_lookup) |>
+    select(-n_cells)   # keep the output tables' column set unchanged
 
   # --- Intercept ---
   # APCI returns intercept as character vector: c(estimate, se, p, sig)
