@@ -1,0 +1,298 @@
+---
+title: "Where does the cohort hump peak? Hump-location diagnostics for the SRH-convergence APC analyses (Task 1, quick tier)"
+author: "Christine Lucille Kuryla (analysis run with Claude Code)"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    embed-resources: true
+    fig-width: 10
+    fig-height: 7
+    code-fold: true
+    code-tools: true
+    theme: cosmo
+  typst:
+    papersize: a4
+    margin:
+      x: 1.6cm
+      y: 1.8cm
+    fontsize: 9pt
+    toc: true
+    number-sections: true
+    fig-width: 10
+    fig-height: 7
+    echo: false
+    keep-typ: false
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r setup}
+suppressPackageStartupMessages({
+  library(tidyverse); library(here); library(knitr)
+})
+OUT <- here::here("analysis", "apc_diagnostics", "output", "task1")
+FIG <- file.path(OUT, "figures")
+hump   <- read_csv(file.path(OUT, "hump_location_summary.csv"), show_col_types = FALSE)
+win    <- read_csv(file.path(OUT, "window_stats.csv"), show_col_types = FALSE)
+bpk    <- read_csv(file.path(OUT, "bhapc_peak_posterior.csv"), show_col_types = FALSE)
+apk    <- read_csv(file.path(OUT, "apci_peak_summary.csv"), show_col_types = FALSE)
+crs    <- read_csv(file.path(OUT, "apci_slope_crossings.csv"), show_col_types = FALSE)
+trk    <- read_csv(file.path(OUT, "peak_tracking.csv"), show_col_types = FALSE)
+vchk   <- read_csv(file.path(OUT, "variance_share_check.csv"), show_col_types = FALSE)
+lblfix <- read_csv(here::here("analysis", "apc_diagnostics", "inputs", "apci", "apci_cohort_label_correction_20260815.csv"), show_col_types = FALSE)
+rt     <- read_csv(file.path(OUT, "runtimes.csv"), show_col_types = FALSE)
+SURVEY_ORDER <- c("BRFSS", "MEPS", "NHIS", "CPS", "NHANES", "GSS")
+hump <- hump |> mutate(survey = factor(survey, levels = SURVEY_ORDER)) |> arrange(survey)
+f1 <- function(x, d = 1) formatC(x, format = "f", digits = d)
+ci <- function(m, lo, hi, d = 1) sprintf("%s [%s, %s]", f1(m, d), f1(lo, d), f1(hi, d))
+H <- hump   # short alias for inline numbers
+g <- function(sv, col) H[[col]][H$survey == sv]
+is_html <- knitr::is_html_output()
+
+# Table helper: HTML -> knitr::kable; PDF (typst) -> raw Typst table with
+# auto-sized columns (pandoc's pipe-table conversion assigns fixed percentage
+# widths that squeeze narrow columns), smaller font, thin rules.
+typst_escape <- function(x) {
+  x <- as.character(x); x[is.na(x)] <- ""
+  x <- gsub("\\\\", "\\\\\\\\", x)
+  gsub("([#$@<>*_\\[\\]])", "\\\\\\1", x)
+}
+tbl <- function(df, caption, size = "8pt") {
+  if (is_html) return(knitr::kable(df, caption = caption))
+  hdr  <- paste0("[*", typst_escape(names(df)), "*]", collapse = ", ")
+  body <- apply(as.data.frame(df), 1, function(r) paste0("[", typst_escape(r), "]", collapse = ", "))
+  out <- c("```{=typst}", "#[",
+           paste0("#set text(size: ", size, ")"),
+           "#set par(justify: false)",
+           "#show figure: set block(breakable: true)",
+           "#figure(kind: table, supplement: [Table],",
+           paste0("  caption: [", typst_escape(caption), "],"),
+           paste0("  table(columns: ", ncol(df), ", align: left, inset: 3.5pt, stroke: none,"),
+           "    table.hline(),",
+           paste0("    table.header(", hdr, "),"),
+           "    table.hline(),",
+           paste0("    ", body, ","),
+           "    table.hline()",
+           "  ))", "]", "```", "")
+  knitr::asis_output(paste(out, collapse = "\n"))
+}
+```
+
+::: {.callout-note title="What this document is"}
+This is **Task 1 of the APC diagnostics** specified in `analysis/apc_diagnostics/INSTRUCTIONS.md`, run in its **quick tier**: every number here is extracted from the *saved* outputs of the paper's APC pipelines — the six fitted BHAPC objects (which contain the posterior draws) and the saved APC-I estimates. **No model was refit.** Task 2 (null simulations through the same pipelines) is a separate session; the places where its results will slot in are marked.
+:::
+
+# Motivation
+
+The paper's central result is that the cross-sectional age gradient in self-rated health (SRH) — always negative — has flattened steadily over five decades in all six surveys: the year-specific age coefficient behaves like $\beta_{\text{age}}(p) \approx \beta_0 + \gamma (p - \overline{p})$ with $\beta_0 < 0,\ \gamma > 0$. Formally that is an **age × period interaction**. The APC section of the paper (main text "Age-Period-Cohort (APC) Effect"; supplement S4) reports, in addition, that the BHAPC and APC-I models show a smooth inverted-U ("hump") of cohort effects favouring people born around the 1940s–1950s, and that APC-I intra-cohort slopes flip from positive (pre-~1950 births) to negative (later births). A co-author asked whether that hump means a baby-boomer cohort effect is what actually drives the convergence.
+
+::: {.callout-important title="The algebra that motivates the diagnostic"}
+Write $c = p - a$ and centre the three clocks on the survey's data: $\alpha = a - \overline{a}$, $\pi = p - \overline{p}$, $\kappa = c - \overline{c}$ with $\overline{c} = \overline{p} - \overline{a}$. The polarization identity gives
+
+$$\alpha\,\pi \;=\; \tfrac12\left(\alpha^2 + \pi^2 - \kappa^2\right).$$
+
+So a pure, steady age × period interaction $\gamma\,\alpha\pi$ is *algebraically identical* to convex quadratics in age and period **plus a concave quadratic in cohort, $-\tfrac{\gamma}{2}\kappa^2$, whose peak sits at $\overline{c} = \overline{p} - \overline{a}$** — the centre of the survey's observed cohort distribution. In an additive APC model the $\alpha^2$ and $\pi^2$ pieces are absorbed invisibly by the flexible age and period effects, so **the only visible fingerprint of the interaction is the cohort hump**, and along any cohort diagonal the deviation slope is $\gamma[(a-\overline{a})+(p-\overline{p})]$, which changes sign near $\overline{c}$ (the intra-cohort slope flip).
+:::
+
+This yields predictions that differ between two accounts and — crucially — that differ *between surveys with different observation windows*:
+
+* **Mechanical account** (no true cohort process): P1 the fitted cohort curve is a smooth inverted-U over the whole cohort range; **P2 its peak sits near each survey's own $\overline{c}$, and therefore differs across surveys whose windows differ** (GSS starts in 1972, MEPS in 2000; their $\overline{c}$ differ by ~10 years); P3 the intra-cohort slope flips sign near $\overline{c}$; P4 cohort variance exceeds period variance even with zero true cohort effects.
+* **Genuine generational account**: the peak sits at the *same birth years in every survey* regardless of window (a fixed boomer peak, taken here as 1955).
+
+**Why the year range matters.** Each survey observes a different slice of cohorts. Its data-centre cohort $\overline{c}$ is a property of the window, not of history: two surveys fielded in different decades over the same population "see" the same generations from different vantage points, and the mechanical account predicts their humps peak in different birth years. Comparing peak *locations across surveys with different windows* is therefore what makes the exercise informative at all.
+
+**Identification caveat, stated up front.** Because of the classical APC identification problem only the *curvature* of the cohort component is invariant; the *location* of its peak depends on how each model resolves the non-identified linear trend (centring, sum-to-zero constraints, shrinkage). The analytic $\overline{c}$ is therefore an approximate reference; the *calibrated* reference is what the same pipelines produce when fed data with no cohort process (Task 2). Two consequences follow for how to read the results: (i) a constant offset of every survey's peak from $\overline{c}$ is not itself evidence against the mechanical account — what matters is whether the peaks *move with the window* (a slope near 1 in the peak-vs-$\overline{c}$ plot, and a small cross-survey spread of peak $-\overline{c}$); (ii) the mechanical prediction is cleanest for the BHAPC cohort *component*, whereas the APC-I "inter-cohort deviation" is a different estimand (the average of the age × period interaction cells along each cohort diagonal, under sum-to-zero constraints), for which a bilinear interaction does not even produce a parabola on a wide-age/narrow-period grid (it produces a flat-topped plateau over the fully observed diagonals, centred on the grid centre — see the note in @sec-interp). Its "peak" is therefore intrinsically less well defined and its null reference is essential.
+
+**Pre-stated decision rule.** Peaks that track $\overline{c}$ (or the centre of the observed cohort range) within their uncertainty and move across surveys with the window → consistent with the mechanical fingerprint. Peaks fixed across surveys at a common birth year → evidence of genuine cohort structure. Anything in between → reported as mixed, with no forcing.
+
+# Methods
+
+## What was reused (nothing refit)
+
+* **BHAPC** — the six fitted objects `output/bhapc_full_random/<survey>/<survey>_bhapc_full_random_model.rds` produced by `R/scripts/28b_bhapc_full_random_fast.R` (NHANES, MEPS, NHIS, CPS, BRFSS) and `R/scripts/28c_bhapc_full_random_gss_fast.R` (GSS), i.e. `rstanarm::stan_lmer(srh ~ lnWt + (1|age_group) + (1|period_4yr) + (1|cohort_4yr))`, 4 chains × 5,000 iterations (2,500 warmup), `adapt_delta = 0.95`, default weakly informative priors — the models behind Fig S6/S7. Each object holds **10,000 post-warmup draws** of every cohort intercept, so peak posteriors are computed *per draw* with no refitting. Their posterior means agree with the saved `<survey>_cohort_effects.csv` to $<10^{-8}$ (checked). Cohort labels are 4-year bins defined in `R/functions/bhapc_data_prep.R` as *period-bin start* − *age-bin midpoint*, rounded to a 4-year grid; the label of each bin is on average $\delta \approx$ `r f1(min(win$grid_offset))`–`r f1(max(win$grid_offset))` years earlier than the birth years of the respondents in it (survey-specific `grid_offset` below), so all BHAPC peaks are reported on the **birth-year scale** (label + $\delta$).
+* **Exact BHAPC analysis rows** — `<survey>_bhapc_data.rds` (post-restriction, post-subsampling: MEPS/NHIS/CPS/BRFSS are stratified 200,000-row subsamples with rescaled weights; NHANES and GSS full). Window statistics are computed on **exactly these rows**.
+* **APC-I** — the saved panel-C (inter-cohort deviations) and panel-D (intra-cohort slopes) estimates behind Fig S9: `main/output/apc/apci/apci_cohort_avgs_all.csv` and `apci_cohort_slopes_all.csv` from `main/R/scripts/12_apci_analysis.R` / `main/R/functions/apci_analysis.R` (APCI v1.0.8, gaussian, weighted, 5-year age and period bins, ages 20–89, NHANES 20–79, BRFSS 50% subsample), **as corrected on 2026-08-15** for a cohort-labelling bug found by this analysis (NHANES and BRFSS labels; see *Issues found*). Verbatim copies (with md5 provenance, and the pre-correction files in `asfiled_20260213/`) are in `analysis/apc_diagnostics/inputs/apci/`; the script verifies the labels in use against APCI's diagonal means (`apci_cohort_diagonal_lookup.csv`) and stops if handed the old files. No APC-I model objects or prepared datasets were saved by the original run, so APC-I is treated at the point-estimate level, as the quick tier prescribes.
+* **Pipeline check (INSTRUCTIONS §2.3).** The variance shares were re-derived from the loaded fits with the repo's `extract_variance_components()` and match the numbers behind Fig S7 / the results text in every survey (`variance_share_check.csv`; max |Δ| = `r f1(max(abs(c(vchk$age_pct - vchk$age_pct_ref, vchk$period_pct - vchk$period_pct_ref, vchk$cohort_pct - vchk$cohort_pct_ref))), 3)` percentage points, i.e. rounding).
+
+## Window statistics
+
+For each survey: $n$, year range, $\overline{p}$ = mean survey year, $\overline{a}$ = mean age, $\overline{c}$ = mean(year − age), checked to equal $\overline{p} - \overline{a}$ exactly. Both unweighted and survey-weighted (weights-only design, `srvyr::survey_mean`) versions are reported. The **unweighted** version is the relevant one for the peak prediction: the BHAPC likelihood is unweighted and handles design only through the ln(weight) covariate, so the unweighted respondent distribution is what the model "sees". A second window-based reference is also reported — the **centre of the observed cohort range**, $c_{\text{mid}}$ = (earliest + latest cohort bin)/2 — because level-based models (random intercepts per bin; sum-to-zero contrasts per level) centre on the *set of levels* rather than on respondents, and respondents are concentrated in the later cohorts, so $\overline{c}$ is systematically later than $c_{\text{mid}}$ by `r f1(min(H$c_bar - H$c_mid))`–`r f1(max(H$c_bar - H$c_mid))` years. For APC-I a proxy window is computed by applying the APC-I age filter (20–89; NHANES 20–79) to the BHAPC rows.
+
+## Peak and flip measures (all pre-stated)
+
+* **Central region.** All peak measures are computed over the *central 80 %* of each survey's respondent cohort distribution (bins whose label lies between the 10th and 90th percentiles). The tails are identified from a handful of extreme-age cells and are unstable in both methods (BHAPC tail bins have wide posteriors; APC-I tail bins are single-cell fixed effects with large SEs). Unrestricted argmaxes are kept in the CSVs for the record.
+* **BHAPC, per posterior draw** (10,000 draws): (i) *argmax* — the bin with the largest effect; (ii) *quadratic vertex* — OLS parabola over the central-region bins, vertex $=-b_1/(2b_2)$, retained when concave ($b_2<0$); the fraction of concave draws is P(concave). Summaries are the posterior median and 90 % interval (5th–95th percentiles). Sensitivities: parabola over the central 90 % and over all bins; and a *local* quadratic over the argmax ± 3 bins (a smoothed-argmax estimator, insensitive to global shape). Peaks of the posterior-mean curve are also given for continuity with Fig S6.
+* **APC-I, point estimates**: (i) *argmax bin*, reported ± one 5-year bin as the minimum uncertainty; (ii) quadratic vertex over the central region, plus the same all-bins / central-90 % / local sensitivities. As an explicitly *approximate* supplement, a parametric bootstrap of the vertex (2,000 replicates, `set.seed(20260815)`) treats the cohort estimates as independent normals with their reported SEs — it ignores their covariance and is labelled as such.
+* **Slope flip (APC-I panel D)**: (i) the zero of a linear fit of intra-cohort slope on cohort over the central region (the mechanical account predicts slope ∝ $c-\overline{c}$, i.e. linear); (ii) the interpolated positive→negative crossing between adjacent bins nearest that zero (all crossings are listed in `apci_slope_crossings.csv`).
+* **Tracking statistics** across the six surveys, per measure: the slope of a regression of peak on window reference (≈1 tracks the window, ≈0 fixed) and the cross-survey SD of (peak − reference) for each reference ($\overline{c}$, $c_{\text{mid}}$, 1955). A *small* SD around a reference means that reference explains the between-survey variation in peak location, whatever the constant offset.
+
+## Runtime and seeds
+
+Whole script (`analysis/apc_diagnostics/01_task1_hump_location.R`): `r f1(rt$seconds[rt$survey == "ALL"], 0)` s, dominated by loading the six fits (`r f1(sum(rt$seconds[rt$survey != "ALL"]), 0)` s). The BHAPC peak extraction is deterministic given the saved draws; the only stochastic step is the optional APC-I bootstrap (seed 20260815).
+
+# Results
+
+## Windows and cohort references
+
+```{r tab-window}
+win_tab <- win |>
+  mutate(survey = factor(survey, levels = SURVEY_ORDER)) |> arrange(survey) |>
+  transmute(Survey = survey,
+            `Years` = paste0(floor(year_min), "–", ceiling(year_max)),
+            `n (BHAPC rows)` = format(n_bhapc, big.mark = ","),
+            `rows with wt = 0` = format(n_zero_wt, big.mark = ","),
+            `p̄` = f1(p_bar), `ā` = f1(a_bar), `c̄ = p̄ − ā` = f1(c_bar),
+            `c̄ (weighted)` = f1(c_bar_w),
+            `cohort-bin range (labels)` = paste0(cohort_grid_min, "–", cohort_grid_max),
+            `grid offset δ` = f1(grid_offset, 2),
+            `c_mid (range centre)` = f1(c_mid),
+            `central-80% region (birth yrs)` = paste0(round(by_q10), "–", round(by_q90)),
+            `c̄ APC-I proxy` = f1(c_bar_apci_proxy))
+win_cap <- "Observation windows of the exact BHAPC analysis samples. c̄ = mean birth year (unweighted, the quantity the unweighted-likelihood BHAPC 'sees'); the weighted version uses the analysis weights (weights-only design). c_mid = centre of the observed cohort-bin range on the birth-year scale. NHANES 'years' are 2-year-cycle midpoints. NHIS/NHANES carry rows with zero analysis weight (see Issues)."
+if (is_html) {
+  tbl(win_tab, win_cap)
+} else {
+  # narrower for PDF: drop three bookkeeping columns (all in window_stats.csv)
+  tbl(win_tab |> select(-`rows with wt = 0`, -`cohort-bin range (labels)`, -`grid offset δ`), win_cap)
+}
+```
+
+The two window-based references differ by roughly 4–6 years (respondents are concentrated in later cohorts), and the late-window surveys (MEPS, CPS, NHANES) have references 8–12 years later than GSS — this is the between-survey leverage the design relies on.
+
+## Summary table (one row per survey)
+
+```{r tab-summary}
+sum_tab <- hump |>
+  transmute(Survey = survey,
+            Years = paste0(floor(year_min), "–", ceiling(year_max)),
+            `c̄` = f1(c_bar), `c_mid` = f1(c_mid),
+            `BHAPC vertex, median [90% CrI]` = ci(bhapc_vertex_median, bhapc_vertex_q05, bhapc_vertex_q95),
+            `BHAPC argmax, median [90% CrI]` = ci(bhapc_argmax_median, bhapc_argmax_q05, bhapc_argmax_q95, 0),
+            `P(concave)` = f1(bhapc_p_concave, 3),
+            `APC-I argmax bin (± 5)` = f1(apci_argmax),
+            `APC-I local vertex` = ifelse(apci_vertex_local_concave, f1(apci_vertex_local), "not concave"),
+            `slope-flip (linear)` = f1(apci_flip_linear),
+            `slope-flip (interp.)` = f1(apci_flip_interp),
+            `Δ BHAPC − c̄` = f1(d_bhapc_vertex_cbar), `Δ BHAPC − c_mid` = f1(d_bhapc_vertex_cmid),
+            `Δ BHAPC − 1955` = f1(d_bhapc_vertex_1955),
+            `Δ APC-I − c̄` = f1(d_apci_argmax_cbar), `Δ APC-I − 1955` = f1(d_apci_argmax_1955),
+            `null peaks (Task 2)` = "—")
+sum_cap <- "Hump-location summary (all on the birth-year scale). BHAPC: posterior median and 90% interval of the per-draw quadratic-vertex peak (central-80% region) and of the per-draw argmax bin; P(concave) = share of draws with a concave central-region parabola. APC-I: argmax bin of the inter-cohort deviations (± one 5-yr bin) and the local quadratic vertex; slope-flip = cohort at which intra-cohort slopes cross zero (linear fit; interpolated). Δ columns are distances from the two window references and from the fixed-generation reference 1955. The Task 2 null-simulation peaks will be merged into the last column. Machine-readable version: output/task1/hump_location_summary.csv."
+if (is_html) {
+  tbl(sum_tab, sum_cap)
+} else {
+  # PDF: split into (a) windows + BHAPC and (b) APC-I + distances
+  tbl(sum_tab |> select(Survey:`P(concave)`), paste0("(a) ", sum_cap))
+}
+```
+
+```{r tab-summary-b}
+if (!is_html) {
+  tbl(sum_tab |> select(Survey, `APC-I argmax bin (± 5)`:`null peaks (Task 2)`),
+      "(b) Hump-location summary, continued: APC-I peak and slope-flip measures and the distances (Δ, years) of the BHAPC vertex and APC-I argmax from c̄, c_mid and 1955.")
+}
+```
+
+The full CSV also holds: weighted window statistics, the central-90 % / all-bins / local BHAPC vertex posteriors, the unrestricted argmaxes, the APC-I central-80 % / central-90 % / all-bins vertices with concavity flags and bootstrap intervals, and the CrI-coverage indicators.
+
+## Key figure — does the peak track the window or a fixed birth year?
+
+![**Figure 1.** Observed hump peak (y) against each survey's window reference (x): panel A uses c̄ = mean birth year of the analysis sample, panel B the centre of the observed cohort range. Filled circles: BHAPC posterior median of the per-draw quadratic-vertex peak with 90 % CrI. Open triangles: APC-I argmax bin ± one 5-yr bin. Solid line: identity (peak = window reference — the mechanical prediction up to a constant convention-dependent offset). Dashed line: peak = 1955 (fixed-generation reference).](output/task1/figures/fig1_peak_vs_cbar.png)
+
+Reading Figure 1: the six **BHAPC** peaks (circles) rise with the window reference — the late-window surveys (MEPS, CPS, NHANES) peak around 1957–1960, the early-window ones (GSS, NHIS, BRFSS) around 1947–1951 — with the same ~10-year gap that separates their windows; all six sit a few years *below* the identity line in panel A and essentially on it in panel B. The **APC-I** argmax bins (triangles) do not rise with the window: they sit at 1940–1945 in every survey — a horizontal band, but ~10–15 years *below* 1955.
+
+```{r tab-tracking}
+trk |>
+  transmute(`Peak / flip measure` = peak_measure, `n` = n_surveys,
+            `mean peak` = f1(mean_peak), `SD of peaks (= SD around 1955)` = f1(sd_peak),
+            `mean (peak − c̄)` = f1(mean_offset_cbar), `SD` = f1(sd_offset_cbar),
+            `mean (peak − c_mid)` = f1(mean_offset_cmid), `SD ` = f1(sd_offset_cmid),
+            `slope on c̄ (SE)` = sprintf("%s (%s)", f1(slope_cbar, 2), f1(slope_cbar_se, 2)),
+            `slope on c_mid (SE)` = sprintf("%s (%s)", f1(slope_cmid, 2), f1(slope_cmid_se, 2))) |>
+  tbl("Cross-survey tracking statistics (six surveys; descriptive — n = 6). A slope near 1 and a small SD of (peak − reference) mean the peak moves with the window; a small SD of the raw peaks means it is fixed across surveys. The window references themselves have SD 5.1 (c̄) and 5.5–7.2 (c_mid) years across surveys. APC-I central-80% vertex is reported for the concave fits only.")
+```
+
+## Companion figure — cohort curves aligned on the window vs on birth year
+
+![**Figure 2.** All six cohort curves overlaid. Left column: birth year minus each survey's c̄ (survey-specific centring; APC-I uses the proxy c̄). Right column: raw birth year. Top: BHAPC posterior means ± 90 % CrI. Bottom: APC-I inter-cohort deviations ± 95 % CI. Under the mechanical account the curves should superimpose on the left but not on the right; the reverse under a fixed-generation account.](output/task1/figures/fig2_cohort_curves_aligned.png)
+
+The BHAPC curves superimpose closely when aligned on $c-\overline{c}$ (peaks all at about −5 to −10 years, common rise from a trough near −45, common decline) and are visibly staggered on raw birth year (~10-year shift between the early- and late-window groups). The APC-I deviations superimpose about equally well in both frames, because their peaks barely move across surveys; note also that they are broad humps spanning essentially the *whole* cohort range, with a shallow, roughly linear decline over the 1950s–1990s cohorts.
+
+## Diagnostics — do the parabolas fit, and how sharp are the peak posteriors?
+
+![**Figure 3.** Per-survey BHAPC cohort curve (posterior mean, 90 % CrI; birth-year scale) with the parabola fitted to the posterior mean over the central-80 % region (shaded), the posterior-median vertex (solid black) and its 90 % CrI (dotted), c̄ (blue dashed) and 1955 (orange long-dash). Bottom row: posterior distribution of the per-draw vertex.](output/task1/figures/fig3_vertex_fit_diagnostics.png)
+
+The central-region parabola is concave in essentially every draw in every survey (P(concave) ≥ `r f1(min(H$bhapc_p_concave), 3)`), the vertex posteriors are tight (90 % intervals of `r f1(min(H$bhapc_vertex_q95 - H$bhapc_vertex_q05))`–`r f1(max(H$bhapc_vertex_q95 - H$bhapc_vertex_q05))` years; widest for NHANES, whose cohort curve is the flattest), and the argmax and vertex agree to within a bin. Outside the central region the curves are *not* parabolic: all six show a trough for cohorts born around 1905–1920 with an upturn in the sparse earliest bins, so P1 ("smooth inverted-U over the whole range") holds over the central 80 % but not literally over the tails.
+
+![**Figure 4.** Every peak/flip measure expressed as a distance from c̄ (left), from the centre of the cohort range (middle) and from 1955 (right), one symbol per survey. What discriminates the accounts is the *spread* of the six symbols within a row: tight on the left/middle = the peak moves with the window; tight on the right = fixed across surveys.](output/task1/figures/fig4_peak_offsets_dotplot.png)
+
+# Interpretation against the pre-stated decision rule {#sec-interp}
+
+## BHAPC
+
+* **The peaks move with the window.** The regression slope of the BHAPC vertex on $\overline{c}$ is `r f1(trk$slope_cbar[trk$peak_measure=="BHAPC vertex, central-80% (posterior median)"],2)` (SE `r f1(trk$slope_cbar_se[trk$peak_measure=="BHAPC vertex, central-80% (posterior median)"],2)`), and on the range centre `r f1(trk$slope_cmid[trk$peak_measure=="BHAPC vertex, central-80% (posterior median)"],2)` (SE `r f1(trk$slope_cmid_se[trk$peak_measure=="BHAPC vertex, central-80% (posterior median)"],2)`); the cross-survey spread of the peaks (SD `r f1(trk$sd_peak[trk$peak_measure=="BHAPC vertex, central-80% (posterior median)"])` y) equals the spread of the windows, and the spread of (peak − $\overline{c}$) is only `r f1(trk$sd_offset_cbar[trk$peak_measure=="BHAPC vertex, central-80% (posterior median)"])` y. The three surveys with early windows (GSS 1972+, NHIS 1983+, BRFSS 1993+) peak in 1947–1951; the three with late windows (CPS 1996+, MEPS 2000+, NHANES 1999+) peak in 1957–1960. This is P2.
+* **With a systematic offset.** Every peak is earlier than $\overline{c}$ by `r f1(-max(H$d_bhapc_vertex_cbar))`–`r f1(-min(H$d_bhapc_vertex_cbar))` years (mean `r f1(mean(H$d_bhapc_vertex_cbar))`), and within about ±4.6 years of the *range centre* (mean `r f1(mean(H$d_bhapc_vertex_cmid))`; the CrI covers $c_{\text{mid}}$ in `r sum(H$bhapc_cri_covers_cmid)` of 6 surveys but $\overline{c}$ in only `r sum(H$bhapc_cri_covers_cbar)`). A constant offset is exactly the kind of thing the identification caveat allows (it is one linear-trend convention away from $\overline{c}$); whether ~−6 y is what the BHAPC conventions produce with no cohort process is precisely what the Task 2 null will calibrate. It is not evidence for a generational peak: on the fixed-1955 reading the peaks should not have moved by 10 years between the early- and late-window surveys.
+* **Against 1955.** The CrI covers 1955 only in the late-window surveys (`r paste(as.character(H$survey[H$bhapc_cri_covers_1955]), collapse = ", ")`), whose window centres happen to lie at 1957–1960 — i.e. exactly where the two accounts do not separate. In the surveys that *can* discriminate (early windows, whose window centres are 1946–1955), all three peaks are before 1955 with CrIs excluding it.
+
+**Per-survey verdicts (BHAPC).**
+
+```{r verdicts}
+v <- hump |> transmute(
+  Survey = survey,
+  `peak [90% CrI]` = ci(bhapc_vertex_median, bhapc_vertex_q05, bhapc_vertex_q95),
+  `c̄ / c_mid / 1955` = sprintf("%s / %s / 1955", f1(c_bar), f1(c_mid)),
+  `CrI covers c̄` = ifelse(bhapc_cri_covers_cbar, "yes", "no"),
+  `covers c_mid` = ifelse(bhapc_cri_covers_cmid, "yes", "no"),
+  `covers 1955` = ifelse(bhapc_cri_covers_1955, "yes", "no"),
+  Verdict = case_when(
+    survey == "GSS"    ~ "Earliest window; peak 1948 sits ~4 y before c̄ and 2 y after the range centre, 7 y before 1955 (excluded) → window-tracking, not boomer.",
+    survey == "NHIS"   ~ "Peak 1947 is ~10 y before c̄ / 5 y before the range centre and 8 y before 1955 (all excluded); shares the early-window group's early offset → mixed, leaning window-tracking (offset larger than elsewhere).",
+    survey == "BRFSS"  ~ "Peak 1951 lies between the references (7 y before c̄, 4 y before the range centre and 1955; all excluded) → mixed; moves with the early-window group.",
+    survey == "CPS"    ~ "Peak 1957.5 sits on the range centre (Δ 0.0) and 2.5 y after 1955; c̄ and 1955 are indistinguishable here → consistent with window-tracking; uninformative about 1955.",
+    survey == "MEPS"   ~ "Peak 1960 (widest CrI) covers c̄, the range centre and 1955 → consistent with window-tracking; uninformative about 1955.",
+    survey == "NHANES" ~ "Peak 1958 covers the range centre and 1955, 6 y before c̄; flattest curve → consistent with window-tracking; uninformative about 1955."))
+tbl(v, "One-line verdicts per survey against the pre-stated decision rule (BHAPC vertex, birth-year scale). 'Uninformative about 1955' flags surveys whose own window centre lies within a few years of 1955, so the two references cannot be told apart there.")
+```
+
+## APC-I
+
+* **The inter-cohort-deviation peak is essentially fixed — but not at 1955.** The argmax bin lies at `r f1(min(H$apci_argmax))`–`r f1(max(H$apci_argmax))` in every survey (SD `r f1(trk$sd_peak[trk$peak_measure=="APC-I argmax bin"])` y across surveys; slope on $\overline{c}$ `r f1(trk$slope_cbar[trk$peak_measure=="APC-I argmax bin"],2)`), i.e. a common early-1940s mode ~`r f1(-mean(H$d_apci_argmax_cbar),0)` years before $\overline{c}$ and ~`r f1(-mean(H$d_apci_argmax_1955),0)` years before 1955. Taken at face value this is "fixed across surveys", the generational signature — except that the fixed year is the war/late-Depression births, not the boomers, and, as noted in the Motivation, the APC-I inter-cohort deviation is not expected to peak at $\overline{c}$ even under the null: for a bilinear interaction it is a plateau centred on the *grid* centre whose argmax is undetermined. The observed APC-I curves are visibly *not* plateaus (they peak and then decline roughly linearly through the 1950s–1990s cohorts), which is itself a departure from the simplest bilinear null; whether it is a departure from the null *as run through APCI on these unbalanced grids* is exactly what Task 2 measures. Verdict: **cannot be adjudicated from Task 1 alone**; recorded as "fixed at ~1942, not 1955" pending the null.
+* **The slope flip tracks the window.** The linear-fit zero of the intra-cohort slopes moves with $\overline{c}$ (slope `r f1(trk$slope_cbar[trk$peak_measure=="APC-I slope-flip (linear fit)"],2)`, SE `r f1(trk$slope_cbar_se[trk$peak_measure=="APC-I slope-flip (linear fit)"],2)`) and sits at a nearly constant `r f1(-mean(H$d_flip_linear_cbar))` ± `r f1(trk$sd_offset_cbar[trk$peak_measure=="APC-I slope-flip (linear fit)"])` years before $\overline{c}$ in every survey (P3, with the same convention-dependent offset logic as above); relative to 1955 it scatters from `r f1(min(H$apci_flip_linear - 1955))` to `r f1(max(H$apci_flip_linear - 1955))`.
+
+## Overall
+
+**Mixed, leaning mechanical.** The BHAPC hump and the APC-I slope flip behave as the age × period interaction predicts — they move with each survey's window, by about the amount the windows differ — with a constant early offset that only the null simulation can calibrate. The one measure that does *not* move, the APC-I deviation argmax, is fixed at ~1942 rather than at a boomer year, and is the measure whose null behaviour is least parabola-like. Nothing in Task 1 supports a fixed 1955 boomer peak; nothing in Task 1 rules out *some* genuine cohort structure either (the two accounts are not exclusive, and the offsets are the honest residual to be compared with the null).
+
+# Issues found in the saved pipeline outputs (for review)
+
+1. **APC-I cohort labels were wrong for NHANES (and, less severely, BRFSS) in the saved CSVs and in Fig S9 — found here, fixed the same day.** APCI indexes cohorts as the $A+P-1$ diagonals of the age × period grid (positional index $= A + \text{period}_j - \text{age}_i$, verified in the package source, `APCI:::cohortdeviation`), and its age/period levels are positional over the levels present in the data. `extract_apci_results()` labelled the diagonal index by joining to `distinct(cohort_group, cohort_midpoint)` and the age index by its *label*. Two consequences: (a) **NHANES** — irregular 5-yr period midpoints (2002/2007/2012/2017/2021) give 27 distinct `cohort_midpoint` values for 16 diagonals, so the diagonals were labelled with the 16 *smallest* midpoints (1924.5 … 1969.5) instead of the diagonal means (1924.5 … 1998.5): the NHANES x-axes of Fig S9 C/D were compressed by up to `r max(lblfix$max_label_change_yrs[lblfix$survey=="NHANES"])` years; (b) **BRFSS** — the wrangled BRFSS codes all ages 80+ as 89, so the "80–84" bin is empty and APCI's positional age level 13 is "85–89"; joined on the label, that level had no midpoint (its estimate, −0.43, was silently dropped from Fig S9 panel A) and the BRFSS cohort labels were up to `r max(lblfix$max_label_change_yrs[lblfix$survey=="BRFSS"])` years too early. GSS/MEPS/NHIS/CPS (regular grids, all age bins populated) were unaffected (verified: zero change). Estimates and SEs were never affected. **Fix (2026-08-15):** `main/R/functions/apci_analysis.R` now builds the cohort lookup on APCI's diagonal index (`build_apci_cohort_lookup()`) and uses positional age/period lookups; `main/R/scripts/12c_apci_fix_nhanes_labels.R` backed up the as-filed tables to `main/output/apc/apci/asfiled_20260213/`, rewrote the cohort/age CSVs from the saved level midpoints (the NHANES data are not on this machine, so no refit was needed or possible — only labels changed), and regenerated the affected figures including the Fig S9 grid (`apci_combined_grid.*`). The manuscript's Fig S9 should be swapped for the regenerated file. This document uses the corrected labels throughout.
+
+2. **Zero analysis weights.** `r format(win$n_zero_wt[win$survey=="NHIS"], big.mark=",")` of `r format(win$n_bhapc[win$survey=="NHIS"], big.mark=",")` NHIS BHAPC rows (`r f1(100*win$n_zero_wt[win$survey=="NHIS"]/win$n_bhapc[win$survey=="NHIS"],0)` %) and `r format(win$n_zero_wt[win$survey=="NHANES"], big.mark=",")` NHANES rows (`r f1(100*win$n_zero_wt[win$survey=="NHANES"]/win$n_bhapc[win$survey=="NHANES"],1)` %) carry `wt = 0`; `prepare_bhapc_data()` sets `lnWt = 0` for them (the same covariate value as a weight of 1) and the published fits include them. This is a property of the upstream data/pipeline, not of this analysis; it is flagged because Task 2's null generating model (`svyglm`) will have to decide how to treat those rows.
+3. Minor, already documented in the code map (§5.2): BHAPC cohort labels are period-bin *start* − age midpoint (≈ 1–2 y earlier than birth year), handled here by the `grid_offset` correction.
+
+# Limitations
+
+* **Peak location is convention-dependent.** Only the curvature of the cohort component is identified; each model's resolution of the linear trend moves the peak. The analytic references used here ($\overline{c}$, range centre) are approximations; the calibrated reference is Task 2's null peak from the same code. The constant early offsets found here should be read with that in mind.
+* **APC-I is treated at the point-estimate level** (no saved model objects): uncertainty is one bin width, the vertex bootstrap ignores covariance, and the APC-I window is a proxy (BHAPC rows with the APC-I age filter — the same source data, subsampled).
+* **The APC-I inter-cohort deviation is a different estimand** from the BHAPC cohort component and is not expected to be parabolic under the null on these grids; its peak location is intrinsically soft.
+* Ordinal SRH is treated as continuous, as in the paper's APC models; the quadratic-vertex fits are descriptive summaries of curve shape, not model parameters; the tracking regressions are over six points and are descriptive.
+* Only the *quick tier* was run: no BHAPC refits, so nothing here changes the published models; the null-simulation reference and the positive-control (boomer step) comparison are deferred to later sessions.
+
+# Files
+
+* Script: `analysis/apc_diagnostics/01_task1_hump_location.R`
+* Tables: `output/task1/hump_location_summary.csv` (one row per survey), `window_stats.csv`, `bhapc_peak_posterior.csv`, `bhapc_peak_draws.rds` (per-draw argmax/vertex, 10,000 × 6, for reuse), `bhapc_cohort_curves.csv`, `apci_peak_summary.csv`, `apci_slope_crossings.csv`, `apci_cohort_curves.csv`, `peak_tracking.csv`, `variance_share_check.csv`, `runtimes.csv`, `run_info.txt`
+* Figures (PNG 300 dpi + PDF): `output/task1/figures/fig1_peak_vs_cbar`, `fig2_cohort_curves_aligned`, `fig3_vertex_fit_diagnostics`, `fig4_peak_offsets_dotplot`
+* Inputs: `analysis/apc_diagnostics/inputs/apci/` (corrected APC-I CSV copies, `apci_cohort_diagonal_lookup.csv`, `apci_cohort_label_correction_20260815.csv`, pre-correction copies in `asfiled_20260213/`, `provenance.txt`)
+* Upstream fix (on `main`): `R/functions/apci_analysis.R`, `R/scripts/12c_apci_fix_nhanes_labels.R`, `output/apc/apci/asfiled_20260213/`, regenerated `output/apc/apci/apci_combined_grid.{png,pdf}` (Fig S9) and related figures
+
+# Session information
+
+```{r sessioninfo}
+sessionInfo()
+```

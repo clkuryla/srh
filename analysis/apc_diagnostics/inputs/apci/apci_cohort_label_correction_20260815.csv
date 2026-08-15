@@ -1,0 +1,7 @@
+survey,n_diagonals,max_label_change_yrs,first_label,last_label
+GSS,24,0,1884.5,1999.5
+NHANES,16,29,1924.5,1998.5
+MEPS,18,0,1914.5,1999.5
+NHIS,22,0,1894.5,1999.5
+CPS,20,0,1909.5,2004.5
+BRFSS,20,5,1904.5,2004.5

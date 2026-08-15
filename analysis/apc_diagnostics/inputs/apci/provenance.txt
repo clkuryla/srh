@@ -1,0 +1,14 @@
+Provenance of APC-I inputs (copied verbatim, 2026-08-15T20:25Z)
+Source dir: /home/ubuntu/projects/srh/main/output/apc/apci  (git worktree of branch main; produced by main/R/scripts/12_apci_analysis.R via main/R/functions/apci_analysis.R; see to_transfer/ronin_code_apc_etc.md §7)
+
+apci_cohort_avgs_all.csv  mtime=2026-02-13 00:12:41  md5=0e87652df6830b9a78d507651868ee02
+apci_cohort_slopes_all.csv  mtime=2026-02-13 00:12:41  md5=0be37ba6cd96da81488c78296fad1b40
+apci_deviance_summary.csv  mtime=2026-02-13 00:12:41  md5=9d8148156a4111faf60a2740047e89d8
+
+APC-I settings (per map/INSTRUCTIONS): APCI pkg, gaussian, weighted glm, 5-yr age/period bins, ages 20-89 (NHANES 20-79), BRFSS 50% subsample (seed 42); cohort_midpoint = period midpoint - age midpoint.
+
+UPDATE 2026-08-15T21:24Z: the as-filed copies above were moved to asfiled_20260213/. The canonical files on main were CORRECTED on 2026-08-15 by main/R/scripts/12c_apci_fix_nhanes_labels.R (cohort labels rebuilt on APCI's diagonal index: NHANES up to 29 y, BRFSS up to 5 y; GSS/MEPS/NHIS/CPS unchanged; estimates untouched). Fresh copies:
+apci_cohort_avgs_all.csv  mtime=2026-08-15 21:23:33  md5=c00a43e3a4155316a099ea67fa8ab780
+apci_cohort_slopes_all.csv  mtime=2026-08-15 21:23:33  md5=2111b1759b4fa32e9cf5557776414531
+apci_cohort_diagonal_lookup.csv  mtime=2026-08-15 21:23:33  md5=7b87875217ed4cf0bf008ff3b850e895
+apci_cohort_label_correction_20260815.csv  mtime=2026-08-15 21:23:33  md5=0c2e5d82310d70dbe933981a80e342d1

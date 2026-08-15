@@ -1,0 +1,8 @@
+survey,step,seconds
+BRFSS,load_fit_and_extract_peaks,5.327310800552368
+MEPS,load_fit_and_extract_peaks,3.5294456481933594
+NHIS,load_fit_and_extract_peaks,2.308668375015259
+CPS,load_fit_and_extract_peaks,3.4052274227142334
+NHANES,load_fit_and_extract_peaks,1.4153046607971191
+GSS,load_fit_and_extract_peaks,1.1979749202728271
+ALL,whole_script,29.086328506469727
